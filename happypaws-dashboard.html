@@ -1705,7 +1705,7 @@ async function uploadVaccRecord(file, clientName){
   return uploadToDriveFolder(file,["Nigel's Place",'Client Vaccine Records',clientName]);
 }
 // Preferred models in order — auto-selects the first one available for this API key
-const GEMINI_MODEL_PREFERENCE=['gemini-2.0-flash','gemini-2.5-flash','gemini-2.0-flash-lite','gemini-1.5-flash-latest','gemini-1.5-pro-latest'];
+const GEMINI_MODEL_PREFERENCE=['gemini-2.5-flash','gemini-2.5-pro','gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash-latest','gemini-1.5-pro-latest'];
 let _cachedGeminiModel=null;
 async function getGeminiModel(key){
   if(_cachedGeminiModel)return _cachedGeminiModel;
@@ -1743,14 +1743,25 @@ If no expiry can be determined, omit the expiry field. Return an empty vaccines 
     {inline_data:{mime_type:mimeType,data:base64}},
     {text:prompt}
   ]}]};
-  const r=await fetch(`https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${key}`,{
-    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
-  });
-  const d=await r.json();
-  if(d.error)throw new Error(`Gemini (${model}): ${d.error.message}`);
-  const text=d.candidates?.[0]?.content?.parts?.[0]?.text||'{}';
-  const clean=text.replace(/```json?|```/g,'').trim();
-  return JSON.parse(clean);
+  // Try each model in preference order until one works (handles per-model quota issues)
+  const modelsToTry=[model,...GEMINI_MODEL_PREFERENCE.filter(m=>m!==model)];
+  for(const m of modelsToTry){
+    const r=await fetch(`https://generativelanguage.googleapis.com/v1/models/${m}:generateContent?key=${key}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
+    });
+    const d=await r.json();
+    if(d.error&&d.error.code===429){
+      console.warn(`Gemini quota hit on ${m}, trying next model...`);
+      _cachedGeminiModel=null; // reset cache so next call re-detects
+      continue;
+    }
+    if(d.error)throw new Error(`Gemini (${m}): ${d.error.message}`);
+    _cachedGeminiModel=m; // cache the working model
+    const text=d.candidates?.[0]?.content?.parts?.[0]?.text||'{}';
+    const clean=text.replace(/```json?|```/g,'').trim();
+    return JSON.parse(clean);
+  }
+  throw new Error('All Gemini models hit quota limits. Please try again in a minute.');
 }
 async function handleVaccUpload(clientId, dogId){
   // Step 1: Request Drive token NOW — directly from user gesture (button click)
