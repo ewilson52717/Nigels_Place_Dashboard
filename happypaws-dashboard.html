@@ -1704,9 +1704,27 @@ async function uploadToDriveFolder(file, folderPath){
 async function uploadVaccRecord(file, clientName){
   return uploadToDriveFolder(file,["Nigel's Place",'Client Vaccine Records',clientName]);
 }
+// Preferred models in order — auto-selects the first one available for this API key
+const GEMINI_MODEL_PREFERENCE=['gemini-2.0-flash','gemini-2.5-flash','gemini-2.0-flash-lite','gemini-1.5-flash-latest','gemini-1.5-pro-latest'];
+let _cachedGeminiModel=null;
+async function getGeminiModel(key){
+  if(_cachedGeminiModel)return _cachedGeminiModel;
+  try{
+    const r=await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${key}`);
+    const d=await r.json();
+    if(d.error)throw new Error(d.error.message);
+    const available=new Set((d.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent')).map(m=>m.name.split('/')[1]));
+    for(const m of GEMINI_MODEL_PREFERENCE){if(available.has(m)){_cachedGeminiModel=m;return m;}}
+    // Fallback: just use first available model that supports generateContent
+    const first=[...(d.models||[])].find(m=>(m.supportedGenerationMethods||[]).includes('generateContent'));
+    if(first){_cachedGeminiModel=first.name.split('/')[1];return _cachedGeminiModel;}
+  }catch(e){console.warn('Could not auto-detect Gemini model:',e);}
+  return 'gemini-2.0-flash'; // last resort default
+}
 async function parseVaccRecordWithGemini(file){
   const key=state.settings.geminiApiKey;
-  if(!key)throw new Error('No Gemini API key set in Settings.');
+  if(!key)throw new Error('No Gemini API key set in Settings → paste your key from ai.google.dev');
+  const model=await getGeminiModel(key);
   // Read file as base64
   const base64=await new Promise((res,rej)=>{
     const fr=new FileReader();
@@ -1725,13 +1743,12 @@ If no expiry can be determined, omit the expiry field. Return an empty vaccines 
     {inline_data:{mime_type:mimeType,data:base64}},
     {text:prompt}
   ]}]};
-  const r=await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${key}`,{
+  const r=await fetch(`https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${key}`,{
     method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
   });
   const d=await r.json();
-  if(d.error)throw new Error(d.error.message||'Gemini error');
+  if(d.error)throw new Error(`Gemini (${model}): ${d.error.message}`);
   const text=d.candidates?.[0]?.content?.parts?.[0]?.text||'{}';
-  // Strip any markdown fences if present
   const clean=text.replace(/```json?|```/g,'').trim();
   return JSON.parse(clean);
 }
