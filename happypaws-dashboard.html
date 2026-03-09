@@ -1725,7 +1725,7 @@ If no expiry can be determined, omit the expiry field. Return an empty vaccines 
     {inline_data:{mime_type:mimeType,data:base64}},
     {text:prompt}
   ]}]};
-  const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,{
+  const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,{
     method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
   });
   const d=await r.json();
@@ -1736,6 +1736,27 @@ If no expiry can be determined, omit the expiry field. Return an empty vaccines 
   return JSON.parse(clean);
 }
 async function handleVaccUpload(clientId, dogId){
+  // Step 1: Request Drive token NOW — directly from user gesture (button click)
+  // This must happen synchronously before any await, so the browser popup isn't blocked.
+  if(state.mode==='live' && !driveToken && driveTokenClient){
+    showToast('📂 Requesting Google Drive access — approve the popup…','#7B4015');
+    try{
+      await new Promise((res,rej)=>{
+        const t=setTimeout(()=>{rej(new Error('Drive popup timed out — try allowing popups for this site.'));},25000);
+        driveTokenClient.callback=(resp)=>{
+          clearTimeout(t);
+          if(resp.error){rej(new Error(resp.error));return;}
+          driveToken=resp.access_token;
+          res();
+        };
+        driveTokenClient.requestAccessToken({prompt:'consent'});
+      });
+    }catch(e){
+      // Drive auth failed — that's OK, we'll skip Drive and just run Gemini
+      console.warn('Drive auth skipped:',e.message);
+    }
+  }
+  // Step 2: Open file picker (after Drive auth attempt, still a valid user-gesture chain)
   const input=document.createElement('input');
   input.type='file';
   input.accept='image/*,application/pdf';
@@ -1750,57 +1771,41 @@ async function handleVaccUpload(clientId, dogId){
     if(!dog||!cl)return;
     const btnId=`vbtn-${dogId}`;
     const btn=document.getElementById(btnId);
-    if(btn){btn.disabled=true;btn.textContent='⏳ Uploading…';}
+    if(btn){btn.disabled=true;btn.textContent='⏳ Processing…';}
     try{
-      // 1. Upload to Drive (requests Drive scope on first use)
-      if(state.mode==='live'){
+      // Step 3: Upload to Drive if we have a token
+      if(state.mode==='live' && driveToken){
         try{
-          if(!driveToken){
-            showToast('📂 A Google sign-in popup will appear — please allow Drive access.','#7B4015');
-            await new Promise((res,rej)=>{
-              const t=setTimeout(()=>rej(new Error('Drive access timed out. Please allow the popup and try again.')),30000);
-              driveTokenClient.callback=(resp)=>{
-                clearTimeout(t);
-                if(resp.error){rej(new Error('Drive access denied: '+resp.error));return;}
-                driveToken=resp.access_token;
-                res();
-              };
-              driveTokenClient.requestAccessToken({prompt:'select_account'});
-            });
-          }
-          if(driveToken){
-            if(btn)btn.textContent='📂 Saving to Drive…';
-            const df=await uploadVaccRecord(file,cl.name);
-            dog.driveFileLink=df.webViewLink||'';
-            showToast('✅ Saved to Google Drive → Nigel\'s Place / Client Vaccine Records / '+cl.name);
-          }
+          if(btn)btn.textContent='📂 Saving to Drive…';
+          const df=await uploadVaccRecord(file,cl.name);
+          dog.driveFileLink=df.webViewLink||'';
+          showToast('✅ Saved to Google Drive → Nigel\'s Place / Client Vaccine Records / '+cl.name);
         }catch(e){
-          showToast('⚠️ Drive upload failed: '+e.message+' — continuing with Gemini parse only.','#F97316');
+          showToast('⚠️ Drive save failed: '+e.message+' — continuing with Gemini scan.','#F97316');
           console.warn('Drive upload error:',e);
         }
       }
-      // 2. Parse with Gemini
-      if(btn)btn.textContent='🤖 Parsing…';
+      // Step 4: Parse with Gemini
+      if(btn)btn.textContent='🤖 Scanning with AI…';
       const result=await parseVaccRecordWithGemini(file);
       if(result.vaccines&&result.vaccines.length>0){
         dog.vaccines=result.vaccines;
-        // Update soonest vaccExpiry for legacy compat
         const expDates=result.vaccines.filter(v=>v.expiry).map(v=>v.expiry).sort();
         if(expDates.length)dog.vaccExpiry=expDates[0];
         dog.vaccinated=true;
         render();
-        showToast(`Found ${result.vaccines.length} vaccine${result.vaccines.length>1?'s':''} for ${dog.name}! 🐾`);
-        try{await persistClients();}catch(e){showToast('Parsed OK; sheet sync failed.','#F97316');}
+        showToast(`🐾 Found ${result.vaccines.length} vaccine record${result.vaccines.length>1?'s':''} for ${dog.name}!`);
+        try{await persistClients();}catch(e){showToast('Parsed OK — sheet sync failed.','#F97316');}
       }else{
         showToast('No vaccines found in that file. Try a clearer photo or PDF.','#F97316');
         if(btn){btn.disabled=false;btn.textContent='📄 Upload Record';}
       }
     }catch(err){
       showToast(`Error: ${err.message}`,'#EF4444');
+      console.error('handleVaccUpload error:',err);
       if(btn){btn.disabled=false;btn.textContent='📄 Upload Record';}
     }
   };
-  // Clean up if user cancels without selecting a file
   input.addEventListener('cancel',()=>{
     if(document.body.contains(input))document.body.removeChild(input);
   });
@@ -1833,12 +1838,13 @@ async function handleDogPhotoUpload(clientId, dogId){
   const cl=clients.find(c=>c.id===clientId);
   const dog=cl?.dogs.find(d=>d.id===dogId);
   if(!dog||!cl)return;
+  // Request Drive token first, directly from button click user gesture
+  await ensureDriveToken();
   openFilePickerForDog('image/*', async(file)=>{
     const btnId=`dpbtn-${dogId}`;
     const btn=document.getElementById(btnId);
     if(btn){btn.disabled=true;btn.textContent='⏳ Uploading…';}
     try{
-      await ensureDriveToken();
       const df=await uploadToDriveFolder(file,["Nigel's Place",'Dog Photos',dog.name]);
       dog.photoLink=df.webViewLink||'';
       render();
@@ -1854,12 +1860,13 @@ async function handlePlayPhotoUpload(clientId, dogId){
   const cl=clients.find(c=>c.id===clientId);
   const dog=cl?.dogs.find(d=>d.id===dogId);
   if(!dog||!cl)return;
+  // Request Drive token first, directly from button click user gesture
+  await ensureDriveToken();
   openFilePickerForDog('image/*', async(file)=>{
     const btnId=`ppbtn-${dogId}`;
     const btn=document.getElementById(btnId);
     if(btn){btn.disabled=true;btn.textContent='⏳ Uploading…';}
     try{
-      await ensureDriveToken();
       const df=await uploadToDriveFolder(file,["Nigel's Place",'Play Photos',dog.name]);
       const entry={link:df.webViewLink||'',filename:df.name||file.name,date:new Date().toISOString().split('T')[0]};
       dog.playPhotos=[...(dog.playPhotos||[]),entry];
