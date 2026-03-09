@@ -277,22 +277,33 @@ function vaccStatus(dog){
   return worst;
 }
 function vaccBadge(dog){
-  const latest=getLatestVaccsByType(dog);
   const s=vaccStatus(dog);
-  if(!latest.length){
-    if(s==='none')return`<div class="text-xs text-gray-400">No vaccine records</div>`;
-    return`<div class="text-xs text-green-600">✓ Vaccinated</div>`;
-  }
-  // Show compact per-type pills (latest record per type only)
-  const rows=latest.map(v=>{
-    const d=vaccDaysLeft(v.expiry);
-    let cls='text-green-600',icon='✓';
-    if(d!==null&&d<0){cls='text-red-500 font-semibold';icon='🚩';}
-    else if(d!==null&&d<=60){cls='text-amber-600 font-semibold';icon='⚠️';}
-    const expStr=v.expiry?` · exp ${fmtDateShort(v.expiry)}`:'';
-    return`<div class="text-xs ${cls}">${icon} ${v.name}${expStr}</div>`;
-  }).join('');
-  return rows;
+  if(s==='expired') return`<span class="inline-block text-xs px-2.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 font-semibold">🚩 Vaccines expired</span>`;
+  if(s==='expiring')return`<span class="inline-block text-xs px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-semibold">⚠️ Expiring soon</span>`;
+  if(s==='ok')      return`<span class="inline-block text-xs px-2.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">✅ Vaccines current</span>`;
+  return`<span class="inline-block text-xs px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500">No vaccine records</span>`;
+}
+// SMS reminder modal — works on desktop (copy to clipboard) and mobile (open Messages).
+function showSmsModal(phone, message){
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  const ph=String(phone||'');const msg=String(message||'');
+  overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:1.5rem;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.2);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <h3 style="margin:0;font-size:1rem;font-weight:700;color:#1f2937;">💬 Text Reminder</h3>
+      <button onclick="this.closest('[data-sms-modal]').remove()" style="background:none;border:none;color:#9ca3af;font-size:1.5rem;cursor:pointer;line-height:1;">×</button>
+    </div>
+    ${ph?`<div style="font-size:.8rem;color:#6b7280;margin-bottom:.75rem;">📱 To: <strong style="color:#374151;">${ph}</strong></div>`:''}
+    <textarea id="sms-msg-text" readonly style="width:100%;height:90px;border:1px solid #e5e7eb;border-radius:10px;padding:.6rem;font-size:.8rem;color:#374151;resize:none;background:#f9fafb;box-sizing:border-box;">${msg}</textarea>
+    <div style="display:flex;gap:.6rem;margin-top:.75rem;">
+      <button onclick="navigator.clipboard.writeText(document.getElementById('sms-msg-text').value).then(()=>{showToast('Message copied to clipboard!')})" style="flex:1;background:#fef3c7;color:#92400e;border:1px solid #d97706;border-radius:10px;padding:.5rem;font-size:.8rem;font-weight:600;cursor:pointer;">📋 Copy</button>
+      ${ph?`<a href="sms:${ph}?&body=${encodeURIComponent(msg)}" style="flex:1;background:#f0fdf4;color:#166534;border:1px solid #16a34a;border-radius:10px;padding:.5rem;font-size:.8rem;font-weight:600;cursor:pointer;text-align:center;text-decoration:none;display:flex;align-items:center;justify-content:center;">📱 Open Messages</a>`:''}
+      <button onclick="this.closest('[data-sms-modal]').remove()" style="flex:0 0 auto;background:#f9fafb;color:#6b7280;border:1px solid #e5e7eb;border-radius:10px;padding:.5rem .75rem;font-size:.8rem;cursor:pointer;">Close</button>
+    </div>
+  </div>`;
+  overlay.setAttribute('data-sms-modal','');
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  document.body.appendChild(overlay);
 }
 // Builds the full vaccine records panel — compact rows, collapsible history,
 // per-type Update button (📄), and SMS reminder (💬) for expired/expiring vaccines.
@@ -320,9 +331,8 @@ function buildVaccineRecordsHTML(dog){
     const daysText=daysLeft!==null?(daysLeft<0?Math.abs(daysLeft)+'d ago':daysLeft===0?'today':'in '+daysLeft+'d'):'';
     const expandKey=String(dog.id)+':'+typeName;
     const isExpanded=_expandedVaccGroups.has(expandKey);
-    // SMS reminder for this specific vaccine type
-    const smsBody=encodeURIComponent(`Hi ${cl?.name||''}! 🐾 A note from Nigel's Place — ${dog.name}'s ${typeName} vaccination has ${expired?'expired':'is coming due soon'}. Could you please send us an updated record? Thank you!`);
-    const smsHref=`sms:${phone}?&body=${smsBody}`;
+    // SMS reminder message (plain text for modal — not URI-encoded yet)
+    const smsMessage=`Hi ${cl?.name||''}! 🐾 A note from Nigel's Place — ${dog.name}'s ${typeName} vaccination has ${expired?'expired':'is coming due soon'}. Could you please send us an updated record? Thank you!`;
     const needsReminder=expired||expiring;
     const priorRowsHTML=prior.map(p=>{
       const pExp=p.expiry?new Date(p.expiry+'T00:00:00'):null;
@@ -330,6 +340,7 @@ function buildVaccineRecordsHTML(dog){
       return`<div class="flex items-center justify-between py-1 px-3 pl-7 border-t border-gray-100 bg-gray-50"><span class="text-xs text-gray-400">↳ ${p.expiry||'no date'}</span>${pDays!==null?`<span class="text-xs text-gray-300">${Math.abs(pDays)}d ago</span>`:''}</div>`;
     }).join('');
     const slug=vaccTypeSlug(typeName);
+    // Use htmlJsonStr so double-quotes inside JS string args don't break onclick="..." attributes
     return`<div class="rounded-md overflow-hidden border border-gray-100 flex">
       <div class="w-1 ${accentCls} shrink-0"></div>
       <div class="flex-1 min-w-0">
@@ -339,9 +350,9 @@ function buildVaccineRecordsHTML(dog){
           <span class="text-xs ${expiryColor} shrink-0">${latest.expiry||'—'}</span>
           ${daysText?`<span class="text-xs text-gray-400 shrink-0">(${daysText})</span>`:''}
           <div class="flex items-center gap-1 shrink-0 ml-1">
-            ${needsReminder&&phone?`<a href="${smsHref}" title="Text reminder to ${cl?.name||'client'}" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200" style="text-decoration:none">💬</a>`:''}
-            <button id="vtbtn-${dog.id}-${slug}" onclick="handleVaccTypeUpload(${dog.clientId},${dog.id},${JSON.stringify(typeName)})" title="Upload updated ${typeName} record" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-gray-50 text-gray-500 hover:bg-gray-100 border border-gray-200">📄</button>
-            ${prior.length>0?`<button onclick="toggleVaccGroup(${dog.id},${JSON.stringify(typeName)})" title="${isExpanded?'Hide':'Show'} ${prior.length} prior record${prior.length>1?'s':''}" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-gray-50 text-gray-500 hover:bg-gray-100 border border-gray-200">${isExpanded?'▲':'▾'}<span class="ml-0.5 leading-none">${prior.length}</span></button>`:''}
+            ${needsReminder?`<button onclick="showSmsModal(${htmlJsonStr(phone)},${htmlJsonStr(smsMessage)})" title="Text reminder to ${cl?.name||'client'}" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200">💬</button>`:''}
+            <button id="vtbtn-${dog.id}-${slug}" onclick="handleVaccTypeUpload(${dog.clientId},${dog.id},${htmlJsonStr(typeName)})" title="Upload updated ${typeName} record" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-gray-50 text-gray-500 hover:bg-gray-100 border border-gray-200">📄</button>
+            ${prior.length>0?`<button onclick="toggleVaccGroup(${dog.id},${htmlJsonStr(typeName)})" title="${isExpanded?'Hide':'Show'} ${prior.length} prior" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-gray-50 text-gray-500 hover:bg-gray-100 border border-gray-200">${isExpanded?'▲':'▾'}<span class="ml-0.5 leading-none">${prior.length}</span></button>`:''}
           </div>
         </div>
         ${isExpanded&&prior.length>0?priorRowsHTML:''}
@@ -407,6 +418,9 @@ try{_folderIdCache=JSON.parse(localStorage.getItem('np_folder_cache')||'{}');}ca
 // Tracks which vaccine type groups are expanded in the dog detail view — persists across renders.
 let _expandedVaccGroups=new Set();
 function vaccTypeSlug(name){return String(name).replace(/[^a-zA-Z0-9]/g,'_');}
+// Safely encode a JS string value for use inside an HTML onclick="..." attribute.
+// JSON.stringify uses double-quotes which would break the HTML attribute; &quot; survives.
+function htmlJsonStr(s){return JSON.stringify(String(s)).replace(/"/g,'&quot;');}
 function toggleVaccGroup(dogId,typeName){
   const k=String(dogId)+':'+typeName;
   if(_expandedVaccGroups.has(k))_expandedVaccGroups.delete(k);
@@ -1444,6 +1458,12 @@ function buildBookingModal(selectedDate){
               class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="updateBookingPrice()"></div>
         </div>
         <div id="vacc-warning" class="text-xs hidden p-2.5 rounded-xl"></div>
+        <div id="vacc-override-row" class="hidden mt-1.5">
+          <label class="flex items-center gap-2 text-xs text-amber-800 cursor-pointer p-2 bg-amber-50 rounded-lg border border-amber-200">
+            <input type="checkbox" id="vacc-override-cb" class="accent-amber-700">
+            <span><strong>Admin override</strong> — proceed despite expired vaccines</span>
+          </label>
+        </div>
         <div id="cap-warning" class="text-xs text-red-500 hidden">⚠️ One or more days in this range is fully booked!</div>
         <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Service (per day)</label>
           <div class="grid grid-cols-2 gap-2" id="svc-grid">
@@ -1683,25 +1703,32 @@ function updateDogSelect(){
 }
 function checkDogVaccWarning(){
   const warn=document.getElementById('vacc-warning');if(!warn)return;
+  const overrideRow=document.getElementById('vacc-override-row');
+  const overrideCb=document.getElementById('vacc-override-cb');
   const cId=parseInt(document.getElementById('bk-client')?.value||'0');
   const dId=parseInt(document.getElementById('bk-dog')?.value||'0');
   const cl=clients.find(c=>c.id===cId);
   const dog=cl?.dogs.find(d=>d.id===dId);
-  if(!dog){warn.classList.add('hidden');return;}
+  const hideOverride=()=>{if(overrideRow)overrideRow.classList.add('hidden');if(overrideCb)overrideCb.checked=false;};
+  if(!dog){warn.classList.add('hidden');hideOverride();return;}
   const vs=vaccStatus(dog);
   if(vs==='expired'){
-    warn.className='text-xs p-2.5 rounded-xl bg-red-50 text-red-600 border border-red-200';
-    warn.innerHTML=`🚩 <strong>${dog.name}'s vaccines are expired.</strong> Consider requesting updated records before confirming this booking.`;
+    warn.className='text-xs p-2.5 rounded-xl bg-red-50 text-red-700 border border-red-300 font-medium';
+    warn.innerHTML=`🚩 <strong>${dog.name}'s vaccines are expired.</strong> Booking is blocked until records are updated. Admin override required to proceed.`;
     warn.classList.remove('hidden');
+    // Show admin override checkbox (admins only)
+    if(overrideRow&&state.role!=='client')overrideRow.classList.remove('hidden');
   }else if(vs==='expiring'){
     const today=new Date(TODAY+'T00:00:00');
     const exp=new Date(dog.vaccExpiry+'T00:00:00');
     const days=Math.round((exp-today)/864e5);
     warn.className='text-xs p-2.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200';
-    warn.innerHTML=`⚠️ <strong>${dog.name}'s vaccines expire in ${days} days</strong> (${fmtDateShort(dog.vaccExpiry)}). You may want to request updated records.`;
+    warn.innerHTML=`⚠️ <strong>${dog.name}'s vaccines expire in ${days} days</strong> (${fmtDateShort(dog.vaccExpiry)}). Consider requesting updated records.`;
     warn.classList.remove('hidden');
+    hideOverride();
   }else{
     warn.classList.add('hidden');
+    hideOverride();
   }
 }
 function populateInvoiceItems(){
@@ -2136,6 +2163,15 @@ async function submitBooking(e){
     if(!clientId||!dogId){showToast('Please select a client and dog.','#EF4444');return;}
     const cl=clients.find(c=>c.id===clientId),dg=cl?.dogs.find(d=>d.id===dogId);
     dogName=dg?.name||'Dog';clientName=cl?.name||'Client';
+    // Vaccine block — only admins can override with the checkbox
+    if(dg&&vaccStatus(dg)==='expired'){
+      const override=document.getElementById('vacc-override-cb')?.checked||false;
+      if(!override){
+        showToast(`🚩 ${dg.name}'s vaccines are expired. Update vaccine records, or check the admin override box to proceed.`,'#EF4444');
+        return;
+      }
+      addonNames.push('⚠️ Admin vacc. override');
+    }
   }
   bookings.push({id:nextId(bookings),clientId,dogId,dogName,clientName,
     checkIn:ci,checkOut:co,nights:days,status:'confirmed',service:svc,
