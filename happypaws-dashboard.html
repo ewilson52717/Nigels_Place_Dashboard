@@ -124,8 +124,8 @@ const DEFAULT_SERVICES=[
   {id:4,name:'Bath',                 type:'addon',price:20,active:true},
   {id:5,name:'Nail Trim',            type:'addon',price:15,active:true},
   {id:6,name:'Anal Gland Expression',type:'addon',price:20,active:true},
-  {id:7,name:'Extra Play Time',      type:'addon',price:10,active:true},
-  {id:8,name:'Snuggle Time',         type:'addon',price:10,active:true},
+  {id:7,name:'Extra Play Time',      type:'addon',price:10,active:true,frequency:'qty'},
+  {id:8,name:'Snuggle Time',         type:'addon',price:10,active:true,frequency:'qty'},
 ];
 
 // ═══════════════════════════════════════════════════
@@ -373,11 +373,12 @@ async function createSpreadsheet(){
   return d.spreadsheetId;
 }
 async function ensureServicesSheet(){
-  try{await readRange('Services!A1:E1');}
+  try{await readRange('Services!A1:F1');}
   catch(e){
     try{
       await sheetsReq(`${CONFIG.API_BASE}/${state.sheetId}:batchUpdate`,
         {method:'POST',body:JSON.stringify({requests:[{addSheet:{properties:{title:'Services'}}}]})});
+      await writeRange('Services!A1:F1',[['id','name','type','price','active','frequency']]);
     }catch(e2){/* already exists */}
   }
 }
@@ -392,7 +393,7 @@ async function initSheetHeaders(){
       ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
       ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',''],['squareLink',''],
     ]),
-    writeRange('Services!A1:E1',[['id','name','type','price','active']]),
+    writeRange('Services!A1:F1',[['id','name','type','price','active','frequency']]),
   ]);
 }
 async function loadAllData(){
@@ -400,7 +401,7 @@ async function loadAllData(){
     readRange('Clients!A2:E'),readRange('Dogs!A2:H'),readRange('Bookings!A2:L'),
     readRange('Invoices!A2:I'),readRange('Settings!A2:B'),
   ]);
-  const svR=await readRangeSafe('Services!A2:E');
+  const svR=await readRangeSafe('Services!A2:F');
   clients.length=0;
   (cR||[]).forEach(r=>{if(r[0])clients.push({id:+r[0],name:r[1]||'',email:r[2]||'',phone:r[3]||'',
     photoConsent:String(r[4]).toLowerCase()==='true',dogs:[]});});
@@ -438,7 +439,7 @@ async function loadAllData(){
   });
   services.length=0;
   if(svR&&svR.length>0){
-    (svR).forEach(r=>{if(r[0])services.push({id:+r[0],name:r[1]||'',type:r[2]||'addon',price:+r[3]||0,active:String(r[4]).toLowerCase()!=='false'});});
+    (svR).forEach(r=>{if(r[0])services.push({id:+r[0],name:r[1]||'',type:r[2]||'addon',price:+r[3]||0,active:String(r[4]).toLowerCase()!=='false',frequency:r[5]||'stay'});});
   }else{
     services.push(...DEFAULT_SERVICES.map(s=>({...s})));
   }
@@ -475,8 +476,8 @@ async function persistSettings(){
 async function persistServices(){
   if(state.mode!=='live')return;
   await ensureServicesSheet();
-  const rows=[['id','name','type','price','active'],...services.map(s=>[s.id,s.name,s.type,s.price,s.active])];
-  await writeRange(`Services!A1:E${rows.length}`,rows);
+  const rows=[['id','name','type','price','active','frequency'],...services.map(s=>[s.id,s.name,s.type,s.price,s.active,s.frequency||'stay'])];
+  await writeRange(`Services!A1:F${rows.length}`,rows);
 }
 async function refreshData(){
   if(state.mode!=='live')return;
@@ -841,7 +842,7 @@ function buildServicesView(){
     </div>
     <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
       <h2 class="font-semibold text-gray-800 mb-1">Add-Ons</h2>
-      <p class="text-xs text-gray-400 mb-4">Charged once per stay · clients can select any combination</p>
+      <p class="text-xs text-gray-400 mb-4">Clients can select any combination when booking</p>
       ${addons.length===0?`<div class="text-center py-8"><div class="text-4xl mb-2">✨</div><p class="text-gray-300 text-sm">No add-ons yet. Add your first one above!</p></div>`:`
       <div class="space-y-2">
         ${addons.map(s=>`
@@ -849,8 +850,12 @@ function buildServicesView(){
             <div class="flex items-center gap-3">
               <span class="text-xl">✨</span>
               <div>
-                <div class="font-semibold text-sm text-gray-700">${s.name} ${!s.active?'<span class="text-xs text-gray-400">(hidden)</span>':''}</div>
-                <div class="text-xs text-gray-400">$${s.price} one-time per stay</div>
+                <div class="flex items-center gap-2">
+                  <span class="font-semibold text-sm text-gray-700">${s.name}</span>
+                  ${s.frequency==='qty'?'<span class="badge bg-amber-100 text-amber-700">qty selectable</span>':'<span class="badge bg-gray-100 text-gray-500">once per stay</span>'}
+                  ${!s.active?'<span class="text-xs text-gray-400">(hidden)</span>':''}
+                </div>
+                <div class="text-xs text-gray-400">$${s.price} per session</div>
               </div>
             </div>
             <div class="flex items-center gap-2">
@@ -1112,14 +1117,37 @@ function buildBookingModal(selectedDate){
               </label>`).join('')}
           </div></div>
         ${activeAddons.length>0?`
-        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Add-Ons <span class="font-normal text-gray-400">(charged once per stay)</span></label>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Add-Ons</label>
           <div class="space-y-1.5">
-            ${activeAddons.map(s=>`
+            ${activeAddons.map(s=>{
+              if(s.frequency==='qty'){
+                return`
+                <div class="flex items-center gap-3 p-2.5 rounded-xl border border-gray-100 bg-gray-50">
+                  <div class="flex-1">
+                    <div class="text-sm text-gray-700 font-medium">${s.name}</div>
+                    <div class="text-xs text-gray-400">$${s.price} per session · choose how many</div>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <button type="button" onclick="stepAddon('aqty-${s.id}',-1)"
+                      class="w-7 h-7 rounded-full border border-gray-300 text-gray-500 text-base leading-none hover:bg-gray-200 flex items-center justify-center">−</button>
+                    <input type="number" id="aqty-${s.id}" name="addon-qty" data-svcid="${s.id}" data-price="${s.price}" data-svcname="${s.name}"
+                      value="0" min="0" max="60"
+                      class="w-10 text-center text-sm border border-gray-200 rounded-lg py-1 font-semibold text-gray-700"
+                      oninput="updateBookingPrice()">
+                    <button type="button" onclick="stepAddon('aqty-${s.id}',1)"
+                      class="w-7 h-7 rounded-full border border-gray-300 text-gray-500 text-base leading-none hover:bg-gray-200 flex items-center justify-center">+</button>
+                  </div>
+                  <span id="aqty-lbl-${s.id}" class="text-xs font-semibold text-amber-700 w-10 text-right hidden"></span>
+                </div>`;
+              }
+              return`
               <label class="flex items-center gap-3 p-2.5 rounded-xl cursor-pointer hover:bg-gray-50 border border-gray-100 transition-colors">
                 <input type="checkbox" name="addon" value="${s.name}" data-price="${s.price}" class="accent-amber-700 w-4 h-4" onchange="updateBookingPrice()">
                 <span class="flex-1 text-sm text-gray-700">${s.name}</span>
+                <span class="text-xs text-gray-400">once per stay</span>
                 <span class="text-xs font-medium text-gray-500">+$${s.price}</span>
-              </label>`).join('')}
+              </label>`;
+            }).join('')}
           </div></div>`:''}
         <div id="price-preview" class="hidden rounded-xl p-3 border border-amber-100 text-sm" style="background:#FFFBEB">
           <div class="font-semibold text-amber-900 mb-1">💰 Booking Summary</div>
@@ -1160,9 +1188,15 @@ function buildServiceModal(editId){
           <input id="svc-name" type="text" required value="${svc?.name||''}" placeholder="e.g. Nail Trim"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
         <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Type</label>
-          <select id="svc-type" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+          <select id="svc-type" onchange="toggleFrequencyRow()" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
             <option value="base" ${svc?.type==='base'?'selected':''}>Base Service (charged per day)</option>
-            <option value="addon" ${!svc||svc?.type==='addon'?'selected':''}>Add-On (charged once per stay)</option>
+            <option value="addon" ${!svc||svc?.type==='addon'?'selected':''}>Add-On</option>
+          </select></div>
+        <div id="svc-freq-row" class="${svc?.type==='base'?'hidden':''}">
+          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Quantity Style</label>
+          <select id="svc-frequency" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            <option value="stay" ${(!svc||svc?.frequency!=='qty')?'selected':''}>Once per stay (checkbox)</option>
+            <option value="qty" ${svc?.frequency==='qty'?'selected':''}>Flexible quantity (+ / − stepper)</option>
           </select></div>
         <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Price ($) *</label>
           <input id="svc-price" type="number" min="0" step="0.01" required value="${svc?.price||''}" placeholder="0.00"
@@ -1243,6 +1277,11 @@ function syncCheckout(){
   checkDateCapacity();
   updateBookingPrice();
 }
+function stepAddon(inputId,delta){
+  const el=document.getElementById(inputId);if(!el)return;
+  el.value=Math.max(0,(+el.value||0)+delta);
+  updateBookingPrice();
+}
 function updateBookingPrice(){
   const ci=document.getElementById('bk-checkin')?.value;
   const co=document.getElementById('bk-checkout')?.value||ci;
@@ -1250,17 +1289,32 @@ function updateBookingPrice(){
   const days=nightsCount(ci,co);
   const svcEl=document.querySelector('input[name="svc"]:checked');
   const baseRate=svcEl?+(svcEl.dataset.price||getBaseRate(svcEl.value)):state.settings.fullDayRate;
-  const addonEls=[...(document.querySelectorAll('input[name="addon"]:checked')||[])];
-  const addonTotal=addonEls.reduce((s,el)=>s+(+el.dataset.price||0),0);
+  // Stay add-ons (checkbox)
+  const stayEls=[...(document.querySelectorAll('input[name="addon"]:checked')||[])];
+  let addonTotal=stayEls.reduce((s,el)=>s+(+el.dataset.price||0),0);
+  // Qty add-ons (stepper)
+  const qtyEls=[...(document.querySelectorAll('input[name="addon-qty"]')||[])];
+  qtyEls.forEach(el=>{
+    const qty=+el.value||0;
+    const lbl=document.getElementById('aqty-lbl-'+el.dataset.svcid);
+    if(qty>0){
+      addonTotal+=qty*(+el.dataset.price||0);
+      if(lbl){lbl.textContent=`$${qty*(+el.dataset.price||0)}`;lbl.classList.remove('hidden');}
+    }else{
+      if(lbl)lbl.classList.add('hidden');
+    }
+  });
   const total=days*baseRate+addonTotal;
   const preview=document.getElementById('price-preview');
   const lines=document.getElementById('price-lines');
   const totalEl=document.getElementById('price-total');
   if(preview&&lines&&totalEl){
     let html=`<div>${days} day${days>1?'s':''} × $${baseRate} = $${days*baseRate}</div>`;
-    if(addonTotal>0){
-      addonEls.forEach(el=>{html+=`<div>+ ${el.value}: $${el.dataset.price}</div>`;});
-    }
+    stayEls.forEach(el=>{html+=`<div>+ ${el.value}: $${el.dataset.price}</div>`;});
+    qtyEls.forEach(el=>{
+      const qty=+el.value||0;
+      if(qty>0)html+=`<div>+ ${el.dataset.svcname}: ${qty} × $${el.dataset.price} = $${qty*(+el.dataset.price||0)}</div>`;
+    });
     lines.innerHTML=html;
     totalEl.textContent=`Total: $${total}`;
     preview.classList.remove('hidden');
@@ -1319,9 +1373,19 @@ async function submitBooking(e){
     const ds=d.toISOString().split('T')[0];
     if(booksForDate(ds).length>=cap){showToast(`${fmtDate(ds)} is fully booked!`,'#EF4444');return;}
   }
+  // Stay add-ons (checkbox)
   const addonEls=[...(document.querySelectorAll('input[name="addon"]:checked')||[])];
   const addonNames=addonEls.map(el=>el.value);
-  const addonTotal=addonEls.reduce((s,el)=>s+(+el.dataset.price||0),0);
+  let addonTotal=addonEls.reduce((s,el)=>s+(+el.dataset.price||0),0);
+  // Qty add-ons (stepper)
+  const qtyAddonEls=[...(document.querySelectorAll('input[name="addon-qty"]')||[])];
+  qtyAddonEls.forEach(el=>{
+    const qty=+el.value||0;
+    if(qty>0){
+      addonNames.push(`${el.dataset.svcname}×${qty}`);
+      addonTotal+=qty*(+el.dataset.price||0);
+    }
+  });
   const totalPrice=days*baseRate+addonTotal;
   let clientId,dogId,dogName,clientName;
   if(state.role==='client'){
@@ -1370,18 +1434,24 @@ async function submitClient(e){
   showToast(`${name} added as a client!`);
   try{await persistClients();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
 }
+function toggleFrequencyRow(){
+  const type=document.getElementById('svc-type')?.value;
+  const row=document.getElementById('svc-freq-row');
+  if(row)row.classList.toggle('hidden',type==='base');
+}
 async function submitService(e){
   e.preventDefault();
   const name=document.getElementById('svc-name')?.value?.trim();
   const type=document.getElementById('svc-type')?.value||'addon';
   const price=parseFloat(document.getElementById('svc-price')?.value)||0;
+  const frequency=type==='addon'?(document.getElementById('svc-frequency')?.value||'stay'):'stay';
   const editId=document.getElementById('svc-edit-id')?parseInt(document.getElementById('svc-edit-id').value):null;
   if(!name){showToast('Service name is required.','#EF4444');return;}
   if(editId){
     const svc=services.find(s=>s.id===editId);
-    if(svc){svc.name=name;svc.type=type;svc.price=price;}
+    if(svc){svc.name=name;svc.type=type;svc.price=price;svc.frequency=frequency;}
   }else{
-    services.push({id:nextId(services),name,type,price,active:true});
+    services.push({id:nextId(services),name,type,price,active:true,frequency});
   }
   state.showModal=null;render();
   showToast(editId?'Service updated!':'Service added!');
