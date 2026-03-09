@@ -294,10 +294,13 @@ function vaccBadge(dog){
   }).join('');
   return rows;
 }
-// Builds the full vaccine records panel HTML — grouped by type with history rows.
+// Builds the full vaccine records panel — compact rows, collapsible history,
+// per-type Update button (📄), and SMS reminder (💬) for expired/expiring vaccines.
 function buildVaccineRecordsHTML(dog){
   const vx=dog.vaccines||[];
-  if(!vx.length)return`<div class="text-center py-6 text-gray-300"><div class="text-3xl mb-2">💉</div><p class="text-sm">No vaccination records yet.</p><p class="text-xs mt-1">Click "Upload Record" to scan &amp; auto-fill vaccines.</p></div>`;
+  if(!vx.length)return`<div class="text-center py-6 text-gray-300"><div class="text-3xl mb-2">💉</div><p class="text-sm">No vaccination records yet.</p><p class="text-xs mt-1">Click "Upload Record" to scan &amp; add all vaccine types at once.</p></div>`;
+  const cl=clients.find(c=>c.id===dog.clientId);
+  const phone=cl?String(cl.phone||'').replace(/\D/g,''):'';
   // Group by vaccine type, sort each group descending by expiry (latest first)
   const groups={};
   vx.forEach(v=>{const k=(v.name||'Unknown').trim();if(!groups[k])groups[k]=[];groups[k].push(v);});
@@ -310,29 +313,42 @@ function buildVaccineRecordsHTML(dog){
     const daysLeft=exp?Math.round((exp-today)/864e5):null;
     const expired=daysLeft!==null&&daysLeft<0;
     const expiring=daysLeft!==null&&daysLeft>=0&&daysLeft<=60;
-    const statusBg=expired?'bg-red-50 border-red-200':expiring?'bg-amber-50 border-amber-200':exp?'bg-green-50 border-green-100':'bg-gray-50 border-gray-200';
+    // Thin left accent strip instead of heavy full-background color
+    const accentCls=expired?'bg-red-400':expiring?'bg-amber-400':exp?'bg-green-400':'bg-gray-300';
     const statusIcon=expired?'🚩':expiring?'⚠️':exp?'✅':'📋';
-    const expiryColor=expired?'text-red-600':expiring?'text-amber-700':'text-green-700';
-    const daysText=daysLeft!==null?(daysLeft<0?Math.abs(daysLeft)+' days ago':daysLeft===0?'Today':'in '+daysLeft+' days'):'';
+    const expiryColor=expired?'text-red-600 font-semibold':expiring?'text-amber-600 font-semibold':'text-gray-500';
+    const daysText=daysLeft!==null?(daysLeft<0?Math.abs(daysLeft)+'d ago':daysLeft===0?'today':'in '+daysLeft+'d'):'';
+    const expandKey=String(dog.id)+':'+typeName;
+    const isExpanded=_expandedVaccGroups.has(expandKey);
+    // SMS reminder for this specific vaccine type
+    const smsBody=encodeURIComponent(`Hi ${cl?.name||''}! 🐾 A note from Nigel's Place — ${dog.name}'s ${typeName} vaccination has ${expired?'expired':'is coming due soon'}. Could you please send us an updated record? Thank you!`);
+    const smsHref=`sms:${phone}?&body=${smsBody}`;
+    const needsReminder=expired||expiring;
     const priorRowsHTML=prior.map(p=>{
       const pExp=p.expiry?new Date(p.expiry+'T00:00:00'):null;
       const pDays=pExp?Math.round((pExp-today)/864e5):null;
-      return`<div class="flex items-center justify-between py-1 px-4 border-t border-gray-100 bg-white/50"><span class="text-xs text-gray-400 pl-4">↳ ${p.expiry||'no date'}</span>${pDays!==null?`<span class="text-xs text-gray-400">${Math.abs(pDays)}d ago</span>`:''}</div>`;
+      return`<div class="flex items-center justify-between py-1 px-3 pl-7 border-t border-gray-100 bg-gray-50"><span class="text-xs text-gray-400">↳ ${p.expiry||'no date'}</span>${pDays!==null?`<span class="text-xs text-gray-300">${Math.abs(pDays)}d ago</span>`:''}</div>`;
     }).join('');
-    return`<div class="rounded-xl border overflow-hidden ${statusBg}">
-      <div class="flex items-center justify-between p-3">
-        <div class="flex items-center gap-2 flex-wrap">
-          <span>${statusIcon}</span>
-          <span class="text-sm font-semibold text-gray-700">${typeName}</span>
-          ${prior.length>0?`<span class="text-xs bg-white/70 text-gray-500 px-2 py-0.5 rounded-full border border-gray-200">+${prior.length} prior</span>`:''}
+    const slug=vaccTypeSlug(typeName);
+    return`<div class="rounded-md overflow-hidden border border-gray-100 flex">
+      <div class="w-1 ${accentCls} shrink-0"></div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 px-2.5 py-1.5 bg-white hover:bg-gray-50/50">
+          <span class="text-xs shrink-0">${statusIcon}</span>
+          <span class="text-xs font-semibold text-gray-700 flex-1 truncate">${typeName}</span>
+          <span class="text-xs ${expiryColor} shrink-0">${latest.expiry||'—'}</span>
+          ${daysText?`<span class="text-xs text-gray-400 shrink-0">(${daysText})</span>`:''}
+          <div class="flex items-center gap-1 shrink-0 ml-1">
+            ${needsReminder&&phone?`<a href="${smsHref}" title="Text reminder to ${cl?.name||'client'}" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200" style="text-decoration:none">💬</a>`:''}
+            <button id="vtbtn-${dog.id}-${slug}" onclick="handleVaccTypeUpload(${dog.clientId},${dog.id},${JSON.stringify(typeName)})" title="Upload updated ${typeName} record" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-gray-50 text-gray-500 hover:bg-gray-100 border border-gray-200">📄</button>
+            ${prior.length>0?`<button onclick="toggleVaccGroup(${dog.id},${JSON.stringify(typeName)})" title="${isExpanded?'Hide':'Show'} ${prior.length} prior record${prior.length>1?'s':''}" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-gray-50 text-gray-500 hover:bg-gray-100 border border-gray-200">${isExpanded?'▲':'▾'}<span class="ml-0.5 leading-none">${prior.length}</span></button>`:''}
+          </div>
         </div>
-        <div class="text-right shrink-0">
-          ${latest.expiry?`<div class="text-xs font-semibold ${expiryColor}">Expires ${latest.expiry}</div>`:'<div class="text-xs text-gray-400">No expiry</div>'}
-          ${daysText?`<div class="text-xs text-gray-400">${daysText}</div>`:''}
-        </div>
-      </div>${priorRowsHTML}</div>`;
+        ${isExpanded&&prior.length>0?priorRowsHTML:''}
+      </div>
+    </div>`;
   }).join('');
-  return`<div class="space-y-2">${groupsHTML}</div><div class="mt-3 text-xs text-gray-400">${typeCount} vaccine type${typeCount!==1?'s':''} · ${vx.length} total record${vx.length!==1?'s':''}</div>`;
+  return`<div class="space-y-1">${groupsHTML}</div><div class="mt-2 text-xs text-gray-400">${typeCount} type${typeCount!==1?'s':''} · ${vx.length} record${vx.length!==1?'s':''} total</div>`;
 }
 function requestVaccInfoLinks(cl,dog){
   const phone=String(cl.phone||'').replace(/\D/g,'');
@@ -388,6 +404,15 @@ let driveToken=null; // separate Drive token — only requested when uploading
 // Key = "parentId:folderName" (parentId is 'root' when no parent), value = Drive folder ID.
 let _folderIdCache={};
 try{_folderIdCache=JSON.parse(localStorage.getItem('np_folder_cache')||'{}');}catch(e){}
+// Tracks which vaccine type groups are expanded in the dog detail view — persists across renders.
+let _expandedVaccGroups=new Set();
+function vaccTypeSlug(name){return String(name).replace(/[^a-zA-Z0-9]/g,'_');}
+function toggleVaccGroup(dogId,typeName){
+  const k=String(dogId)+':'+typeName;
+  if(_expandedVaccGroups.has(k))_expandedVaccGroups.delete(k);
+  else _expandedVaccGroups.add(k);
+  render();
+}
 function initGoogleAuth(){
   if(typeof google==='undefined'){setTimeout(initGoogleAuth,300);return;}
   tokenClient=google.accounts.oauth2.initTokenClient({
@@ -1896,6 +1921,94 @@ async function handleVaccUpload(clientId, dogId){
   input.addEventListener('cancel',()=>{
     if(document.body.contains(input))document.body.removeChild(input);
   });
+  input.click();
+}
+// Per-vaccine-type upload: scans the file with Gemini, then only updates records
+// for the specific vaccTypeName — all other types are left untouched.
+async function handleVaccTypeUpload(clientId, dogId, vaccTypeName){
+  // Step 1: Drive token from user gesture before any await
+  if(state.mode==='live' && !driveToken && driveTokenClient){
+    showToast('📂 Requesting Google Drive access — approve the popup…','#7B4015');
+    try{
+      await new Promise((res,rej)=>{
+        const t=setTimeout(()=>{rej(new Error('Drive popup timed out.'));},25000);
+        driveTokenClient.callback=(resp)=>{clearTimeout(t);if(resp.error){rej(new Error(resp.error));return;}driveToken=resp.access_token;res();};
+        driveTokenClient.requestAccessToken({});
+      });
+    }catch(e){console.warn('Drive auth skipped:',e.message);}
+  }
+  // Step 2: Open file picker
+  const input=document.createElement('input');
+  input.type='file'; input.accept='image/*,application/pdf'; input.style.display='none';
+  document.body.appendChild(input);
+  input.onchange=async()=>{
+    document.body.removeChild(input);
+    const file=input.files[0]; if(!file)return;
+    const initCl=clients.find(c=>c.id===clientId); if(!initCl)return;
+    const clientName=initCl.name;
+    const slug=vaccTypeSlug(vaccTypeName);
+    const btn=document.getElementById(`vtbtn-${dogId}-${slug}`);
+    if(btn){btn.disabled=true;btn.textContent='⏳';}
+    try{
+      // Step 3: Upload to Drive (same folder as full-record upload)
+      let savedDriveLink='';
+      if(state.mode==='live' && driveToken){
+        try{
+          const df=await uploadVaccRecord(file,clientName);
+          savedDriveLink=df.webViewLink||'';
+          showToast('✅ Saved to Drive → Client Vaccine Records / '+clientName);
+        }catch(e){showToast('⚠️ Drive save failed — continuing with scan.','#F97316');console.warn(e);}
+      }
+      // Step 4: Parse with Gemini
+      const btnEl=document.getElementById(`vtbtn-${dogId}-${slug}`);
+      if(btnEl)btnEl.textContent='🤖';
+      const result=await parseVaccRecordWithGemini(file);
+      // Filter results to only records that match this vaccine type (case-insensitive partial match)
+      const typeKey=vaccTypeName.trim().toLowerCase();
+      const matched=(result.vaccines||[]).filter(v=>{
+        const vn=(v.name||'').trim().toLowerCase();
+        return vn.includes(typeKey)||typeKey.includes(vn)||vn===typeKey;
+      });
+      if(matched.length>0){
+        // Re-fetch fresh dog reference (auto-refresh may have run during Gemini await)
+        const freshCl=clients.find(c=>c.id===clientId);
+        const freshDog=freshCl?.dogs.find(d=>d.id===dogId);
+        if(!freshDog){showToast('Dog not found — please reload.','#EF4444');return;}
+        // Merge: remove old records of this type, add newly parsed ones
+        const typeKeep=(freshDog.vaccines||[]).filter(v=>{
+          const vn=(v.name||'').trim().toLowerCase();
+          return !vn.includes(typeKey)&&!typeKey.includes(vn)&&vn!==typeKey;
+        });
+        freshDog.vaccines=[...typeKeep,...matched];
+        // Refresh the soonest-expiry summary field
+        const allExp=freshDog.vaccines.filter(v=>v.expiry).map(v=>v.expiry).sort();
+        if(allExp.length)freshDog.vaccExpiry=allExp[0];
+        freshDog.vaccinated=true;
+        if(savedDriveLink)freshDog.driveFileLink=savedDriveLink;
+        render();
+        showToast(`✅ Updated ${matched.length} ${vaccTypeName} record${matched.length>1?'s':''} for ${freshDog.name}!`);
+        // Hint if other types were also found but ignored
+        const otherFound=(result.vaccines||[]).length-matched.length;
+        if(otherFound>0)showToast(`ℹ️ ${otherFound} other vaccine type${otherFound>1?'s':''} found in this file — use "Upload Record" to add them all.`,'#6B7280');
+        try{await persistClients();}catch(e){showToast('Updated OK — sheet sync failed.','#F97316');}
+      } else {
+        const total=(result.vaccines||[]).length;
+        if(total>0){
+          showToast(`⚠️ Gemini found ${total} vaccine(s) but none matched "${vaccTypeName}". Try "Upload Record" to add all types found.`,'#F97316');
+        } else {
+          showToast(`No vaccine records found in that file.`,'#F97316');
+        }
+        const btnReset=document.getElementById(`vtbtn-${dogId}-${slug}`);
+        if(btnReset){btnReset.disabled=false;btnReset.textContent='📄';}
+      }
+    }catch(err){
+      showToast('Error: '+err.message,'#EF4444');
+      console.error('handleVaccTypeUpload error:',err);
+      const btnReset=document.getElementById(`vtbtn-${dogId}-${slug}`);
+      if(btnReset){btnReset.disabled=false;btnReset.textContent='📄';}
+    }
+  };
+  input.addEventListener('cancel',()=>{if(document.body.contains(input))document.body.removeChild(input);});
   input.click();
 }
 function openFilePickerForDog(accept, onFile){
