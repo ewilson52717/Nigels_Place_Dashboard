@@ -271,7 +271,7 @@ function vaccBadge(dog){
   return rows;
 }
 function requestVaccInfoLinks(cl,dog){
-  const phone=(cl.phone||'').replace(/\D/g,'');
+  const phone=String(cl.phone||'').replace(/\D/g,'');
   const svcName=dog.name;
   const smsBody=encodeURIComponent(`Hi ${cl.name}! 🐾 Just a friendly reminder from Nigel's Place — could you please send us updated vaccination records for ${svcName}? We want to make sure everything stays current. Thank you! 🐶`);
   const emailSubj=encodeURIComponent(`Updated Vaccine Records Needed for ${svcName}`);
@@ -460,7 +460,7 @@ async function loadAllData(){
   ]);
   const svR=await readRangeSafe('Services!A2:F');
   clients.length=0;
-  (cR||[]).forEach(r=>{if(r[0])clients.push({id:+r[0],name:r[1]||'',email:r[2]||'',phone:r[3]||'',
+  (cR||[]).forEach(r=>{if(r[0])clients.push({id:+r[0],name:String(r[1]||''),email:String(r[2]||''),phone:String(r[3]||''),
     photoConsent:String(r[4]).toLowerCase()==='true',dogs:[]});});
   (dR||[]).forEach(r=>{
     if(!r[0])return;
@@ -1720,7 +1720,7 @@ async function deleteService(id){
 function sendInvoiceText(invId){
   const inv=invoices.find(i=>i.id===invId);if(!inv)return;
   const cl=clients.find(c=>c.id===inv.clientId);
-  const phone=(cl?.phone||'').replace(/\D/g,'');
+  const phone=String(cl?.phone||'').replace(/\D/g,'');
   const owed=inv.amount-inv.paid;
   const venmo=state.settings.venmoHandle,square=state.settings.squareLink;
   const payLines=(square?`\nPay by card: ${square}`:'')+(venmo?`\nPay by Venmo: venmo.com/${venmo} (@${venmo})`:'');
