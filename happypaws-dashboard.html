@@ -181,7 +181,7 @@ async function onToken(resp){
 }
 function googleSignIn(){
   if(!tokenClient){showToast('Auth loading, try again','#EF4444');return;}
-  tokenClient.requestAccessToken({prompt:''});
+  tokenClient.requestAccessToken({prompt:'select_account'});
 }
 function enterDemo(roleChoice){
   state.mode='demo'; loadMockData();
