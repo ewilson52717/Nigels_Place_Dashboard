@@ -173,8 +173,9 @@ const state={
   sheetId:CONFIG.SHEET_ID||null,sheetUrl:null,
   settings:{
     businessName:"Nigel's Place",ownerName:'Kelly Hendrickson',
-    dailyCapacity:10,fullDayRate:45,halfDayRate:25,groomingAddOn:20,
+    dailyCapacity:5,fullDayRate:45,halfDayRate:25,groomingAddOn:20,
     venmoHandle:'',squareLink:'',geminiApiKey:'',nigelsDriveFolderId:'',
+    capacityOverrides:{}, // { 'YYYY-MM-DD': number } — per-date overrides
   },
 };
 
@@ -308,6 +309,10 @@ function vaccStatus(dog){
     if(d<=60&&worst==='ok')worst='expiring';
   }
   return worst;
+}
+// Returns effective daily capacity for a specific date (allows per-date overrides)
+function getEffectiveCap(ds){
+  return state.settings.capacityOverrides?.[ds]||state.settings.dailyCapacity;
 }
 function vaccBadge(dog){
   const s=vaccStatus(dog);
@@ -750,6 +755,7 @@ async function loadAllData(){
     else if(k==='squareLink')state.settings.squareLink=v;
     else if(k==='geminiApiKey')state.settings.geminiApiKey=v;
     else if(k==='nigelsDriveFolderId')state.settings.nigelsDriveFolderId=v;
+    else if(k==='capacityOverrides'){try{state.settings.capacityOverrides=JSON.parse(v)||{};}catch(e){}}
   });
   services.length=0;
   if(svR&&svR.length>0){
@@ -780,12 +786,14 @@ async function persistInvoices(){
 }
 async function persistSettings(){
   if(state.mode!=='live')return;
-  await writeRange('Settings!A1:B10',[
+  const overridesJson=JSON.stringify(state.settings.capacityOverrides||{});
+  await writeRange('Settings!A1:B11',[
     ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
     ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
     ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',state.settings.venmoHandle||''],
     ['squareLink',state.settings.squareLink||''],['geminiApiKey',state.settings.geminiApiKey||''],
     ['nigelsDriveFolderId',state.settings.nigelsDriveFolderId||''],
+    ['capacityOverrides',overridesJson],
   ]);
 }
 async function persistServices(){
@@ -996,6 +1004,8 @@ function buildDashboard(){
   const monthBks=bookings.filter(b=>(b.checkIn||'').startsWith(monthPfx)&&b.status!=='cancelled').length;
   const overdue=invoices.filter(i=>i.status==='overdue').reduce((s,i)=>s+(i.amount-i.paid),0);
   const upcoming=bookings.filter(b=>b.checkIn>TODAY&&b.status==='confirmed').sort((a,b)=>a.checkIn.localeCompare(b.checkIn)).slice(0,5);
+  // Next 3 days for the mini calendar view
+  const next3=[];for(let i=1;i<=3;i++){const nd=new Date(now);nd.setDate(nd.getDate()+i);next3.push(nd.toISOString().split('T')[0]);}
   const greetHour=now.getHours();
   const greet=greetHour<12?'Good morning':greetHour<17?'Good afternoon':'Good evening';
   const todayFmt=now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
@@ -1037,14 +1047,39 @@ function buildDashboard(){
       </div>
       <div class="space-y-4">
         <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-          <h2 class="font-semibold text-gray-800 mb-3">Upcoming</h2>
-          ${upcoming.length===0?'<p class="text-gray-300 text-sm">No upcoming bookings</p>':
-            upcoming.map(b=>`
-            <div class="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
-              <div class="text-sm text-gray-700">${b.dogName} <span class="text-gray-400">· ${b.clientName}</span></div>
-              <div class="text-xs text-gray-400 font-medium">${b.nights>1?`${fmtDateShort(b.checkIn)}–${fmtDateShort(b.checkOut)}`:fmtDate(b.checkIn).replace(', '+new Date().getFullYear(),'')}</div>
-            </div>`).join('')}
-          <button onclick="setView('calendar')" class="mt-3 w-full text-xs text-amber-700 hover:underline">View Calendar →</button>
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="font-semibold text-gray-800">Upcoming — Next 3 Days</h2>
+            <button onclick="setView('calendar')" class="text-xs text-amber-700 hover:underline">Full Calendar →</button>
+          </div>
+          <div class="space-y-2">
+          ${next3.map(ds=>{
+            const dayBks=booksForDate(ds).filter(b=>b.status==='confirmed');
+            const cap=getEffectiveCap(ds); // uses per-date override if set
+            const dayLabel=new Date(ds+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+            const hasGrooming=dayBks.some(b=>b.addons&&b.addons.toLowerCase().includes('groom'));
+            const hasBoarding=dayBks.some(b=>b.nights>1);
+            const tagHtml=[
+              hasGrooming?`<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">✂️ Grooming</span>`:'',
+              hasBoarding?`<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">🏨 Boarding</span>`:'',
+            ].filter(Boolean).join('');
+            return`<div class="rounded-xl border ${dayBks.length===0?'border-gray-100 bg-gray-50/60':'border-amber-100 bg-amber-50/40'} p-3">
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-xs font-bold text-gray-700">${dayLabel}</span>
+                <div class="flex items-center gap-1.5">
+                  ${tagHtml}
+                  <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full ${dayBks.length===0?'bg-gray-100 text-gray-400':dayBks.length>=cap?'bg-red-100 text-red-600':'bg-amber-100 text-amber-700'}">${dayBks.length}/${cap}</span>
+                </div>
+              </div>
+              ${dayBks.length===0
+                ?'<p class="text-gray-300 text-xs">No bookings</p>'
+                :dayBks.map(b=>`<div class="flex items-center gap-2 py-0.5">
+                  <span class="text-xs">🐶</span>
+                  <span class="text-xs font-medium text-gray-700 flex-1 truncate">${b.dogName}</span>
+                  <span class="text-[10px] text-gray-400 truncate max-w-[80px]">${b.service}${b.addons?` · ${b.addons.split(',')[0]}`:''}${b.nights>1?` · ${b.nights}d`:''}</span>
+                </div>`).join('')}
+            </div>`;
+          }).join('')}
+          </div>
         </div>
         <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
           <h2 class="font-semibold text-gray-800 mb-3">Invoices</h2>
@@ -1066,7 +1101,7 @@ function buildCalendarView(role){
   const yr=state.calendarDate.getFullYear(),mo=state.calendarDate.getMonth();
   const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
   const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const cap=state.settings.dailyCapacity;
+  // Note: per-day cap now handled per-cell via getEffectiveCap(ds) inside the loop
   const firstDow=new Date(yr,mo,1).getDay(),dim=new Date(yr,mo+1,0).getDate();
   let cells=Array(firstDow).fill(null);
   for(let d=1;d<=dim;d++)cells.push(d);
@@ -1098,6 +1133,7 @@ function buildCalendarView(role){
         ${cells.map(day=>{
           if(!day)return`<div class="border-b border-r border-gray-50 min-h-[88px] bg-gray-50/40"></div>`;
           const ds=mkDs(yr,mo,day),bks=booksForDate(ds),n=bks.length;
+          const cap=getEffectiveCap(ds);
           const c=capColor(n,cap),full=n>=cap,isToday=ds===TODAY;
           const isPast=ds<TODAY,dow=new Date(yr,mo,day).getDay(),wknd=dow===0||dow===6;
           return`
@@ -1468,8 +1504,25 @@ function buildSettingsView(){
       </div>
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
         <h2 class="font-semibold text-gray-800 mb-1">Daily Dog Capacity</h2>
-        <p class="text-xs text-gray-400 mb-3">Clients cannot book days that reach this limit.</p>
-        <input id="set-cap" type="number" value="${state.settings.dailyCapacity}" min="1" max="100" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+        <p class="text-xs text-gray-400 mb-3">Default max dogs per day. You can override specific dates below (e.g. for holidays or when you have extra staff).</p>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Default Max Per Day</label>
+        <input id="set-cap" type="number" value="${state.settings.dailyCapacity}" min="1" max="100" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mb-4">
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Date-Specific Overrides</label>
+        <div class="flex gap-2 mb-3">
+          <input type="date" id="cap-override-date" min="${TODAY}" class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm">
+          <input type="number" id="cap-override-val" placeholder="Max" min="1" max="100" class="w-20 border border-gray-200 rounded-xl px-3 py-2 text-sm">
+          <button type="button" onclick="addCapOverride()" class="px-3 py-2 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">+ Add</button>
+        </div>
+        ${Object.keys(state.settings.capacityOverrides||{}).length===0
+          ?'<p class="text-xs text-gray-300">No date overrides set yet.</p>'
+          :`<div class="space-y-1 max-h-36 overflow-y-auto">${Object.entries(state.settings.capacityOverrides||{}).sort().map(([d,v])=>`
+            <div class="flex items-center justify-between px-3 py-1.5 bg-amber-50 rounded-lg border border-amber-100">
+              <span class="text-xs font-medium text-amber-900">${fmtDate(d)}</span>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-amber-700">${v} dogs max</span>
+                <button onclick="removeCapOverride('${d}')" class="text-gray-300 hover:text-red-400 text-sm leading-none">×</button>
+              </div>
+            </div>`).join('')}</div>`}
       </div>
       <div class="bg-amber-50 rounded-xl p-4 border border-amber-100 text-sm text-amber-800">
         🛎️ Service rates are managed in the <button onclick="setView('services')" class="underline font-semibold">Services</button> section.
@@ -1575,7 +1628,7 @@ function buildAddInvoiceModal(){
   </div>`;
 }
 function buildDayModal(ds){
-  const bks=booksForDate(ds),cap=state.settings.dailyCapacity,c=capColor(bks.length,cap);
+  const bks=booksForDate(ds),cap=getEffectiveCap(ds),c=capColor(bks.length,cap);
   const full=bks.length>=cap,isPast=ds<TODAY,isAdm=state.role==='admin';
   return`
   <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
@@ -1636,7 +1689,7 @@ function buildBookingModal(selectedDate){
         <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Dog</label>
           <select id="bk-dog" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="checkDogVaccWarning()"><option>Select client first...</option></select></div>`
         :`<div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Dog</label>
-          <select id="bk-dog" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+          <select id="bk-dog" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="checkDogVaccWarning()">
             ${cl?.dogs.map(d=>`<option value="${d.id}">${d.name} (${d.breed})</option>`).join('')||'<option>No dogs on file</option>'}
           </select></div>`}
         <div class="grid grid-cols-2 gap-3">
@@ -1824,7 +1877,15 @@ function prevMonth()      {state.calendarDate=new Date(state.calendarDate.getFul
 function nextMonth()      {state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()+1,1);render();}
 function closeModal()     {state.showModal=null;render();}
 function openDayModal(ds)     {state.showModal={type:'day',date:ds};render();}
-function openBookingModal(ds) {state.showModal={type:'booking',date:ds};render();}
+function openBookingModal(ds) {
+  state.showModal={type:'booking',date:ds};
+  render();
+  // Initialize vaccine warning immediately after modal renders
+  setTimeout(()=>{
+    if(state.role!=='client')updateDogSelect();
+    checkDogVaccWarning();
+  },0);
+}
 function openAddClientModal() {state.showModal={type:'addClient'};render();}
 function openAddInvoiceModal(){state.showModal={type:'addInvoice'};render();}
 function openAddServiceModal(){state.showModal={type:'addService'};render();}
@@ -1884,11 +1945,11 @@ function checkDateCapacity(){
   const ci=document.getElementById('bk-checkin')?.value;
   const co=document.getElementById('bk-checkout')?.value||ci;
   const warn=document.getElementById('cap-warning');if(!warn||!ci)return;
-  const cap=state.settings.dailyCapacity;
   let anyFull=false;
   const a=new Date(ci+'T00:00:00'),b=new Date(co+'T00:00:00');
   for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1)){
-    if(booksForDate(d.toISOString().split('T')[0]).length>=cap){anyFull=true;break;}
+    const ds=d.toISOString().split('T')[0];
+    if(booksForDate(ds).length>=getEffectiveCap(ds)){anyFull=true;break;}
   }
   warn.classList.toggle('hidden',!anyFull);
 }
@@ -1903,30 +1964,68 @@ function checkDogVaccWarning(){
   const warn=document.getElementById('vacc-warning');if(!warn)return;
   const overrideRow=document.getElementById('vacc-override-row');
   const overrideCb=document.getElementById('vacc-override-cb');
-  const cId=parseInt(document.getElementById('bk-client')?.value||'0');
+  // Support both admin flow (has #bk-client dropdown) and client flow (use currentClientId)
+  const cId=parseInt(document.getElementById('bk-client')?.value||state.currentClientId||'0');
   const dId=parseInt(document.getElementById('bk-dog')?.value||'0');
   const cl=clients.find(c=>c.id===cId);
   const dog=cl?.dogs.find(d=>d.id===dId);
-  const hideOverride=()=>{if(overrideRow)overrideRow.classList.add('hidden');if(overrideCb)overrideCb.checked=false;};
-  if(!dog){warn.classList.add('hidden');hideOverride();return;}
+
+  const ciEl=document.getElementById('bk-checkin');
+  const coEl=document.getElementById('bk-checkout');
+  const lockDates=()=>{
+    [ciEl,coEl].forEach(el=>{if(el){el.disabled=true;el.style.opacity='0.38';el.style.cursor='not-allowed';el.style.pointerEvents='none';}});
+  };
+  const unlockDates=()=>{
+    [ciEl,coEl].forEach(el=>{if(el){el.disabled=false;el.style.opacity='';el.style.cursor='';el.style.pointerEvents='';}});
+  };
+  const hideOverride=()=>{
+    if(overrideRow)overrideRow.classList.add('hidden');
+    if(overrideCb)overrideCb.checked=false;
+  };
+
+  if(!dog){warn.classList.add('hidden');hideOverride();unlockDates();return;}
   const vs=vaccStatus(dog);
+
   if(vs==='expired'){
-    warn.className='text-xs p-2.5 rounded-xl bg-red-50 text-red-700 border border-red-300 font-medium';
-    warn.innerHTML=`🚩 <strong>${dog.name}'s vaccines are expired.</strong> Booking is blocked until records are updated. Admin override required to proceed.`;
+    // Find which specific vaccines are expired to give a precise message
+    const latest=getLatestVaccsByType(dog);
+    const expiredNames=latest.filter(v=>v.expiry&&v.expiry<TODAY).map(v=>v.name);
+    const expLabel=expiredNames.length?expiredNames.join(', '):'vaccination records';
+    warn.className='text-xs p-3 rounded-xl bg-red-50 text-red-700 border border-red-300 font-medium';
+
+    if(state.role==='client'){
+      warn.innerHTML=`🚩 <strong>${dog.name}'s ${expLabel} ${expiredNames.length===1?'is':'are'} expired.</strong> Booking is currently blocked. Please contact <strong>${state.settings.ownerName||'the business'}</strong> at ${state.settings.businessName||'Nigel\'s Place'} to discuss your options.`;
+      hideOverride();
+      lockDates();
+    }else{
+      warn.innerHTML=`🚩 <strong>${dog.name}'s ${expLabel} ${expiredNames.length===1?'is':'are'} expired.</strong> Dates are locked until records are updated — or use Admin Override to proceed anyway.`;
+      if(overrideRow)overrideRow.classList.remove('hidden');
+      // Lock/unlock based on current override checkbox state
+      const isOverride=overrideCb?.checked||false;
+      if(isOverride)unlockDates();else lockDates();
+      // Wire override checkbox once (flag prevents double-wiring across re-renders)
+      if(overrideCb&&!overrideCb._wired){
+        overrideCb._wired=true;
+        overrideCb.addEventListener('change',()=>{
+          if(overrideCb.checked)unlockDates();else lockDates();
+        });
+      }
+    }
     warn.classList.remove('hidden');
-    // Show admin override checkbox (admins only)
-    if(overrideRow&&state.role!=='client')overrideRow.classList.remove('hidden');
   }else if(vs==='expiring'){
-    const today=new Date(TODAY+'T00:00:00');
-    const exp=new Date(dog.vaccExpiry+'T00:00:00');
-    const days=Math.round((exp-today)/864e5);
+    const latest=getLatestVaccsByType(dog);
+    const soonest=latest.filter(v=>v.expiry&&v.expiry>=TODAY).sort((a,b)=>a.expiry.localeCompare(b.expiry))[0];
+    const exp=soonest?.expiry||dog.vaccExpiry||'';
+    const days=exp?Math.round((new Date(exp+'T00:00:00')-new Date(TODAY+'T00:00:00'))/864e5):0;
     warn.className='text-xs p-2.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200';
-    warn.innerHTML=`⚠️ <strong>${dog.name}'s vaccines expire in ${days} days</strong> (${fmtDateShort(dog.vaccExpiry)}). Consider requesting updated records.`;
+    warn.innerHTML=`⚠️ <strong>${dog.name}'s vaccines expire in ${days} day${days!==1?'s':''}</strong> (${fmtDateShort(exp)}). Consider requesting updated records soon.`;
     warn.classList.remove('hidden');
     hideOverride();
+    unlockDates();
   }else{
     warn.classList.add('hidden');
     hideOverride();
+    unlockDates();
   }
 }
 function populateInvoiceItems(){
@@ -2310,12 +2409,11 @@ async function submitBooking(e){
   const svcEl=document.querySelector('input[name="svc"]:checked');
   const svc=svcEl?.value||'Full Day';
   const baseRate=svcEl?+(svcEl.dataset.price||getBaseRate(svc)):getBaseRate(svc);
-  // Check capacity for each day
-  const cap=state.settings.dailyCapacity;
+  // Check capacity for each day (respects per-date overrides)
   const a=new Date(ci+'T00:00:00'),b=new Date(co+'T00:00:00');
   for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1)){
     const ds=d.toISOString().split('T')[0];
-    if(booksForDate(ds).length>=cap){showToast(`${fmtDate(ds)} is fully booked!`,'#EF4444');return;}
+    if(booksForDate(ds).length>=getEffectiveCap(ds)){showToast(`${fmtDate(ds)} is fully booked!`,'#EF4444');return;}
   }
   // Stay add-ons (checkbox)
   const addonEls=[...(document.querySelectorAll('input[name="addon"]:checked')||[])];
@@ -2337,6 +2435,11 @@ async function submitBooking(e){
     dogId=parseInt(document.getElementById('bk-dog')?.value);
     const cl=clients.find(c=>c.id===clientId),dg=cl?.dogs.find(d=>d.id===dogId);
     dogName=dg?.name||'Dog';clientName=cl?.name||'Client';
+    // Client vaccine block — hard stop, no override available
+    if(dg&&vaccStatus(dg)==='expired'){
+      showToast(`🚩 ${dg.name}'s vaccines are expired. Please contact ${state.settings.businessName||"Nigel's Place"} to update records before booking.`,'#EF4444');
+      return;
+    }
     const photoConsent=document.getElementById('bk-photo')?.checked||false;
     if(cl)cl.photoConsent=photoConsent;
   }else{
@@ -2345,11 +2448,11 @@ async function submitBooking(e){
     if(!clientId||!dogId){showToast('Please select a client and dog.','#EF4444');return;}
     const cl=clients.find(c=>c.id===clientId),dg=cl?.dogs.find(d=>d.id===dogId);
     dogName=dg?.name||'Dog';clientName=cl?.name||'Client';
-    // Vaccine block — only admins can override with the checkbox
+    // Admin vaccine block — can override with checkbox
     if(dg&&vaccStatus(dg)==='expired'){
       const override=document.getElementById('vacc-override-cb')?.checked||false;
       if(!override){
-        showToast(`🚩 ${dg.name}'s vaccines are expired. Update vaccine records, or check the admin override box to proceed.`,'#EF4444');
+        showToast(`🚩 ${dg.name}'s vaccines are expired. Update records, or check the Admin Override box to proceed.`,'#EF4444');
         return;
       }
       addonNames.push('⚠️ Admin vacc. override');
@@ -2461,6 +2564,22 @@ async function markInvoicePaid(id){
   if(inv){inv.paid=inv.amount;inv.status='paid';}
   render();showToast('Invoice marked as paid!');
   try{await persistInvoices();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+}
+function addCapOverride(){
+  const d=document.getElementById('cap-override-date')?.value;
+  const v=parseInt(document.getElementById('cap-override-val')?.value);
+  if(!d){showToast('Please select a date.','#EF4444');return;}
+  if(!v||v<1){showToast('Please enter a valid capacity (min 1).','#EF4444');return;}
+  if(!state.settings.capacityOverrides)state.settings.capacityOverrides={};
+  state.settings.capacityOverrides[d]=v;
+  showToast(`Override set: ${fmtDate(d)} → ${v} dogs max`);
+  render();
+  try{persistSettings();}catch(e){}
+}
+function removeCapOverride(d){
+  if(state.settings.capacityOverrides)delete state.settings.capacityOverrides[d];
+  render();
+  try{persistSettings();}catch(e){}
 }
 async function saveSettings(){
   const v=id=>document.getElementById(id)?.value;
