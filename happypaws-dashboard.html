@@ -46,6 +46,89 @@ const CONFIG = {
 const LOGO_URL = 'nigels-place-logo.jpg';
 
 // ═══════════════════════════════════════════════════
+//  DOG BREEDS
+// ═══════════════════════════════════════════════════
+const BREEDS = [
+  'Affenpinscher','Afghan Hound','Airedale Terrier','Akita','Alaskan Klee Kai',
+  'Alaskan Malamute','American Bulldog','American English Coonhound','American Eskimo Dog',
+  'American Foxhound','American Hairless Terrier','American Pit Bull Terrier',
+  'American Staffordshire Terrier','American Water Spaniel','Anatolian Shepherd',
+  'Australian Cattle Dog','Australian Shepherd','Australian Silky Terrier',
+  'Australian Terrier','Azawakh','Barbet','Basenji','Basset Fauve de Bretagne',
+  'Basset Hound','Beagle','Bearded Collie','Bedlington Terrier','Belgian Malinois',
+  'Belgian Sheepdog','Belgian Tervuren','Bergamasco Sheepdog','Berger Picard',
+  'Bernese Mountain Dog','Bichon Frise','Biewer Terrier','Black and Tan Coonhound',
+  'Black Russian Terrier','Bloodhound','Bluetick Coonhound','Boerboel','Bolognese',
+  'Border Collie','Border Terrier','Borzoi','Boston Terrier','Bouvier des Flandres',
+  'Boxer','Boykin Spaniel','Bracco Italiano','Braque du Bourbonnais','Briard',
+  'Brittany','Brussels Griffon','Bull Terrier','Bulldog','Bullmastiff',
+  'Cairn Terrier','Canaan Dog','Cane Corso','Cardigan Welsh Corgi','Catahoula Leopard Dog',
+  'Caucasian Shepherd','Cavalier King Charles Spaniel','Cesky Terrier','Chesapeake Bay Retriever',
+  'Chihuahua','Chinese Crested','Chinese Shar-Pei','Chinook','Chow Chow',
+  'Cirneco dell\'Etna','Clumber Spaniel','Cocker Spaniel','Collie','Coton de Tulear',
+  'Croatian Sheepdog','Curly-Coated Retriever','Dachshund','Dalmatian','Dandie Dinmont Terrier',
+  'Doberman Pinscher','Dogo Argentino','Dutch Shepherd','English Cocker Spaniel',
+  'English Foxhound','English Setter','English Springer Spaniel','English Toy Spaniel',
+  'Entlebucher Mountain Dog','Field Spaniel','Finnish Lapphund','Finnish Spitz',
+  'Flat-Coated Retriever','French Bulldog','German Pinscher','German Shepherd',
+  'German Shorthaired Pointer','German Wirehaired Pointer','Giant Schnauzer',
+  'Glen of Imaal Terrier','Golden Retriever','Gordon Setter','Great Dane',
+  'Great Pyrenees','Greater Swiss Mountain Dog','Greyhound','Hamiltonstovare',
+  'Harrier','Havanese','Ibizan Hound','Icelandic Sheepdog','Irish Red and White Setter',
+  'Irish Setter','Irish Terrier','Irish Water Spaniel','Irish Wolfhound',
+  'Italian Greyhound','Japanese Chin','Keeshond','Kerry Blue Terrier','Komondor',
+  'Kooikerhondje','Kuvasz','Labrador Retriever','Lagotto Romagnolo','Leonberger',
+  'Lhasa Apso','Lowchen','Maltese','Manchester Terrier','Mastiff','Miniature American Shepherd',
+  'Miniature Bull Terrier','Miniature Pinscher','Miniature Schnauzer','Mountain Cur',
+  'Mudi','Neapolitan Mastiff','Nederlandse Kooikerhondje','Newfoundland','Norfolk Terrier',
+  'Norwegian Buhund','Norwegian Elkhound','Norwegian Lundehund','Norwich Terrier',
+  'Nova Scotia Duck Tolling Retriever','Old English Sheepdog','Otterhound','Papillon',
+  'Parson Russell Terrier','Pekingese','Pembroke Welsh Corgi','Perro de Presa Canario',
+  'Petit Basset Griffon Vendeen','Pharaoh Hound','Plott Hound','Pointer',
+  'Polish Lowland Sheepdog','Pomeranian','Poodle (Miniature)','Poodle (Standard)',
+  'Poodle (Toy)','Portuguese Podengo','Portuguese Water Dog','Pudelpointer','Pug',
+  'Puli','Pumi','Pyrenean Mastiff','Pyrenean Shepherd','Rat Terrier','Redbone Coonhound',
+  'Rhodesian Ridgeback','Rottweiler','Russell Terrier','Saint Bernard','Saluki',
+  'Samoyed','Schipperke','Scottish Deerhound','Scottish Terrier','Sealyham Terrier',
+  'Shetland Sheepdog','Shiba Inu','Shih Tzu','Siberian Husky','Skye Terrier',
+  'Sloughi','Small Munsterlander','Soft Coated Wheaten Terrier','Spanish Water Dog',
+  'Spinone Italiano','Stabyhoun','Staffordshire Bull Terrier','Standard Schnauzer',
+  'Sussex Spaniel','Swedish Vallhund','Thai Ridgeback','Tibetan Mastiff','Tibetan Spaniel',
+  'Tibetan Terrier','Toy Fox Terrier','Treeing Tennessee Brindle','Treeing Walker Coonhound',
+  'Vizsla','Weimaraner','Welsh Springer Spaniel','Welsh Terrier','West Highland White Terrier',
+  'Whippet','Wire Fox Terrier','Wirehaired Pointing Griffon','Wirehaired Vizsla',
+  'Working Kelpie','Xoloitzcuintli','Yorkshire Terrier',
+  // Popular mixes / designer breeds
+  'Aussiedoodle','Bernedoodle','Cavachon','Cavapoo','Cockapoo','Corgidor',
+  'Goldendoodle','Labradoodle','Maltipoo','Morkie','Pomsky','Puggle',
+  'Schnoodle','Sheepadoodle','Shorkie','Springerdoodle','Yorkipoo',
+  'Mixed Breed',
+].sort();
+function breedSelectHtml(selectId, otherInputId, currentVal=''){
+  const isOther = currentVal && !BREEDS.includes(currentVal);
+  return`
+    <select id="${selectId}" onchange="toggleBreedOther('${selectId}','${otherInputId}')"
+      class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+      <option value="">Select breed...</option>
+      ${BREEDS.map(b=>`<option value="${b}" ${b===currentVal?'selected':''}>${b}</option>`).join('')}
+      <option value="Other" ${isOther?'selected':''}>Other (type below)</option>
+    </select>
+    <input id="${otherInputId}" type="text" placeholder="Type breed name..."
+      value="${isOther?currentVal:''}"
+      class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mt-2 ${isOther?'':'hidden'}">`;
+}
+function toggleBreedOther(selId, inputId){
+  const sel=document.getElementById(selId);
+  const inp=document.getElementById(inputId);
+  if(inp) inp.classList.toggle('hidden', sel?.value!=='Other');
+}
+function getBreedValue(selectId, otherInputId){
+  const sel=document.getElementById(selectId)?.value;
+  if(sel==='Other') return document.getElementById(otherInputId)?.value?.trim()||'Mixed';
+  return sel||'Mixed';
+}
+
+// ═══════════════════════════════════════════════════
 //  ②  STATE
 // ═══════════════════════════════════════════════════
 const state = {
@@ -58,6 +141,8 @@ const state = {
   settings:{
     businessName:"Nigel's Place", ownerName:'Sarah Johnson',
     dailyCapacity:10, fullDayRate:45, halfDayRate:25, groomingAddOn:20,
+    venmoHandle:'',
+    squareLink:'',
   },
 };
 
@@ -229,11 +314,11 @@ async function initSheetHeaders(){
     writeRange('Dogs!A1:G1',    [['id','clientId','name','breed','age','vaccinated','notes']]),
     writeRange('Bookings!A1:I1',[['id','clientId','dogId','dogName','clientName','date','status','service','price']]),
     writeRange('Invoices!A1:I1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items']]),
-    writeRange('Settings!A1:B6',[
+    writeRange('Settings!A1:B8',[
       ['key','value'],
       ['businessName', state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
       ['fullDayRate',  state.settings.fullDayRate],  ['halfDayRate',  state.settings.halfDayRate],
-      ['groomingAddOn',state.settings.groomingAddOn],
+      ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',''],['squareLink',''],
     ]),
   ]);
 }
@@ -260,6 +345,8 @@ async function loadAllData(){
     else if(k==='fullDayRate')state.settings.fullDayRate=+v;
     else if(k==='halfDayRate')state.settings.halfDayRate=+v;
     else if(k==='groomingAddOn')state.settings.groomingAddOn=+v;
+    else if(k==='venmoHandle')state.settings.venmoHandle=v;
+    else if(k==='squareLink')state.settings.squareLink=v;
   });
 }
 async function persistBookings(){
@@ -284,10 +371,11 @@ async function persistInvoices(){
 }
 async function persistSettings(){
   if(state.mode!=='live')return;
-  await writeRange('Settings!A1:B6',[
+  await writeRange('Settings!A1:B8',[
     ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
     ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
-    ['groomingAddOn',state.settings.groomingAddOn],
+    ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',state.settings.venmoHandle||''],
+    ['squareLink',state.settings.squareLink||''],
   ]);
 }
 async function refreshData(){
@@ -630,9 +718,13 @@ function buildInvoicesView(){
             <td class="px-5 py-3.5"><div class="font-bold text-gray-800">$${inv.amount}</div>${inv.paid>0&&inv.paid<inv.amount?`<div class="text-xs text-gray-400">$${inv.paid} paid</div>`:''}</td>
             <td class="px-5 py-3.5 text-gray-500">${inv.dueDate}</td>
             <td class="px-5 py-3.5"><span class="badge ${sCls[inv.status]||'bg-gray-100 text-gray-600'}">${inv.status}</span></td>
-            <td class="px-5 py-3.5">
-              <button class="text-xs text-amber-700 hover:underline mr-2">View</button>
-              ${inv.status!=='paid'?`<button onclick="markInvoicePaid(${inv.id})" class="text-xs text-blue-600 hover:underline">Mark Paid</button>`:''}
+            <td class="px-5 py-3.5 flex items-center gap-2 flex-wrap">
+              ${inv.status!=='paid'?`
+                <button onclick="sendInvoiceText(${inv.id})"
+                  class="text-xs px-2 py-1 rounded-lg text-white" style="background:#7B4015"
+                  title="Open pre-filled text message">📱 Text</button>
+                <button onclick="markInvoicePaid(${inv.id})" class="text-xs text-blue-600 hover:underline">Mark Paid</button>`
+              :`<span class="text-xs text-gray-300">Paid ✓</span>`}
             </td>
           </tr>`).join('')}
         </tbody>
@@ -661,6 +753,21 @@ function buildSettingsView(){
             <input id="set-biz" type="text" value="${state.settings.businessName}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
           <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Owner Name</label>
             <input id="set-owner" type="text" value="${state.settings.ownerName}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Venmo Handle</label>
+            <div class="flex items-center border border-gray-200 rounded-xl overflow-hidden">
+              <span class="px-3 py-2 bg-gray-50 text-gray-400 text-sm border-r border-gray-200">@</span>
+              <input id="set-venmo" type="text" placeholder="your-venmo-handle"
+                value="${state.settings.venmoHandle||''}"
+                class="flex-1 px-3 py-2 text-sm outline-none">
+            </div>
+            <p class="text-xs text-gray-400 mt-1">Used in invoice text messages for payment requests</p>
+          </div>
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Square Payment Link</label>
+            <input id="set-square" type="url" placeholder="https://square.link/u/XXXXXXXX"
+              value="${state.settings.squareLink||''}"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            <p class="text-xs text-gray-400 mt-1">In Square: Online → Payment Links → Create Link → copy URL</p>
+          </div>
         </div>
       </div>
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
@@ -881,8 +988,8 @@ function buildAddClientModal(){
           <div class="grid grid-cols-2 gap-3">
             <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Dog Name *</label>
               <input id="dog-name" type="text" placeholder="Buddy" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
-            <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Breed</label>
-              <input id="dog-breed" type="text" placeholder="Golden Retriever" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+            <div class="col-span-2"><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Breed</label>
+              ${breedSelectHtml('dog-breed','dog-breed-other')}</div>
             <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Age (yrs)</label>
               <input id="dog-age" type="number" min="0" max="25" placeholder="3" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
             <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Vaccinations</label>
@@ -977,7 +1084,7 @@ async function submitClient(e){
     phone:document.getElementById('cl-phone')?.value||'',
     dogs:[{id:maxDogId+1,
       name: document.getElementById('dog-name')?.value||'Dog',
-      breed:document.getElementById('dog-breed')?.value||'Mixed',
+      breed:getBreedValue('dog-breed','dog-breed-other'),
       age:  parseInt(document.getElementById('dog-age')?.value)||1,
       vaccinated:document.getElementById('dog-vacc')?.value==='true',
       notes:document.getElementById('dog-notes')?.value||'',
@@ -986,6 +1093,24 @@ async function submitClient(e){
   clients.push(nc); state.showModal=null; render();
   showToast(`${name} added as a client!`);
   try{await persistClients();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+}
+function sendInvoiceText(invId){
+  const inv=invoices.find(i=>i.id===invId); if(!inv)return;
+  const cl=clients.find(c=>c.id===inv.clientId);
+  const phone=(cl?.phone||'').replace(/\D/g,'');
+  const owed=inv.amount-inv.paid;
+  const venmo=state.settings.venmoHandle;
+  const square=state.settings.squareLink;
+  const payLines=(square?`\nPay by card: ${square}`:'')+(venmo?`\nPay by Venmo: venmo.com/${venmo} (@${venmo})`:'');
+  const msg=`Hi ${inv.clientName}! 🐾 This is a payment reminder from Nigel's Place.`
+    +`\n\nServices: ${inv.items}`
+    +`\nAmount due: $${owed}`
+    +`\nDue date: ${inv.dueDate}`
+    +payLines
+    +`\n\nThank you! 🐶`;
+  const encoded=encodeURIComponent(msg);
+  const smsLink=phone?`sms:${phone}?&body=${encoded}`:`sms:?&body=${encoded}`;
+  window.open(smsLink,'_self');
 }
 async function submitInvoice(e){
   e.preventDefault();
@@ -1026,6 +1151,10 @@ async function saveSettings(){
   if(groom>0)state.settings.groomingAddOn=groom;
   if(biz)    state.settings.businessName=biz;
   if(owner)  state.settings.ownerName=owner;
+  const venmo=v('set-venmo')?.trim();
+  if(venmo!==undefined) state.settings.venmoHandle=venmo;
+  const sq=v('set-square')?.trim();
+  if(sq!==undefined) state.settings.squareLink=sq;
   showToast('Settings saved!'); render();
   try{await persistSettings();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
 }
