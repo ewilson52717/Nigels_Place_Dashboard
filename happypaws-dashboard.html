@@ -1777,7 +1777,7 @@ async function handleVaccUpload(clientId, dogId){
           driveToken=resp.access_token;
           res();
         };
-        driveTokenClient.requestAccessToken({prompt:'consent'});
+        driveTokenClient.requestAccessToken({});
       });
     }catch(e){
       // Drive auth failed — that's OK, we'll skip Drive and just run Gemini
@@ -1794,20 +1794,23 @@ async function handleVaccUpload(clientId, dogId){
     document.body.removeChild(input);
     const file=input.files[0];
     if(!file)return;
-    const cl=clients.find(c=>c.id===clientId);
-    const dog=cl?.dogs.find(d=>d.id===dogId);
-    if(!dog||!cl)return;
+    // Initial client name lookup (for Drive folder path) — clientId/dogId are closed-over
+    const initCl=clients.find(c=>c.id===clientId);
+    if(!initCl)return;
+    const clientName=initCl.name; // capture name string — stable even if array refreshes
     const btnId=`vbtn-${dogId}`;
     const btn=document.getElementById(btnId);
     if(btn){btn.disabled=true;btn.textContent='⏳ Processing…';}
     try{
       // Step 3: Upload to Drive if we have a token
+      // Save Drive link in a local var — don't mutate dog yet (it may become stale during Gemini await)
+      let savedDriveLink='';
       if(state.mode==='live' && driveToken){
         try{
           if(btn)btn.textContent='📂 Saving to Drive…';
-          const df=await uploadVaccRecord(file,cl.name);
-          dog.driveFileLink=df.webViewLink||'';
-          showToast('✅ Saved to Google Drive → Nigel\'s Place / Client Vaccine Records / '+cl.name);
+          const df=await uploadVaccRecord(file,clientName);
+          savedDriveLink=df.webViewLink||'';
+          showToast('✅ Saved to Google Drive → Nigel\'s Place / Client Vaccine Records / '+clientName);
         }catch(e){
           showToast('⚠️ Drive save failed: '+e.message+' — continuing with Gemini scan.','#F97316');
           console.warn('Drive upload error:',e);
@@ -1817,12 +1820,21 @@ async function handleVaccUpload(clientId, dogId){
       if(btn)btn.textContent='🤖 Scanning with AI…';
       const result=await parseVaccRecordWithGemini(file);
       if(result.vaccines&&result.vaccines.length>0){
-        dog.vaccines=result.vaccines;
+        // Re-fetch fresh references — auto-refresh may have replaced all dog objects during the Gemini await
+        const freshCl=clients.find(c=>c.id===clientId);
+        const freshDog=freshCl?.dogs.find(d=>d.id===dogId);
+        if(!freshDog||!freshCl){
+          showToast('⚠️ Dog not found after scan — please reload and try again.','#EF4444');
+          if(btn){btn.disabled=false;btn.textContent='📄 Upload Record';}
+          return;
+        }
+        if(savedDriveLink)freshDog.driveFileLink=savedDriveLink;
+        freshDog.vaccines=result.vaccines;
         const expDates=result.vaccines.filter(v=>v.expiry).map(v=>v.expiry).sort();
-        if(expDates.length)dog.vaccExpiry=expDates[0];
-        dog.vaccinated=true;
+        if(expDates.length)freshDog.vaccExpiry=expDates[0];
+        freshDog.vaccinated=true;
         render();
-        showToast(`🐾 Found ${result.vaccines.length} vaccine record${result.vaccines.length>1?'s':''} for ${dog.name}!`);
+        showToast(`🐾 Found ${result.vaccines.length} vaccine record${result.vaccines.length>1?'s':''} for ${freshDog.name}!`);
         try{await persistClients();}catch(e){showToast('Parsed OK — sheet sync failed.','#F97316');}
       }else{
         showToast('No vaccines found in that file. Try a clearer photo or PDF.','#F97316');
@@ -1851,21 +1863,25 @@ async function ensureDriveToken(){
   if(driveToken)return true;
   if(state.mode!=='live')return false;
   showToast('📂 A Google sign-in popup will appear — please allow Drive access.','#7B4015');
-  await new Promise((res,rej)=>{
-    const t=setTimeout(()=>rej(new Error('Drive access timed out. Please allow the popup and try again.')),30000);
-    driveTokenClient.callback=(resp)=>{
-      clearTimeout(t);
-      if(resp.error){rej(new Error('Drive access denied: '+resp.error));return;}
-      driveToken=resp.access_token; res();
-    };
-    driveTokenClient.requestAccessToken({prompt:'select_account'});
-  });
+  try{
+    await new Promise((res,rej)=>{
+      const t=setTimeout(()=>rej(new Error('Drive access timed out. Please allow the popup and try again.')),30000);
+      driveTokenClient.callback=(resp)=>{
+        clearTimeout(t);
+        if(resp.error){rej(new Error('Drive access denied: '+resp.error));return;}
+        driveToken=resp.access_token; res();
+      };
+      driveTokenClient.requestAccessToken({});
+    });
+  }catch(e){
+    console.warn('ensureDriveToken failed:',e.message);
+    showToast('⚠️ Drive access not granted — photo will not be saved to Drive.','#F97316');
+    return false;
+  }
   return !!driveToken;
 }
 async function handleDogPhotoUpload(clientId, dogId){
-  const cl=clients.find(c=>c.id===clientId);
-  const dog=cl?.dogs.find(d=>d.id===dogId);
-  if(!dog||!cl)return;
+  if(!clients.find(c=>c.id===clientId)?.dogs.find(d=>d.id===dogId))return;
   // Request Drive token first, directly from button click user gesture
   await ensureDriveToken();
   openFilePickerForDog('image/*', async(file)=>{
@@ -1873,10 +1889,14 @@ async function handleDogPhotoUpload(clientId, dogId){
     const btn=document.getElementById(btnId);
     if(btn){btn.disabled=true;btn.textContent='⏳ Uploading…';}
     try{
-      const df=await uploadToDriveFolder(file,["Nigel's Place",'Dog Photos',dog.name]);
-      dog.photoLink=df.webViewLink||'';
+      // Re-fetch fresh reference inside the async callback
+      const freshCl=clients.find(c=>c.id===clientId);
+      const freshDog=freshCl?.dogs.find(d=>d.id===dogId);
+      if(!freshDog||!freshCl){showToast('Dog not found — please reload.','#EF4444');return;}
+      const df=await uploadToDriveFolder(file,["Nigel's Place",'Dog Photos',freshDog.name]);
+      freshDog.photoLink=df.webViewLink||'';
       render();
-      showToast(`📸 ${dog.name}'s photo saved to Google Drive!`);
+      showToast(`📸 ${freshDog.name}'s photo saved to Google Drive!`);
       try{await persistClients();}catch(e){showToast('Photo saved; sheet sync failed.','#F97316');}
     }catch(err){
       showToast('Photo upload failed: '+err.message,'#EF4444');
@@ -1885,9 +1905,7 @@ async function handleDogPhotoUpload(clientId, dogId){
   });
 }
 async function handlePlayPhotoUpload(clientId, dogId){
-  const cl=clients.find(c=>c.id===clientId);
-  const dog=cl?.dogs.find(d=>d.id===dogId);
-  if(!dog||!cl)return;
+  if(!clients.find(c=>c.id===clientId)?.dogs.find(d=>d.id===dogId))return;
   // Request Drive token first, directly from button click user gesture
   await ensureDriveToken();
   openFilePickerForDog('image/*', async(file)=>{
@@ -1895,11 +1913,15 @@ async function handlePlayPhotoUpload(clientId, dogId){
     const btn=document.getElementById(btnId);
     if(btn){btn.disabled=true;btn.textContent='⏳ Uploading…';}
     try{
-      const df=await uploadToDriveFolder(file,["Nigel's Place",'Play Photos',dog.name]);
+      // Re-fetch fresh reference inside the async callback
+      const freshCl=clients.find(c=>c.id===clientId);
+      const freshDog=freshCl?.dogs.find(d=>d.id===dogId);
+      if(!freshDog||!freshCl){showToast('Dog not found — please reload.','#EF4444');return;}
+      const df=await uploadToDriveFolder(file,["Nigel's Place",'Play Photos',freshDog.name]);
       const entry={link:df.webViewLink||'',filename:df.name||file.name,date:new Date().toISOString().split('T')[0]};
-      dog.playPhotos=[...(dog.playPhotos||[]),entry];
+      freshDog.playPhotos=[...(freshDog.playPhotos||[]),entry];
       render();
-      showToast(`🎉 Play photo added for ${dog.name}!`);
+      showToast(`🎉 Play photo added for ${freshDog.name}!`);
       try{await persistClients();}catch(e){showToast('Photo saved; sheet sync failed.','#F97316');}
     }catch(err){
       showToast('Play photo upload failed: '+err.message,'#EF4444');
