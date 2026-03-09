@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nigel's Place</title>
+  <title>Nigel's Place · PawDesk</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://accounts.google.com/gsi/client" async></script>
   <style>
@@ -35,6 +35,21 @@
     .fs-btn:hover { background:#F9FAFB; color:#374151; border-color:#D1D5DB; }
     .fs-btn-dark { background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:rgba(255,255,255,0.7); border-radius:8px; padding:5px 10px; cursor:pointer; font-size:0.75rem; transition:all 0.15s; display:inline-flex; align-items:center; gap:5px; }
     .fs-btn-dark:hover { background:rgba(255,255,255,0.18); color:white; }
+    /* ── Policy footer ── */
+    .policy-footer { padding:0.85rem 1.5rem; text-align:center; border-top:1px solid #F3F4F6; background:white; font-size:0.72rem; color:#9CA3AF; }
+    .policy-footer a, .policy-footer button.policy-link { color:#9CA3AF; text-decoration:underline; background:none; border:none; cursor:pointer; font-size:0.72rem; font-family:inherit; padding:0; }
+    .policy-footer a:hover, .policy-footer button.policy-link:hover { color:#6B7280; }
+    /* Policy modal overlay */
+    .policy-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9000; display:flex; align-items:center; justify-content:center; padding:1rem; }
+    .policy-modal-box { background:white; border-radius:16px; max-width:680px; width:100%; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.3); overflow:hidden; }
+    .policy-modal-header { padding:1.25rem 1.5rem; border-bottom:1px solid #F3F4F6; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+    .policy-modal-body { padding:1.5rem; overflow-y:auto; flex:1; font-size:0.87rem; line-height:1.7; color:#374151; }
+    .policy-modal-body h3 { font-size:0.95rem; font-weight:700; color:#7B4015; margin:1.4rem 0 0.4rem; }
+    .policy-modal-body h3:first-child { margin-top:0; }
+    .policy-modal-body p { margin-bottom:0.75rem; }
+    .policy-modal-body ul { margin:0.3rem 0 0.75rem 1.25rem; }
+    .policy-modal-body ul li { margin-bottom:0.25rem; }
+    .policy-modal-footer { padding:1rem 1.5rem; border-top:1px solid #F3F4F6; display:flex; justify-content:flex-end; flex-shrink:0; }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -53,6 +68,10 @@ const CONFIG = {
   // 2. Set your Google Sheet to "Anyone with link can view" (Share → Anyone with link → Viewer)
   // 3. Paste the API key here.  The kiosk URL is: [your-github-pages-url]?kiosk
   KIOSK_API_KEY: '',
+  // ─── APP BRANDING ─────────────────────────────────────────────────────────
+  // PawDesk — Pet care management platform by Spend by Design LLC
+  APP_NAME: 'PawDesk',
+  APP_COMPANY: 'Spend by Design LLC',
   // ──────────────────────────────────────────────────────────────────────────
 };
 const LOGO_URL = 'nigels-place-logo.jpg';
@@ -858,6 +877,11 @@ function buildLogin(){
       <div class="mt-5 p-3 bg-amber-50 rounded-xl border border-amber-100 text-center">
         <p class="text-amber-600 text-xs font-medium">⚡ Google sign-in saves real data to your Drive</p>
       </div>
+      <div class="mt-4 text-center" style="font-size:0.7rem;color:#D1D5DB;">
+        <button onclick="showPolicyModal('privacy')" style="background:none;border:none;cursor:pointer;color:#D1D5DB;text-decoration:underline;font-size:0.7rem;font-family:inherit;">Privacy Policy</button>
+        &nbsp;·&nbsp;
+        <button onclick="showPolicyModal('terms')" style="background:none;border:none;cursor:pointer;color:#D1D5DB;text-decoration:underline;font-size:0.7rem;font-family:inherit;">Terms of Service</button>
+      </div>
     </div>
   </div>`;
 }
@@ -887,6 +911,9 @@ function buildAdminLayout(){
       <div class="p-5 border-b border-white/10">
         <img src="${LOGO_URL}" style="width:60px;margin:0 auto 0.2rem;display:block">
         <div class="text-white font-bold text-sm leading-tight text-center">Nigel's Place</div>
+        <div style="text-align:center;margin-top:2px;margin-bottom:1px;">
+          <span style="font-size:0.6rem;color:rgba(255,255,255,0.22);letter-spacing:0.06em;text-transform:uppercase;">powered by ${CONFIG.APP_NAME}</span>
+        </div>
         <div class="text-amber-300 text-xs mt-0.5 text-center">
           ${state.mode==='live'
             ?`<span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 bg-green-400 rounded-full inline-block"></span>Live · ${state.userEmail?.split('@')[0]||''}</span>`
@@ -907,6 +934,11 @@ function buildAdminLayout(){
           class="w-full px-3 py-2 rounded-xl text-amber-200 hover:text-white hover:bg-white/10 text-xs text-left transition-all">
           ← Sign Out
         </button>
+        <div style="padding:6px 12px 2px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button onclick="showPolicyModal('privacy')" style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.28);font-size:0.67rem;text-decoration:underline;font-family:inherit;padding:0;">Privacy</button>
+          <button onclick="showPolicyModal('terms')" style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.28);font-size:0.67rem;text-decoration:underline;font-family:inherit;padding:0;">Terms</button>
+          <span style="color:rgba(255,255,255,0.15);font-size:0.67rem;">&copy; ${new Date().getFullYear()} ${CONFIG.APP_COMPANY}</span>
+        </div>
       </div>
     </aside>
     <main class="flex-1 overflow-auto">${views[state.view]||views.dashboard}</main>
@@ -943,6 +975,12 @@ function buildClientLayout(){
     </header>
     <div class="max-w-5xl mx-auto p-5">
       ${state.clientView==='home'?buildClientHome():buildClientBookings()}
+    </div>
+    <div class="policy-footer">
+      &copy; ${new Date().getFullYear()} ${CONFIG.APP_COMPANY} &nbsp;&middot;&nbsp;
+      <button class="policy-link" onclick="showPolicyModal('privacy')">Privacy Policy</button>
+      &nbsp;&middot;&nbsp;
+      <button class="policy-link" onclick="showPolicyModal('terms')">Terms of Service</button>
     </div>
   </div>
   ${state.showModal?buildModal():''}`;
@@ -2463,6 +2501,77 @@ document.addEventListener('fullscreenchange',()=>{
     btn.title=inFs?'Exit fullscreen  (Esc)':'Go fullscreen';
   });
 });
+
+// ─── Policy Modal ────────────────────────────────
+function showPolicyModal(type){
+  const isPrivacy=(type==='privacy');
+  const title=isPrivacy?'Privacy Policy':'Terms of Service';
+  const content=isPrivacy?`
+    <h3>Who We Are</h3>
+    <p>PawDesk is a pet care management platform developed by <strong>Spend by Design LLC</strong>. Pet care businesses use PawDesk to manage client profiles, pet records, and bookings. We <strong>never sell</strong> your personal information.</p>
+    <h3>Information We Collect</h3>
+    <ul>
+      <li>Your name, email address, and phone number</li>
+      <li>Emergency contact information for your pet's stay</li>
+      <li>Your pet's profile — name, breed, age, and care notes</li>
+      <li>Vaccination records and pet photos you upload</li>
+      <li>Booking details and photo consent preferences</li>
+    </ul>
+    <h3>How We Use It</h3>
+    <p>Your information is used to manage your pet's profile, schedule and track bookings, verify vaccination requirements, send reminders, and display activity photos during your pet's visits. It is shared only with the pet care facility you are booking with.</p>
+    <h3>Sign-In &amp; Session</h3>
+    <p>Access to this portal uses Google Sign-In to verify your identity. We do not access your Gmail, Google Drive, or other Google services on your behalf. Your session is remembered in your browser for convenience and cleared when you sign out.</p>
+    <h3>Your Rights</h3>
+    <p>You may update or correct your profile at any time through the portal. To request deletion of your data, contact the pet care facility or email us at <strong>hello@spendbydesign.co</strong>.</p>
+    <h3>Changes to This Policy</h3>
+    <p>We may update this policy from time to time. Continued use of the portal after changes are posted constitutes acceptance.</p>
+  `:`
+    <h3>About This Agreement</h3>
+    <p>These Terms govern your use of the client portal powered by PawDesk (<strong>Spend by Design LLC</strong>). By using this portal, you agree to these Terms and our Privacy Policy.</p>
+    <h3>What the Portal Does</h3>
+    <p>The portal lets you create a client profile, manage your pet's records, request bookings, upload vaccination documents, and view your booking history and invoices.</p>
+    <h3>PawDesk Is Not the Pet Care Provider</h3>
+    <p>PawDesk is the software platform — not the pet care facility. Questions or concerns about your pet's care should be directed to the facility directly. We are not responsible for the services your pet receives during a visit.</p>
+    <h3>Your Responsibilities</h3>
+    <ul>
+      <li>Provide accurate, up-to-date information about yourself and your pet.</li>
+      <li>Ensure vaccination records are current before each booking.</li>
+      <li>Use the portal only for lawful purposes and in good faith.</li>
+      <li>Keep your Google account credentials secure.</li>
+    </ul>
+    <h3>Photos &amp; Payments</h3>
+    <p>If you consent, the facility may photograph your pet during visits. You can withdraw photo consent at any time in your profile. Payments are handled directly by the pet care facility — PawDesk does not process or store payment information.</p>
+    <h3>Disclaimer</h3>
+    <p>The portal is provided "as is." We are not liable for missed reminders, temporary outages, or issues resulting from inaccurate information you provided. PawDesk does not provide veterinary advice.</p>
+    <h3>Contact</h3>
+    <p>Questions? Email us at <strong>hello@spendbydesign.co</strong>.</p>
+  `;
+  const existing=document.getElementById('np-policy-modal');
+  if(existing)existing.remove();
+  const ov=document.createElement('div');
+  ov.id='np-policy-modal';
+  ov.className='policy-modal-overlay';
+  ov.onclick=(e)=>{if(e.target===ov)ov.remove();};
+  ov.innerHTML=`
+    <div class="policy-modal-box">
+      <div class="policy-modal-header">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:34px;height:34px;background:linear-gradient(135deg,#7B4015,#5C3317);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">🐾</div>
+          <div>
+            <div style="font-weight:700;font-size:1rem;color:#111827;">${title}</div>
+            <div style="font-size:0.72rem;color:#9CA3AF;">${CONFIG.APP_NAME} · ${CONFIG.APP_COMPANY} · Effective March 9, 2026</div>
+          </div>
+        </div>
+        <button onclick="document.getElementById('np-policy-modal').remove()" style="background:none;border:none;cursor:pointer;font-size:1.3rem;color:#9CA3AF;line-height:1;" title="Close">×</button>
+      </div>
+      <div class="policy-modal-body">${content}</div>
+      <div class="policy-modal-footer">
+        <button onclick="document.getElementById('np-policy-modal').remove()" style="background:#7B4015;color:white;border:none;padding:0.5rem 1.5rem;border-radius:10px;cursor:pointer;font-size:0.85rem;font-weight:600;">Close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+// ─────────────────────────────────────────────────
 
 // ═══════════════════════════════════════════════════
 //  ⑬  KIOSK MODE  — No-auth lobby display
