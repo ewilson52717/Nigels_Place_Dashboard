@@ -318,13 +318,23 @@ document.addEventListener('visibilitychange',()=>{
 // ═══════════════════════════════════════════════════
 //  ⑦  GOOGLE AUTH
 // ═══════════════════════════════════════════════════
-let tokenClient=null,silentSignIn=false;
+let tokenClient=null,driveTokenClient=null,silentSignIn=false;
+let driveToken=null; // separate Drive token — only requested when uploading
 function initGoogleAuth(){
   if(typeof google==='undefined'){setTimeout(initGoogleAuth,300);return;}
   tokenClient=google.accounts.oauth2.initTokenClient({
     client_id:CONFIG.CLIENT_ID,
-    scope:'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file',
+    scope:'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email',
     callback:onToken,
+  });
+  // Separate Drive-scoped client — only invoked on demand when uploading vaccine records
+  driveTokenClient=google.accounts.oauth2.initTokenClient({
+    client_id:CONFIG.CLIENT_ID,
+    scope:'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file',
+    callback:(resp)=>{
+      if(!resp.error)driveToken=resp.access_token;
+      else showToast('Drive access denied — file will not be saved to Drive.','#F97316');
+    }
   });
   const savedEmail=localStorage.getItem('np_email');
   if(savedEmail){silentSignIn=true;tokenClient.requestAccessToken({prompt:'none',login_hint:savedEmail});}
@@ -354,7 +364,10 @@ async function onToken(resp){
     }else{
       state.loadingMsg='Loading your data...';render();
       state.sheetUrl=`https://docs.google.com/spreadsheets/d/${state.sheetId}`;
-      await loadAllData();
+      await Promise.race([
+        loadAllData(),
+        new Promise((_,rej)=>setTimeout(()=>rej(new Error('Loading timed out — please refresh the page.')),20000))
+      ]);
     }
     lastSynced=Date.now();
     startAutoRefresh();
@@ -442,8 +455,8 @@ async function initSheetHeaders(){
 }
 async function loadAllData(){
   const[cR,dR,bR,iR,sR]=await Promise.all([
-    readRange('Clients!A2:E'),readRange('Dogs!A2:H'),readRange('Bookings!A2:L'),
-    readRange('Invoices!A2:I'),readRange('Settings!A2:B'),
+    readRangeSafe('Clients!A2:E'),readRangeSafe('Dogs!A2:K'),readRangeSafe('Bookings!A2:L'),
+    readRangeSafe('Invoices!A2:I'),readRangeSafe('Settings!A2:B'),
   ]);
   const svR=await readRangeSafe('Services!A2:F');
   clients.length=0;
@@ -539,7 +552,19 @@ async function refreshData(){
 // ═══════════════════════════════════════════════════
 //  ⑨  RENDER
 // ═══════════════════════════════════════════════════
-function render(){document.getElementById('app').innerHTML=buildApp();}
+function render(){
+  try{document.getElementById('app').innerHTML=buildApp();}
+  catch(e){
+    console.error('Render error:',e);
+    state.isLoading=false;
+    document.getElementById('app').innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;color:#7B4015;background:#FEF3C7">
+      <div style="font-size:3rem">🐾</div>
+      <div style="font-weight:700;font-size:1.2rem;margin:8px 0">Something went wrong</div>
+      <div style="color:#92400E;font-size:.9rem;margin-bottom:16px">${e.message}</div>
+      <button onclick="location.reload()" style="background:#7B4015;color:white;border:none;padding:10px 24px;border-radius:12px;cursor:pointer;font-size:.9rem">Refresh Page</button>
+    </div>`;
+  }
+}
 function buildApp(){
   if(state.isLoading)return buildLoader();
   if(state.role==='login')return buildLogin();
@@ -1463,37 +1488,33 @@ function populateInvoiceItems(){
 // ═══════════════════════════════════════════════════
 const DRIVE_API = 'https://www.googleapis.com/';
 async function findOrCreateFolder(name, parentId){
-  // Search for existing folder
   const q=`mimeType='application/vnd.google-apps.folder' and name='${name}' and trashed=false${parentId?` and '${parentId}' in parents`:''}`;
   const r=await fetch(`${DRIVE_API}drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`,{
-    headers:{Authorization:`Bearer ${state.accessToken}`}
+    headers:{Authorization:`Bearer ${driveToken}`}
   });
   const d=await r.json();
   if(d.files&&d.files.length>0)return d.files[0].id;
-  // Create it
   const body={name,mimeType:'application/vnd.google-apps.folder'};
   if(parentId)body.parents=[parentId];
   const cr=await fetch(`${DRIVE_API}drive/v3/files`,{
-    method:'POST',headers:{Authorization:`Bearer ${state.accessToken}`,'Content-Type':'application/json'},
+    method:'POST',headers:{Authorization:`Bearer ${driveToken}`,'Content-Type':'application/json'},
     body:JSON.stringify(body)
   });
   const cd=await cr.json();
   return cd.id;
 }
 async function uploadVaccRecord(file, clientName){
-  // Ensure folder path: Nigel's Place / Client Vaccine Records / [ClientName]
   const rootId=await findOrCreateFolder("Nigel's Place",null);
   const recordsId=await findOrCreateFolder('Client Vaccine Records',rootId);
-  const clientId2=await findOrCreateFolder(clientName,recordsId);
-  // Upload file via multipart
-  const meta=JSON.stringify({name:file.name,parents:[clientId2]});
+  const clientFolderId=await findOrCreateFolder(clientName,recordsId);
+  const meta=JSON.stringify({name:file.name,parents:[clientFolderId]});
   const form=new FormData();
   form.append('metadata',new Blob([meta],{type:'application/json'}));
   form.append('file',file);
   const r=await fetch(`${DRIVE_API}upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink`,{
-    method:'POST',headers:{Authorization:`Bearer ${state.accessToken}`},body:form
+    method:'POST',headers:{Authorization:`Bearer ${driveToken}`},body:form
   });
-  return await r.json(); // {id, webViewLink}
+  return await r.json();
 }
 async function parseVaccRecordWithGemini(file){
   const key=state.settings.geminiApiKey;
@@ -1540,13 +1561,21 @@ async function handleVaccUpload(clientId, dogId){
     const btn=document.getElementById(btnId);
     if(btn){btn.disabled=true;btn.textContent='⏳ Uploading…';}
     try{
-      // 1. Upload to Drive (if signed in to live mode)
-      let driveLink='';
-      if(state.mode==='live'&&state.accessToken){
+      // 1. Upload to Drive (requests Drive scope on first use)
+      if(state.mode==='live'){
         try{
-          const df=await uploadVaccRecord(file,cl.name);
-          dog.driveFileLink=df.webViewLink||'';
-          driveLink=dog.driveFileLink;
+          // Request Drive token if we don't have one yet
+          if(!driveToken){
+            await new Promise((res)=>{
+              const orig=driveTokenClient.callback;
+              driveTokenClient.callback=(resp)=>{orig(resp);res();};
+              driveTokenClient.requestAccessToken({prompt:'consent'});
+            });
+          }
+          if(driveToken){
+            const df=await uploadVaccRecord(file,cl.name);
+            dog.driveFileLink=df.webViewLink||'';
+          }
         }catch(e){showToast('Drive upload failed — parsing anyway.','#F97316');}
       }
       // 2. Parse with Gemini
