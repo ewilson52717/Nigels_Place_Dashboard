@@ -236,6 +236,19 @@ function capColor(n,cap){
 function fmtDate(ds){return new Date(ds+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});}
 function fmtDateShort(ds){return new Date(ds+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});}
 function mkDs(y,m,d){return`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
+// Google Sheets sometimes returns dates as serial numbers (days since Dec 30 1899).
+// Convert to YYYY-MM-DD string; pass through if already a string date.
+function sheetsDateStr(val){
+  if(!val&&val!==0)return'';
+  if(typeof val==='string')return val;
+  if(typeof val==='number'){
+    const ms=(val-25569)*864e5; // Sheets epoch → Unix ms
+    const d=new Date(ms);
+    if(isNaN(d.getTime()))return String(val);
+    return d.toISOString().split('T')[0];
+  }
+  return String(val);
+}
 // Vaccine helpers
 function vaccDaysLeft(expiry){
   if(!expiry)return null;
@@ -466,9 +479,13 @@ async function loadAllData(){
     if(!r[0])return;
     let vaccines=[];
     try{if(r[9])vaccines=JSON.parse(r[9]);}catch(e){}
+    // Ensure vaccine expiry dates inside the array are also string-converted
+    vaccines=vaccines.map(v=>({...v,expiry:sheetsDateStr(v.expiry)}));
+    const vaccExpiry=sheetsDateStr(r[8]);
+    const birthday=sheetsDateStr(r[7]);
     // Back-compat: if no vaccines array yet, seed from old vaccExpiry field
-    if(!vaccines.length&&r[8]){vaccines=[{name:'Vaccines',expiry:r[8]}];}
-    const dog={id:+r[0],name:r[2]||'',breed:r[3]||'',age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',notes:r[6]||'',birthday:r[7]||'',vaccExpiry:r[8]||'',vaccines,driveFileLink:r[10]||''};
+    if(!vaccines.length&&vaccExpiry){vaccines=[{name:'Vaccines',expiry:vaccExpiry}];}
+    const dog={id:+r[0],name:String(r[2]||''),breed:String(r[3]||''),age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',notes:String(r[6]||''),birthday,vaccExpiry,vaccines,driveFileLink:String(r[10]||'')};
     const cl=clients.find(c=>c.id===+r[1]);if(cl)cl.dogs.push(dog);
   });
   bookings.length=0;
@@ -1564,19 +1581,30 @@ async function handleVaccUpload(clientId, dogId){
       // 1. Upload to Drive (requests Drive scope on first use)
       if(state.mode==='live'){
         try{
-          // Request Drive token if we don't have one yet
           if(!driveToken){
-            await new Promise((res)=>{
+            showToast('📂 A Google sign-in popup will appear — please allow Drive access.','#7B4015');
+            await new Promise((res,rej)=>{
+              // Timeout in case popup is blocked or user dismisses it
+              const t=setTimeout(()=>rej(new Error('Drive access popup timed out or was blocked. Please allow popups for this site.')),30000);
               const orig=driveTokenClient.callback;
-              driveTokenClient.callback=(resp)=>{orig(resp);res();};
+              driveTokenClient.callback=(resp)=>{
+                clearTimeout(t);
+                orig(resp);
+                res();
+              };
               driveTokenClient.requestAccessToken({prompt:'consent'});
             });
           }
           if(driveToken){
+            if(btn)btn.textContent='📂 Saving to Drive…';
             const df=await uploadVaccRecord(file,cl.name);
             dog.driveFileLink=df.webViewLink||'';
+            showToast('📂 Saved to Drive → Nigel\'s Place / Client Vaccine Records / '+cl.name);
           }
-        }catch(e){showToast('Drive upload failed — parsing anyway.','#F97316');}
+        }catch(e){
+          showToast('Drive upload skipped: '+e.message,'#F97316');
+          console.warn('Drive upload error:',e);
+        }
       }
       // 2. Parse with Gemini
       if(btn)btn.textContent='🤖 Parsing…';
