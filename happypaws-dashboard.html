@@ -40,6 +40,12 @@ const CONFIG = {
   SHEET_ID:     '1hQEJB1tFOAk8RoQTyH2Ovkk56psVIJfLjuvlj_URTeg',
   API_BASE:     'https://sheets.googleapis.com/v4/spreadsheets',
   ADMIN_EMAILS: ['elyserwilson@gmail.com', 'kellyhendrickson1@yahoo.com'],
+  // ─── KIOSK MODE ───────────────────────────────────────────────────────────
+  // 1. Create a Sheets API key in Google Cloud Console → APIs & Services → Credentials
+  // 2. Set your Google Sheet to "Anyone with link can view" (Share → Anyone with link → Viewer)
+  // 3. Paste the API key here.  The kiosk URL is: [your-github-pages-url]?kiosk
+  KIOSK_API_KEY: '',
+  // ──────────────────────────────────────────────────────────────────────────
 };
 const LOGO_URL = 'nigels-place-logo.jpg';
 
@@ -135,7 +141,7 @@ const state={
   role:'login',view:'dashboard',clientView:'home',
   calendarDate:new Date(),
   showModal:null,currentClientId:null,selectedDogId:null,
-  mode:null,accessToken:null,tokenExpiry:null,userEmail:null,
+  mode:null,accessToken:null,tokenExpiry:null,userEmail:null,kioskDogs:[],
   isLoading:false,loadingMsg:'',
   sheetId:CONFIG.SHEET_ID||null,sheetUrl:null,
   settings:{
@@ -409,8 +415,9 @@ document.addEventListener('visibilitychange',()=>{
 // ═══════════════════════════════════════════════════
 //  ⑦  GOOGLE AUTH
 // ═══════════════════════════════════════════════════
-let tokenClient=null,driveTokenClient=null,silentSignIn=false;
-let driveToken=null; // separate Drive token — only requested when uploading
+let tokenClient=null,silentSignIn=false;
+// driveToken mirrors state.accessToken — they are the same token now that all scopes are consolidated.
+let driveToken=null;
 // Persistent folder ID cache — avoids duplicate folder creation across sessions.
 // Key = "parentId:folderName" (parentId is 'root' when no parent), value = Drive folder ID.
 let _folderIdCache={};
@@ -454,6 +461,56 @@ async function hydrateImages(){
     }catch(e){console.warn('Drive image hydration failed:',fileId,e);}
   }));
 }
+// ─── Image Compression ───────────────────────────────────────────────────────
+// Shrinks a photo file before uploading to Drive — faster upload, less storage,
+// snappier display. Returns a JPEG File. Falls back to original on any error.
+async function compressImage(file, maxPx=800, quality=0.82){
+  return new Promise(resolve=>{
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      let w=img.naturalWidth,h=img.naturalHeight;
+      if(w>maxPx||h>maxPx){if(w>h){h=Math.round(h*maxPx/w);w=maxPx;}else{w=Math.round(w*maxPx/h);h=maxPx;}}
+      const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      canvas.toBlob(blob=>{
+        if(!blob){resolve(file);return;}
+        resolve(new File([blob],file.name.replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg',lastModified:Date.now()}));
+      },'image/jpeg',quality);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);resolve(file);};
+    img.src=url;
+  });
+}
+// ─── Photo Lightbox ───────────────────────────────────────────────────────────
+// Full-screen overlay that fetches and shows a Drive image at full quality.
+async function showPhotoLightbox(fileId, label=''){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.93);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;cursor:zoom-out;padding:1.5rem;box-sizing:border-box;';
+  ov.onclick=()=>ov.remove();
+  const spin=document.createElement('div');spin.style.cssText='color:rgba(255,255,255,0.5);font-size:1.2rem;';spin.textContent='Loading…';
+  ov.appendChild(spin);document.body.appendChild(ov);
+  try{
+    let src=_driveImgCache[fileId];
+    if(!src&&state.accessToken){
+      const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,{headers:{Authorization:`Bearer ${state.accessToken}`}});
+      if(r.ok){const bl=await r.blob();if(bl.type.startsWith('image/')){src=URL.createObjectURL(bl);_driveImgCache[fileId]=src;}}
+    }
+    spin.remove();
+    if(src){
+      const img=document.createElement('img');
+      img.src=src;img.onclick=e=>e.stopPropagation();
+      img.style.cssText='max-width:90vw;max-height:80vh;object-fit:contain;border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.9);';
+      ov.insertBefore(img,ov.firstChild);
+    }else{const err=document.createElement('div');err.style.cssText='color:rgba(255,255,255,0.4);';err.textContent='Image unavailable';ov.appendChild(err);}
+    if(label){const lbl=document.createElement('div');lbl.style.cssText='color:rgba(255,255,255,0.45);font-size:.8rem;';lbl.textContent=label;ov.appendChild(lbl);}
+    const btn=document.createElement('button');
+    btn.textContent='✕  Close';btn.onclick=e=>{e.stopPropagation();ov.remove();};
+    btn.style.cssText='color:rgba(255,255,255,0.55);background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:.4rem 1.1rem;font-size:.82rem;cursor:pointer;';
+    ov.appendChild(btn);
+  }catch(e){if(spin.parentNode)spin.textContent='Failed to load image';}
+}
 // Tracks which vaccine type groups are expanded in the dog detail view — persists across renders.
 let _expandedVaccGroups=new Set();
 function vaccTypeSlug(name){return String(name).replace(/[^a-zA-Z0-9]/g,'_');}
@@ -468,19 +525,12 @@ function toggleVaccGroup(dogId,typeName){
 }
 function initGoogleAuth(){
   if(typeof google==='undefined'){setTimeout(initGoogleAuth,300);return;}
+  // Single token client — Sheets + Drive + userinfo in ONE request.
+  // This means one Google sign-in permission prompt ever, and zero separate Drive popup on upload.
   tokenClient=google.accounts.oauth2.initTokenClient({
     client_id:CONFIG.CLIENT_ID,
-    scope:'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email',
-    callback:onToken,
-  });
-  // Separate Drive-scoped client — only invoked on demand when uploading vaccine records
-  driveTokenClient=google.accounts.oauth2.initTokenClient({
-    client_id:CONFIG.CLIENT_ID,
     scope:'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive',
-    callback:(resp)=>{
-      if(!resp.error)driveToken=resp.access_token;
-      else showToast('Drive access denied — file will not be saved to Drive.','#F97316');
-    }
+    callback:onToken,
   });
   const savedEmail=localStorage.getItem('np_email');
   // Try cached access token first — if it's still valid, skip the sign-in round-trip entirely
@@ -499,6 +549,7 @@ async function onToken(resp){
   }
   silentSignIn=false;
   state.accessToken=resp.access_token;
+  driveToken=resp.access_token; // consolidated — same token covers Drive scope too
   state.tokenExpiry=Date.now()+(resp.expires_in*1000);
   // Cache token so the next refresh within ~1 hour skips the sign-in popup entirely
   try{
@@ -746,6 +797,7 @@ function render(){
 }
 function buildApp(){
   if(state.isLoading)return buildLoader();
+  if(state.role==='kiosk')return buildKioskView();
   if(state.role==='login')return buildLogin();
   if(state.role==='admin')return buildAdminLayout();
   if(state.role==='client')return buildClientLayout();
@@ -806,7 +858,7 @@ function buildAdminLayout(){
     {id:'dashboard',icon:'📊',label:'Dashboard'},{id:'calendar',icon:'📅',label:'Calendar'},
     {id:'clients',  icon:'👥',label:'Clients'},  {id:'dogs',    icon:'🐾',label:'Dogs'},
     {id:'services', icon:'🛎️',label:'Services'}, {id:'invoices', icon:'💰',label:'Invoices'},
-    {id:'settings', icon:'⚙️',label:'Settings'},
+    {id:'settings', icon:'⚙️',label:'Settings'}, {id:'kiosk',    icon:'🖥️',label:'Kiosk Preview'},
   ];
   const dbNavItem=state.mode==='live'&&state.sheetUrl?`
     <button onclick="window.open('${state.sheetUrl}','_blank')"
@@ -817,7 +869,8 @@ function buildAdminLayout(){
     dashboard:buildDashboard(),calendar:buildCalendarView('admin'),
     clients:buildClientsView(),dogs:buildDogsView(),
     services:buildServicesView(),
-    invoices:buildInvoicesView(),settings:buildSettingsView()
+    invoices:buildInvoicesView(),settings:buildSettingsView(),
+    kiosk:buildKioskView(true),
   };
   const syncDisplay=state.mode==='live'&&lastSynced?`<div class="text-xs px-3 py-1" style="color:rgba(255,255,255,0.3)">⏱ Synced: ${fmtSynced()}</div>`:'';
   return`
@@ -1159,10 +1212,12 @@ function buildDogsView(){
             ${dog.playPhotos&&dog.playPhotos.length>0?`
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
               ${dog.playPhotos.map(p=>`
-                <div class="rounded-xl overflow-hidden bg-gray-50 border border-gray-100 relative group">
-                  <a href="https://drive.google.com/file/d/${p.link.match(/^[A-Za-z0-9_-]{25,60}$/)?p.link:((p.link.match(/\/d\/([A-Za-z0-9_-]{25,60})/)||[])[1]||'')}/view" target="_blank" title="${p.filename||''}">
-                    ${driveImgTag(p.link,'w-full h-28 object-cover',p.filename||'')||`<div class="w-full h-28 bg-amber-50 flex items-center justify-center text-3xl">🐾</div>`}
-                  </a>
+                <div class="rounded-xl overflow-hidden bg-gray-50 border border-gray-100 relative group cursor-zoom-in"
+                  onclick="(()=>{const id='${(p.link.match(/^[A-Za-z0-9_-]{25,60}$/)?p.link:(p.link.match(/\/d\/([A-Za-z0-9_-]{25,60})/)||[])[1])||''}';if(id)showPhotoLightbox(id,${htmlJsonStr(p.filename||p.date||'')});})()">
+                  ${driveImgTag(p.link,'w-full h-28 object-cover',p.filename||'')||`<div class="w-full h-28 bg-amber-50 flex items-center justify-center text-3xl">🐾</div>`}
+                  <div class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                    <span class="opacity-0 group-hover:opacity-100 text-white text-2xl transition-opacity drop-shadow-lg">🔍</span>
+                  </div>
                   <div class="p-1.5 text-xs text-gray-400 truncate">${p.date||''}</div>
                 </div>`).join('')}
             </div>`:`<div class="text-center py-6 text-gray-300">
@@ -1371,6 +1426,20 @@ function buildSettingsView(){
       </div>
       <div class="bg-amber-50 rounded-xl p-4 border border-amber-100 text-sm text-amber-800">
         🛎️ Service rates are managed in the <button onclick="setView('services')" class="underline font-semibold">Services</button> section.
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <h2 class="font-semibold text-gray-800 mb-1">🖥️ Kiosk Mode Setup</h2>
+        <p class="text-xs text-gray-400 mb-3">A lobby display that shows today's dogs — no login needed, always live. Set up once, run forever on a tablet or TV.</p>
+        <ol class="text-xs text-gray-600 space-y-2 list-decimal pl-4 mb-3">
+          <li>In <strong>Google Cloud Console</strong> → APIs &amp; Services → Credentials → <strong>Create API Key</strong>. Restrict it to the Sheets API.</li>
+          <li>Paste that key into <code class="bg-gray-100 px-1 rounded">CONFIG.KIOSK_API_KEY</code> in the HTML source file (near the top, same section as <code class="bg-gray-100 px-1 rounded">SHEET_ID</code>).</li>
+          <li>In <strong>Google Sheets</strong>: Share → Change → <em>Anyone with link</em> → Viewer.</li>
+          <li>Open the kiosk URL on any device: <code class="bg-amber-50 px-1.5 py-0.5 rounded text-amber-800 font-medium break-all">${window.location.href.split('?')[0]}?kiosk</code></li>
+        </ol>
+        <div class="flex gap-2">
+          <button onclick="setView('kiosk')" class="flex-1 py-2 rounded-xl text-sm font-medium border border-amber-200 text-amber-800 hover:bg-amber-50">👁 Preview Kiosk</button>
+          <button onclick="window.open(window.location.href.split('?')[0]+'?kiosk','_blank')" class="flex-1 py-2 rounded-xl text-sm font-medium text-white" style="background:#7B4015">🖥️ Open Kiosk</button>
+        </div>
       </div>
       <button onclick="saveSettings()" class="w-full py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">Save Settings</button>
     </div>
@@ -1700,6 +1769,8 @@ function setView(v){
   // Persist so a page refresh returns to the same section
   try{localStorage.setItem('np_view',v);if(v!=='dogs')localStorage.removeItem('np_dog_id');}catch(e){}
   render();
+  // Start kiosk clock when admin previews kiosk
+  if(v==='kiosk')startKioskTimers();
 }
 function setClientView(v) {state.clientView=v;state.showModal=null;render();}
 function prevMonth()      {state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()-1,1);render();}
@@ -1947,27 +2018,9 @@ If no expiry can be determined, omit the expiry field. Return an empty vaccines 
   throw new Error('All Gemini models hit quota limits. Please try again in a minute.');
 }
 async function handleVaccUpload(clientId, dogId){
-  // Step 1: Request Drive token NOW — directly from user gesture (button click)
-  // This must happen synchronously before any await, so the browser popup isn't blocked.
-  if(state.mode==='live' && !driveToken && driveTokenClient){
-    showToast('📂 Requesting Google Drive access — approve the popup…','#7B4015');
-    try{
-      await new Promise((res,rej)=>{
-        const t=setTimeout(()=>{rej(new Error('Drive popup timed out — try allowing popups for this site.'));},25000);
-        driveTokenClient.callback=(resp)=>{
-          clearTimeout(t);
-          if(resp.error){rej(new Error(resp.error));return;}
-          driveToken=resp.access_token;
-          res();
-        };
-        driveTokenClient.requestAccessToken({});
-      });
-    }catch(e){
-      // Drive auth failed — that's OK, we'll skip Drive and just run Gemini
-      console.warn('Drive auth skipped:',e.message);
-    }
-  }
-  // Step 2: Open file picker (after Drive auth attempt, still a valid user-gesture chain)
+  // Step 1: Ensure Drive token (consolidated auth — no popup needed)
+  await ensureDriveToken();
+  // Step 2: Open file picker
   const input=document.createElement('input');
   input.type='file';
   input.accept='image/*,application/pdf';
@@ -2037,17 +2090,8 @@ async function handleVaccUpload(clientId, dogId){
 // Per-vaccine-type upload: scans the file with Gemini, then only updates records
 // for the specific vaccTypeName — all other types are left untouched.
 async function handleVaccTypeUpload(clientId, dogId, vaccTypeName){
-  // Step 1: Drive token from user gesture before any await
-  if(state.mode==='live' && !driveToken && driveTokenClient){
-    showToast('📂 Requesting Google Drive access — approve the popup…','#7B4015');
-    try{
-      await new Promise((res,rej)=>{
-        const t=setTimeout(()=>{rej(new Error('Drive popup timed out.'));},25000);
-        driveTokenClient.callback=(resp)=>{clearTimeout(t);if(resp.error){rej(new Error(resp.error));return;}driveToken=resp.access_token;res();};
-        driveTokenClient.requestAccessToken({});
-      });
-    }catch(e){console.warn('Drive auth skipped:',e.message);}
-  }
+  // Step 1: Ensure Drive token (consolidated auth — no popup needed)
+  await ensureDriveToken();
   // Step 2: Open file picker
   const input=document.createElement('input');
   input.type='file'; input.accept='image/*,application/pdf'; input.style.display='none';
@@ -2131,25 +2175,12 @@ function openFilePickerForDog(accept, onFile){
   input.click();
 }
 async function ensureDriveToken(){
+  // With consolidated auth the Drive token is the same as the main token — no separate popup needed.
   if(driveToken)return true;
-  if(state.mode!=='live')return false;
-  showToast('📂 A Google sign-in popup will appear — please allow Drive access.','#7B4015');
-  try{
-    await new Promise((res,rej)=>{
-      const t=setTimeout(()=>rej(new Error('Drive access timed out. Please allow the popup and try again.')),30000);
-      driveTokenClient.callback=(resp)=>{
-        clearTimeout(t);
-        if(resp.error){rej(new Error('Drive access denied: '+resp.error));return;}
-        driveToken=resp.access_token; res();
-      };
-      driveTokenClient.requestAccessToken({});
-    });
-  }catch(e){
-    console.warn('ensureDriveToken failed:',e.message);
-    showToast('⚠️ Drive access not granted — photo will not be saved to Drive.','#F97316');
-    return false;
-  }
-  return !!driveToken;
+  if(state.accessToken){driveToken=state.accessToken;return true;}
+  if(state.mode!=='live'){return false;}
+  showToast('⚠️ Please sign in first to enable file uploads.','#F97316');
+  return false;
 }
 async function handleDogPhotoUpload(clientId, dogId){
   if(!clients.find(c=>c.id===clientId)?.dogs.find(d=>d.id===dogId))return;
@@ -2169,7 +2200,9 @@ async function handleDogPhotoUpload(clientId, dogId){
       const freshCl=clients.find(c=>c.id===clientId);
       const freshDog=freshCl?.dogs.find(d=>d.id===dogId);
       if(!freshDog||!freshCl){showToast('Dog not found — please reload.','#EF4444');return;}
-      const df=await uploadToDriveFolder(file,["Nigel's Place",'Dog Photos',freshDog.name]);
+      // Compress to 800px JPEG before uploading — faster and smaller
+      const compressed=await compressImage(file,800,0.82);
+      const df=await uploadToDriveFolder(compressed,["Nigel's Place",'Dog Photos',freshDog.name]);
       // Store file ID (not webViewLink) — hydrateImages() fetches content via API with auth token
       freshDog.photoLink=df.id||df.webViewLink||'';
       render();
@@ -2199,7 +2232,9 @@ async function handlePlayPhotoUpload(clientId, dogId){
       const freshCl=clients.find(c=>c.id===clientId);
       const freshDog=freshCl?.dogs.find(d=>d.id===dogId);
       if(!freshDog||!freshCl){showToast('Dog not found — please reload.','#EF4444');return;}
-      const df=await uploadToDriveFolder(file,["Nigel's Place",'Play Photos',freshDog.name]);
+      // Compress play photos aggressively — 600px thumbnails, fast to display
+      const compressed=await compressImage(file,600,0.75);
+      const df=await uploadToDriveFolder(compressed,["Nigel's Place",'Play Photos',freshDog.name]);
       // Store file ID for authenticated image loading; driveImgTag() uses it to fetch via API
       const entry={link:df.id||df.webViewLink||'',filename:df.name||file.name,date:new Date().toISOString().split('T')[0]};
       freshDog.playPhotos=[...(freshDog.playPhotos||[]),entry];
@@ -2401,10 +2436,133 @@ async function saveSettings(){
 }
 
 // ═══════════════════════════════════════════════════
+//  ⑬  KIOSK MODE  — No-auth lobby display
+// ═══════════════════════════════════════════════════
+// Read a Sheets range using a public API key (no OAuth — works 24/7 on the lobby tablet)
+async function readRangeWithApiKey(range){
+  const key=CONFIG.KIOSK_API_KEY;const sheetId=CONFIG.SHEET_ID;
+  if(!key||!sheetId)throw new Error('KIOSK_API_KEY or SHEET_ID not set in CONFIG');
+  const url=`${CONFIG.API_BASE}/${sheetId}/values/${encodeURIComponent(range)}?key=${encodeURIComponent(key)}`;
+  const r=await fetch(url);const d=await r.json();
+  if(d.error)throw new Error('Sheets API: '+(d.error.message||JSON.stringify(d.error)));
+  return d.values||[];
+}
+let _kioskRefreshTimer=null,_kioskClockTimer=null;
+async function loadKioskData(){
+  const today=new Date().toISOString().split('T')[0];
+  try{
+    const[bR,dR,cR]=await Promise.all([
+      readRangeWithApiKey('Bookings!A2:L'),
+      readRangeWithApiKey('Dogs!A2:M'),
+      readRangeWithApiKey('Clients!A2:E'),
+    ]);
+    const dogMap={};(dR||[]).forEach(r=>{if(r[0])dogMap[+r[0]]={name:r[2]||'',breed:r[3]||'',photoLink:r[11]||''};});
+    const clientMap={};(cR||[]).forEach(r=>{if(r[0])clientMap[+r[0]]=r[1]||'';});
+    state.kioskDogs=(bR||[]).filter(r=>{
+      if(!r[0])return false;
+      const ci=r[5]||'',co=r[6]||ci;
+      return ci&&co&&ci<=today&&today<=co&&(r[8]||'').toLowerCase()!=='cancelled';
+    }).map(r=>({
+      dogId:+r[2],dogName:r[3]||(dogMap[+r[2]]?.name)||'Unknown',
+      breed:dogMap[+r[2]]?.breed||'',clientName:r[4]||(clientMap[+r[1]])||'',
+      checkIn:r[5],checkOut:r[6],
+    }));
+    // De-duplicate (same dog may have multiple bookings)
+    const seen=new Set();state.kioskDogs=state.kioskDogs.filter(d=>{if(seen.has(d.dogId))return false;seen.add(d.dogId);return true;});
+    lastSynced=Date.now();
+    render();
+    const el=document.getElementById('kiosk-sync');if(el)el.textContent='✓ Updated '+new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  }catch(e){
+    console.error('Kiosk data load failed:',e);
+    const el=document.getElementById('kiosk-sync');if(el)el.textContent='⚠️ '+e.message;
+  }
+}
+function startKioskTimers(){
+  if(!_kioskClockTimer){
+    _kioskClockTimer=setInterval(()=>{const el=document.getElementById('kiosk-clock');if(el)el.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});},1000);
+  }
+  if(!_kioskRefreshTimer){
+    _kioskRefreshTimer=setInterval(loadKioskData,5*60*1000); // refresh every 5 min
+  }
+}
+// adminPreview=true means it's embedded in the admin panel (slightly different styling)
+function buildKioskView(adminPreview=false){
+  const dogs=adminPreview
+    ?bookings.filter(b=>{const t=new Date().toISOString().split('T')[0];return b.checkIn<=t&&t<=b.checkOut&&b.status!=='cancelled';})
+      .map(b=>{const cl=clients.find(c=>c.id===b.clientId);const dog=cl?.dogs.find(d=>d.id===b.dogId);return{dogId:b.dogId,dogName:b.dogName||dog?.name||'?',breed:dog?.breed||'',clientName:b.clientName||cl?.name||'',checkIn:b.checkIn,checkOut:b.checkOut,photoLink:dog?.photoLink||''};})
+      .filter((d,i,a)=>a.findIndex(x=>x.dogId===d.dogId)===i) // de-dup
+    :state.kioskDogs||[];
+  const dateStr=new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const timeStr=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  const bgStyle=adminPreview?'background:linear-gradient(135deg,#3d1a08,#7B4015);border-radius:1rem;overflow:hidden;':
+    'position:fixed;inset:0;background:linear-gradient(135deg,#3d1a08,#5C3317,#3d1a08);overflow:auto;';
+  const wrapStyle=adminPreview?'min-height:500px;':'min-height:100vh;';
+  return`
+  <div style="${bgStyle}${wrapStyle}font-family:system-ui,sans-serif;display:flex;flex-direction:column;">
+    <!-- Header -->
+    <div style="padding:1.8rem 2.5rem;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.1);">
+      <div style="display:flex;align-items:center;gap:1rem;">
+        <img src="${LOGO_URL}" style="width:48px;height:48px;object-fit:contain;border-radius:50%;background:rgba(255,255,255,0.1);padding:4px;">
+        <div>
+          <div style="color:white;font-size:1.6rem;font-weight:800;letter-spacing:-0.5px;">${state.settings.businessName||"Nigel's Place"}</div>
+          <div style="color:rgba(255,200,100,0.7);font-size:0.85rem;margin-top:2px;">${dateStr}</div>
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <div id="kiosk-clock" style="color:white;font-size:${adminPreview?'2rem':'3rem'};font-weight:200;letter-spacing:3px;font-variant-numeric:tabular-nums;">${timeStr}</div>
+      </div>
+    </div>
+    <!-- Dog grid -->
+    <div style="flex:1;padding:2rem 2.5rem;">
+      <div style="color:rgba(255,200,100,0.85);font-size:0.85rem;font-weight:700;text-transform:uppercase;letter-spacing:2.5px;margin-bottom:1.5rem;">
+        🐕 Today's Guests &nbsp;·&nbsp; ${dogs.length} dog${dogs.length!==1?'s':''}
+      </div>
+      ${dogs.length===0?`
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4rem 2rem;color:rgba(255,255,255,0.25);">
+          <div style="font-size:4rem;margin-bottom:1rem;">🐾</div>
+          <div style="font-size:1.3rem;font-weight:600;">No guests today</div>
+          <div style="font-size:0.85rem;margin-top:0.4rem;">Check back soon!</div>
+        </div>`:`
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:1.25rem;">
+          ${dogs.map(d=>`
+          <div style="background:rgba(255,255,255,0.09);border:1px solid rgba(255,255,255,0.14);border-radius:1.25rem;padding:1.5rem 1rem;text-align:center;backdrop-filter:blur(8px);transition:transform .2s;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform=''">
+            <div style="width:70px;height:70px;border-radius:50%;background:rgba(255,255,255,0.08);border:2.5px solid rgba(255,200,100,0.35);display:flex;align-items:center;justify-content:center;font-size:2.2rem;margin:0 auto 0.9rem;">🐶</div>
+            <div style="color:white;font-size:1.1rem;font-weight:700;line-height:1.2;">${d.dogName}</div>
+            ${d.breed?`<div style="color:rgba(255,200,100,0.7);font-size:0.78rem;margin-top:3px;">${d.breed}</div>`:''}
+            <div style="color:rgba(255,255,255,0.4);font-size:0.75rem;margin-top:6px;">${d.clientName}</div>
+          </div>`).join('')}
+        </div>`}
+    </div>
+    <!-- Footer -->
+    <div style="padding:0.9rem 2.5rem;border-top:1px solid rgba(255,255,255,0.08);display:flex;justify-content:space-between;align-items:center;">
+      <div id="kiosk-sync" style="color:rgba(255,255,255,0.25);font-size:0.75rem;">Auto-refreshes every 5 minutes</div>
+      ${!adminPreview?`<button onclick="loadKioskData()" style="color:rgba(255,200,100,0.6);background:rgba(255,255,255,0.06);border:1px solid rgba(255,200,100,0.2);border-radius:8px;padding:0.3rem 0.9rem;font-size:0.75rem;cursor:pointer;">↻ Refresh Now</button>`:`<span style="color:rgba(255,255,255,0.2);font-size:0.7rem;">Preview — uses live bookings data</span>`}
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════
 //  ⑫  INIT
 // ═══════════════════════════════════════════════════
-initGoogleAuth();
-render();
+// Check for kiosk mode (?kiosk in URL) — launches no-auth lobby display
+const _kioskMode=new URLSearchParams(window.location.search).has('kiosk');
+if(_kioskMode){
+  if(!CONFIG.KIOSK_API_KEY||!CONFIG.SHEET_ID){
+    document.getElementById('app').innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#3d1a08;color:white;font-family:sans-serif;text-align:center;padding:2rem;">
+      <div style="font-size:3rem;margin-bottom:1rem;">⚙️</div>
+      <div style="font-size:1.4rem;font-weight:700;margin-bottom:.75rem;">Kiosk Not Configured</div>
+      <div style="color:rgba(255,255,255,.5);max-width:420px;line-height:1.6;">Set <code>KIOSK_API_KEY</code> and ensure <code>SHEET_ID</code> are filled in the CONFIG section of the HTML file. Then share your Google Sheet as "Anyone with link can view".</div>
+    </div>`;
+  }else{
+    state.role='kiosk';
+    render();
+    startKioskTimers();
+    loadKioskData();
+  }
+}else{
+  initGoogleAuth();
+  render();
+}
 </script>
 </body>
 </html>
