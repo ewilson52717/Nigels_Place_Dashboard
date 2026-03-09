@@ -224,7 +224,7 @@ function showToast(msg,color='#059669'){
 // ═══════════════════════════════════════════════════
 //  ⑥  GOOGLE AUTH
 // ═══════════════════════════════════════════════════
-let tokenClient=null;
+let tokenClient=null, silentSignIn=false;
 function initGoogleAuth(){
   if(typeof google==='undefined'){setTimeout(initGoogleAuth,300);return;}
   tokenClient=google.accounts.oauth2.initTokenClient({
@@ -232,9 +232,16 @@ function initGoogleAuth(){
     scope:'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email',
     callback:onToken,
   });
+  // Auto sign-in if we have a saved session
+  const savedEmail=localStorage.getItem('np_email');
+  if(savedEmail){silentSignIn=true; tokenClient.requestAccessToken({prompt:'',login_hint:savedEmail});}
 }
 async function onToken(resp){
-  if(resp.error){showToast('Sign-in failed: '+resp.error,'#EF4444');return;}
+  if(resp.error){
+    if(silentSignIn){silentSignIn=false;return;} // silent fail — just show login screen
+    showToast('Sign-in failed: '+resp.error,'#EF4444');return;
+  }
+  silentSignIn=false;
   state.accessToken=resp.access_token;
   state.tokenExpiry=Date.now()+(resp.expires_in*1000);
   state.mode='live'; state.isLoading=true; state.loadingMsg='Connecting to Google...'; render();
@@ -242,6 +249,7 @@ async function onToken(resp){
     const info=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',
       {headers:{Authorization:`Bearer ${state.accessToken}`}}).then(r=>r.json());
     state.userEmail=info.email;
+    localStorage.setItem('np_email',info.email);
     if(!state.sheetId){
       state.loadingMsg='Creating your spreadsheet...'; render();
       state.sheetId=await createSpreadsheet();
@@ -278,6 +286,7 @@ function signOut(){
   if(state.accessToken&&typeof google!=='undefined') google.accounts.oauth2.revoke(state.accessToken);
   Object.assign(state,{role:'login',mode:null,accessToken:null,userEmail:null,
     sheetId:CONFIG.SHEET_ID||null,sheetUrl:null,showModal:null,currentClientId:null});
+  localStorage.removeItem('np_email');
   clients=[];bookings=[];invoices=[];render();
 }
 
@@ -311,7 +320,7 @@ async function createSpreadsheet(){
 async function initSheetHeaders(){
   await Promise.all([
     writeRange('Clients!A1:D1', [['id','name','email','phone']]),
-    writeRange('Dogs!A1:G1',    [['id','clientId','name','breed','age','vaccinated','notes']]),
+    writeRange('Dogs!A1:H1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday']]),
     writeRange('Bookings!A1:I1',[['id','clientId','dogId','dogName','clientName','date','status','service','price']]),
     writeRange('Invoices!A1:I1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items']]),
     writeRange('Settings!A1:B8',[
@@ -324,14 +333,14 @@ async function initSheetHeaders(){
 }
 async function loadAllData(){
   const[cR,dR,bR,iR,sR]=await Promise.all([
-    readRange('Clients!A2:D'),readRange('Dogs!A2:G'),readRange('Bookings!A2:I'),
+    readRange('Clients!A2:D'),readRange('Dogs!A2:H'),readRange('Bookings!A2:I'),
     readRange('Invoices!A2:I'),readRange('Settings!A2:B'),
   ]);
   clients.length=0;
   (cR||[]).forEach(r=>{if(r[0])clients.push({id:+r[0],name:r[1]||'',email:r[2]||'',phone:r[3]||'',dogs:[]});});
   (dR||[]).forEach(r=>{
     if(!r[0])return;
-    const dog={id:+r[0],name:r[2]||'',breed:r[3]||'',age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',notes:r[6]||''};
+    const dog={id:+r[0],name:r[2]||'',breed:r[3]||'',age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',notes:r[6]||'',birthday:r[7]||''};
     const cl=clients.find(c=>c.id===+r[1]); if(cl)cl.dogs.push(dog);
   });
   bookings.length=0;
@@ -358,10 +367,10 @@ async function persistBookings(){
 async function persistClients(){
   if(state.mode!=='live')return;
   const cRows=[['id','name','email','phone'],...clients.map(c=>[c.id,c.name,c.email,c.phone])];
-  const dRows=[['id','clientId','name','breed','age','vaccinated','notes'],
-    ...clients.flatMap(c=>c.dogs.map(d=>[d.id,c.id,d.name,d.breed,d.age,d.vaccinated,d.notes]))];
+  const dRows=[['id','clientId','name','breed','age','vaccinated','notes','birthday'],
+    ...clients.flatMap(c=>c.dogs.map(d=>[d.id,c.id,d.name,d.breed,d.age,d.vaccinated,d.notes,d.birthday||'']))];
   await writeRange(`Clients!A1:D${cRows.length}`,cRows);
-  await writeRange(`Dogs!A1:G${dRows.length}`,dRows);
+  await writeRange(`Dogs!A1:H${dRows.length}`,dRows);
 }
 async function persistInvoices(){
   if(state.mode!=='live')return;
@@ -455,6 +464,11 @@ function buildAdminLayout(){
     {id:'clients',  icon:'👥',label:'Clients'},  {id:'invoices',icon:'💰',label:'Invoices'},
     {id:'settings', icon:'⚙️',label:'Settings'},
   ];
+  const dbNavItem=state.mode==='live'&&state.sheetUrl?`
+    <button onclick="window.open('${state.sheetUrl}','_blank')"
+      class="nav-item w-full text-left px-3 py-2.5 rounded-xl text-white flex items-center gap-3">
+      <span>🗄️</span><span class="text-sm font-medium">Database</span>
+    </button>`:'';
   const views={dashboard:buildDashboard(),calendar:buildCalendarView('admin'),
     clients:buildClientsView(),invoices:buildInvoicesView(),settings:buildSettingsView()};
   return`
@@ -474,6 +488,7 @@ function buildAdminLayout(){
             class="nav-item w-full text-left px-3 py-2.5 rounded-xl text-white flex items-center gap-3 ${state.view===n.id?'active':''}">
             <span>${n.icon}</span><span class="text-sm font-medium">${n.label}</span>
           </button>`).join('')}
+        ${dbNavItem?`<div class="pt-2 pb-0.5"><div class="text-xs text-white/30 px-3 uppercase tracking-widest font-semibold mb-1">Admin</div>${dbNavItem}</div>`:''}
       </nav>
       <div class="p-3 border-t border-white/10 space-y-1">
         ${state.mode==='live'?`
@@ -535,9 +550,7 @@ function buildDashboard(){
     <div class="flex items-center justify-between mb-6">
       <div>
         <h1 class="text-2xl font-bold text-gray-800">Good morning! ☀️</h1>
-        <p class="text-gray-400 text-sm">Sunday, March 8, 2026 · ${state.settings.businessName}
-          ${state.mode==='live'&&state.sheetUrl?` · <a href="${state.sheetUrl}" target="_blank" class="text-amber-800 hover:underline">Open Sheet ↗</a>`:''}
-        </p>
+        <p class="text-gray-400 text-sm">Sunday, March 8, 2026 · ${state.settings.businessName}</p>
       </div>
       <button onclick="openBookingModal(null)" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'"">+ New Booking</button>
     </div>
@@ -991,12 +1004,14 @@ function buildAddClientModal(){
             <div class="col-span-2"><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Breed</label>
               ${breedSelectHtml('dog-breed','dog-breed-other')}</div>
             <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Age (yrs)</label>
-              <input id="dog-age" type="number" min="0" max="25" placeholder="3" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+              <input id="dog-age" type="number" min="0" max="25" step="0.1" placeholder="e.g. 2 or 0.5" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
             <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Vaccinations</label>
               <select id="dog-vacc" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
                 <option value="true">Up to Date</option><option value="false">Not Current</option>
               </select></div>
           </div>
+          <div class="mt-3"><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Birthday <span class="text-gray-400 font-normal">(optional)</span></label>
+            <input id="dog-birthday" type="date" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
           <div class="mt-3"><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Notes</label>
             <textarea id="dog-notes" rows="2" placeholder="Allergies, temperament, special needs..."
               class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none"></textarea></div>
@@ -1085,7 +1100,8 @@ async function submitClient(e){
     dogs:[{id:maxDogId+1,
       name: document.getElementById('dog-name')?.value||'Dog',
       breed:getBreedValue('dog-breed','dog-breed-other'),
-      age:  parseInt(document.getElementById('dog-age')?.value)||1,
+      age:  parseFloat(document.getElementById('dog-age')?.value)||0,
+      birthday: document.getElementById('dog-birthday')?.value||'',
       vaccinated:document.getElementById('dog-vacc')?.value==='true',
       notes:document.getElementById('dog-notes')?.value||'',
     }]
