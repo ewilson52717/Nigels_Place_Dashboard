@@ -234,7 +234,7 @@ function initGoogleAuth(){
   });
   // Auto sign-in if we have a saved session
   const savedEmail=localStorage.getItem('np_email');
-  if(savedEmail){silentSignIn=true; tokenClient.requestAccessToken({prompt:'',login_hint:savedEmail});}
+  if(savedEmail){silentSignIn=true; tokenClient.requestAccessToken({prompt:'none',login_hint:savedEmail});}
 }
 async function onToken(resp){
   if(resp.error){
