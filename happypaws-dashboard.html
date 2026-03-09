@@ -141,7 +141,7 @@ const state={
   settings:{
     businessName:"Nigel's Place",ownerName:'Kelly Hendrickson',
     dailyCapacity:10,fullDayRate:45,halfDayRate:25,groomingAddOn:20,
-    venmoHandle:'',squareLink:'',
+    venmoHandle:'',squareLink:'',geminiApiKey:'',
   },
 };
 
@@ -155,13 +155,13 @@ let lastSynced=null,autoRefreshTimer=null;
 //  ④  MOCK DATA (Demo Mode)
 // ═══════════════════════════════════════════════════
 const MC=[
-  {id:1,name:'Alice Chen',  email:'alice@email.com',  phone:'555-0101',photoConsent:true, dogs:[{id:1,name:'Buddy', breed:'Golden Retriever',age:3,vaccinated:true, vaccExpiry:'',notes:'Loves fetch',birthday:''}]},
+  {id:1,name:'Alice Chen',  email:'alice@email.com',  phone:'555-0101',photoConsent:true, dogs:[{id:1,name:'Buddy', breed:'Golden Retriever',age:3,vaccinated:true, vaccExpiry:'',vaccines:[],driveFileLink:'',notes:'Loves fetch',birthday:''}]},
   {id:2,name:'Mark Davis',  email:'mark@email.com',   phone:'555-0102',photoConsent:false,dogs:[
-    {id:2,name:'Luna', breed:'Toy Poodle',  age:2,vaccinated:true, vaccExpiry:'',notes:'Shy at first',birthday:''},
-    {id:3,name:'Max',  breed:'Labrador',    age:5,vaccinated:true, vaccExpiry:'',notes:'Very energetic',birthday:''}]},
-  {id:3,name:'Jessica Park',email:'jessica@email.com',phone:'555-0103',photoConsent:true, dogs:[{id:4,name:'Coco', breed:'French Bulldog',age:1,vaccinated:true, vaccExpiry:'',notes:'Needs breaks',birthday:''}]},
-  {id:4,name:'Tom Wilson',  email:'tom@email.com',    phone:'555-0104',photoConsent:false,dogs:[{id:5,name:'Bear', breed:'Siberian Husky', age:4,vaccinated:false,vaccExpiry:'',notes:'Vacc update needed',birthday:''}]},
-  {id:5,name:'Sarah Lee',   email:'sarah@email.com',  phone:'555-0105',photoConsent:true, dogs:[{id:6,name:'Daisy',breed:'Corgi',          age:2,vaccinated:true, vaccExpiry:'',notes:'Very social',birthday:''}]},
+    {id:2,name:'Luna', breed:'Toy Poodle',  age:2,vaccinated:true, vaccExpiry:'',vaccines:[],driveFileLink:'',notes:'Shy at first',birthday:''},
+    {id:3,name:'Max',  breed:'Labrador',    age:5,vaccinated:true, vaccExpiry:'',vaccines:[],driveFileLink:'',notes:'Very energetic',birthday:''}]},
+  {id:3,name:'Jessica Park',email:'jessica@email.com',phone:'555-0103',photoConsent:true, dogs:[{id:4,name:'Coco', breed:'French Bulldog',age:1,vaccinated:true, vaccExpiry:'',vaccines:[],driveFileLink:'',notes:'Needs breaks',birthday:''}]},
+  {id:4,name:'Tom Wilson',  email:'tom@email.com',    phone:'555-0104',photoConsent:false,dogs:[{id:5,name:'Bear', breed:'Siberian Husky', age:4,vaccinated:false,vaccExpiry:'',vaccines:[],driveFileLink:'',notes:'Vacc update needed',birthday:''}]},
+  {id:5,name:'Sarah Lee',   email:'sarah@email.com',  phone:'555-0105',photoConsent:true, dogs:[{id:6,name:'Daisy',breed:'Corgi',          age:2,vaccinated:true, vaccExpiry:'',vaccines:[],driveFileLink:'',notes:'Very social',birthday:''}]},
 ];
 function nightsCount(ci,co){
   if(!ci)return 1;
@@ -237,26 +237,38 @@ function fmtDate(ds){return new Date(ds+'T00:00:00').toLocaleDateString('en-US',
 function fmtDateShort(ds){return new Date(ds+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});}
 function mkDs(y,m,d){return`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
 // Vaccine helpers
+function vaccDaysLeft(expiry){
+  if(!expiry)return null;
+  return Math.round((new Date(expiry+'T00:00:00')-new Date(TODAY+'T00:00:00'))/864e5);
+}
 function vaccStatus(dog){
-  if(!dog.vaccExpiry){return dog.vaccinated?'ok':'expired';}
-  const today=new Date(TODAY+'T00:00:00');
-  const exp=new Date(dog.vaccExpiry+'T00:00:00');
-  const daysLeft=Math.round((exp-today)/864e5);
-  if(daysLeft<0)return'expired';
-  if(daysLeft<=60)return'expiring';
-  return'ok';
+  const vx=dog.vaccines||[];
+  if(!vx.length){return dog.vaccinated?'ok':'none';}
+  let worst='ok';
+  for(const v of vx){
+    const d=vaccDaysLeft(v.expiry);
+    if(d===null)continue;
+    if(d<0){worst='expired';break;}
+    if(d<=60&&worst==='ok')worst='expiring';
+  }
+  return worst;
 }
 function vaccBadge(dog){
+  const vx=dog.vaccines||[];
   const s=vaccStatus(dog);
-  const expStr=dog.vaccExpiry?` · exp ${fmtDateShort(dog.vaccExpiry)}`:'';
-  if(s==='expired')return`<div class="text-xs text-red-500 font-semibold">🚩 Vaccines expired${expStr}</div>`;
-  if(s==='expiring'){
-    const today=new Date(TODAY+'T00:00:00');
-    const exp=new Date(dog.vaccExpiry+'T00:00:00');
-    const days=Math.round((exp-today)/864e5);
-    return`<div class="text-xs text-amber-600 font-semibold">⚠️ Exp in ${days}d${expStr}</div>`;
+  if(!vx.length){
+    if(s==='none')return`<div class="text-xs text-gray-400">No vaccine records</div>`;
+    return`<div class="text-xs text-green-600">✓ Vaccinated</div>`;
   }
-  return`<div class="text-xs text-green-600">✓ Vaccinated${expStr}</div>`;
+  const rows=vx.map(v=>{
+    const d=vaccDaysLeft(v.expiry);
+    let cls='text-green-600',icon='✓';
+    if(d!==null&&d<0){cls='text-red-500 font-semibold';icon='🚩';}
+    else if(d!==null&&d<=60){cls='text-amber-600 font-semibold';icon='⚠️';}
+    const expStr=v.expiry?` · exp ${fmtDateShort(v.expiry)}`:'';
+    return`<div class="text-xs ${cls}">${icon} ${v.name}${expStr}</div>`;
+  }).join('');
+  return rows;
 }
 function requestVaccInfoLinks(cl,dog){
   const phone=(cl.phone||'').replace(/\D/g,'');
@@ -311,7 +323,7 @@ function initGoogleAuth(){
   if(typeof google==='undefined'){setTimeout(initGoogleAuth,300);return;}
   tokenClient=google.accounts.oauth2.initTokenClient({
     client_id:CONFIG.CLIENT_ID,
-    scope:'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email',
+    scope:'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file',
     callback:onToken,
   });
   const savedEmail=localStorage.getItem('np_email');
@@ -417,13 +429,13 @@ async function ensureServicesSheet(){
 async function initSheetHeaders(){
   await Promise.all([
     writeRange('Clients!A1:E1', [['id','name','email','phone','photoConsent']]),
-    writeRange('Dogs!A1:I1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry']]),
+    writeRange('Dogs!A1:K1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink']]),
     writeRange('Bookings!A1:L1',[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price']]),
     writeRange('Invoices!A1:I1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items']]),
-    writeRange('Settings!A1:B8',[
+    writeRange('Settings!A1:B9',[
       ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
       ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
-      ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',''],['squareLink',''],
+      ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',''],['squareLink',''],['geminiApiKey',''],
     ]),
     writeRange('Services!A1:F1',[['id','name','type','price','active','frequency']]),
   ]);
@@ -439,7 +451,11 @@ async function loadAllData(){
     photoConsent:String(r[4]).toLowerCase()==='true',dogs:[]});});
   (dR||[]).forEach(r=>{
     if(!r[0])return;
-    const dog={id:+r[0],name:r[2]||'',breed:r[3]||'',age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',notes:r[6]||'',birthday:r[7]||'',vaccExpiry:r[8]||''};
+    let vaccines=[];
+    try{if(r[9])vaccines=JSON.parse(r[9]);}catch(e){}
+    // Back-compat: if no vaccines array yet, seed from old vaccExpiry field
+    if(!vaccines.length&&r[8]){vaccines=[{name:'Vaccines',expiry:r[8]}];}
+    const dog={id:+r[0],name:r[2]||'',breed:r[3]||'',age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',notes:r[6]||'',birthday:r[7]||'',vaccExpiry:r[8]||'',vaccines,driveFileLink:r[10]||''};
     const cl=clients.find(c=>c.id===+r[1]);if(cl)cl.dogs.push(dog);
   });
   bookings.length=0;
@@ -468,6 +484,7 @@ async function loadAllData(){
     else if(k==='groomingAddOn')state.settings.groomingAddOn=+v;
     else if(k==='venmoHandle')state.settings.venmoHandle=v;
     else if(k==='squareLink')state.settings.squareLink=v;
+    else if(k==='geminiApiKey')state.settings.geminiApiKey=v;
   });
   services.length=0;
   if(svR&&svR.length>0){
@@ -485,10 +502,10 @@ async function persistBookings(){
 async function persistClients(){
   if(state.mode!=='live')return;
   const cRows=[['id','name','email','phone','photoConsent'],...clients.map(c=>[c.id,c.name,c.email,c.phone,c.photoConsent?'true':'false'])];
-  const dRows=[['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry'],
-    ...clients.flatMap(c=>c.dogs.map(d=>[d.id,c.id,d.name,d.breed,d.age,d.vaccinated,d.notes,d.birthday||'',d.vaccExpiry||'']))];
+  const dRows=[['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink'],
+    ...clients.flatMap(c=>c.dogs.map(d=>[d.id,c.id,d.name,d.breed,d.age,d.vaccinated,d.notes,d.birthday||'',d.vaccExpiry||'',JSON.stringify(d.vaccines||[]),d.driveFileLink||'']))];
   await writeRange(`Clients!A1:E${cRows.length}`,cRows);
-  await writeRange(`Dogs!A1:I${dRows.length}`,dRows);
+  await writeRange(`Dogs!A1:K${dRows.length}`,dRows);
 }
 async function persistInvoices(){
   if(state.mode!=='live')return;
@@ -498,11 +515,11 @@ async function persistInvoices(){
 }
 async function persistSettings(){
   if(state.mode!=='live')return;
-  await writeRange('Settings!A1:B8',[
+  await writeRange('Settings!A1:B9',[
     ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
     ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
     ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',state.settings.venmoHandle||''],
-    ['squareLink',state.settings.squareLink||''],
+    ['squareLink',state.settings.squareLink||''],['geminiApiKey',state.settings.geminiApiKey||''],
   ]);
 }
 async function persistServices(){
@@ -831,19 +848,22 @@ function buildClientsView(){
               const links=requestVaccInfoLinks(cl,d);
               const needsRequest=vs==='expired'||vs==='expiring';
               return`
-              <div class="bg-gray-50 border ${vs==='expired'?'border-red-200':vs==='expiring'?'border-amber-200':'border-gray-100'} rounded-xl p-2.5 flex items-start gap-2 min-w-[140px]">
+              <div class="bg-gray-50 border ${vs==='expired'?'border-red-200':vs==='expiring'?'border-amber-200':'border-gray-100'} rounded-xl p-3 flex items-start gap-2" style="min-width:180px;max-width:260px">
                 <span class="text-lg">🐶</span>
                 <div class="flex-1 min-w-0">
                   <div class="text-sm font-semibold text-gray-700">${d.name}</div>
                   <div class="text-xs text-gray-400">${d.breed} · ${d.age}yr</div>
-                  ${vaccBadge(d)}
-                  ${d.birthday?`<div class="text-xs text-gray-400">🎂 ${d.birthday}</div>`:''}
-                  ${d.notes?`<div class="text-xs text-gray-400 italic">"${d.notes}"</div>`:''}
-                  ${needsRequest?`
+                  <div class="mt-1 space-y-0.5">${vaccBadge(d)}</div>
+                  ${d.birthday?`<div class="text-xs text-gray-400 mt-1">🎂 ${d.birthday}</div>`:''}
+                  ${d.notes?`<div class="text-xs text-gray-400 italic mt-0.5">"${d.notes}"</div>`:''}
                   <div class="mt-2 flex gap-1.5 flex-wrap">
+                    <button id="vbtn-${d.id}" onclick="handleVaccUpload(${cl.id},${d.id})"
+                      class="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">📄 Upload Record</button>
+                    ${d.driveFileLink?`<a href="${d.driveFileLink}" target="_blank" class="text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 no-underline">📂 View File</a>`:''}
+                    ${needsRequest?`
                     <a href="${links.smsHref}" class="text-xs px-2 py-1 bg-amber-700 text-white rounded-lg hover:bg-amber-800 no-underline">💬 Text</a>
-                    <a href="${links.emailHref}" class="text-xs px-2 py-1 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 no-underline">✉️ Email</a>
-                  </div>`:''}
+                    <a href="${links.emailHref}" class="text-xs px-2 py-1 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 no-underline">✉️ Email</a>`:''}
+                  </div>
                 </div>
               </div>`;
             }).join('')}
@@ -982,6 +1002,14 @@ function buildSettingsView(){
           <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Square Payment Link</label>
             <input id="set-square" type="url" placeholder="https://square.link/u/XXXXXXXX" value="${state.settings.squareLink||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
             <p class="text-xs text-gray-400 mt-1">In Square: Online → Payment Links → Create Link → copy URL</p></div>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <h2 class="font-semibold text-gray-800 mb-1">🤖 AI Vaccine Parsing</h2>
+        <p class="text-xs text-gray-400 mb-3">Upload a vaccine record PDF or photo and Gemini AI will read it and fill in all the vaccines and dates automatically.</p>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Gemini API Key</label>
+          <input id="set-gemini" type="password" placeholder="AIza..." value="${state.settings.geminiApiKey||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
+          <p class="text-xs text-gray-400 mt-1">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" class="underline text-amber-700">aistudio.google.com/apikey</a> → Create API key (free tier is plenty).</p>
         </div>
       </div>
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
@@ -1285,9 +1313,10 @@ function buildAddClientModal(){
               <select id="dog-vacc" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
                 <option value="true">Up to Date</option><option value="false">Not Current</option>
               </select></div>
-            <div class="col-span-2"><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Vaccine Expiry Date <span class="font-normal text-gray-400">(optional)</span></label>
-              <input id="dog-vacc-expiry" type="date" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-              <p class="text-xs text-gray-400 mt-1">💡 You'll get a reminder to notify the client 60 days before this date.</p></div>
+            <div class="col-span-2 bg-amber-50 border border-amber-100 rounded-xl p-3">
+              <p class="text-xs text-amber-800 font-medium">📄 Vaccine records</p>
+              <p class="text-xs text-amber-700 mt-0.5">After saving the client, open their card and click <strong>Upload Record</strong> — Gemini AI will read the file and fill in all vaccines and expiry dates automatically.</p>
+            </div>
           </div>
           <div class="mt-3"><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Birthday <span class="font-normal text-gray-400">(optional)</span></label>
             <input id="dog-birthday" type="date" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
@@ -1429,6 +1458,120 @@ function populateInvoiceItems(){
   if(amtEl)amtEl.value=total;
 }
 
+// ═══════════════════════════════════════════════════
+//  DRIVE + GEMINI  ─  Vaccine Record Upload & Parse
+// ═══════════════════════════════════════════════════
+const DRIVE_API = 'https://www.googleapis.com/';
+async function findOrCreateFolder(name, parentId){
+  // Search for existing folder
+  const q=`mimeType='application/vnd.google-apps.folder' and name='${name}' and trashed=false${parentId?` and '${parentId}' in parents`:''}`;
+  const r=await fetch(`${DRIVE_API}drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`,{
+    headers:{Authorization:`Bearer ${state.accessToken}`}
+  });
+  const d=await r.json();
+  if(d.files&&d.files.length>0)return d.files[0].id;
+  // Create it
+  const body={name,mimeType:'application/vnd.google-apps.folder'};
+  if(parentId)body.parents=[parentId];
+  const cr=await fetch(`${DRIVE_API}drive/v3/files`,{
+    method:'POST',headers:{Authorization:`Bearer ${state.accessToken}`,'Content-Type':'application/json'},
+    body:JSON.stringify(body)
+  });
+  const cd=await cr.json();
+  return cd.id;
+}
+async function uploadVaccRecord(file, clientName){
+  // Ensure folder path: Nigel's Place / Client Vaccine Records / [ClientName]
+  const rootId=await findOrCreateFolder("Nigel's Place",null);
+  const recordsId=await findOrCreateFolder('Client Vaccine Records',rootId);
+  const clientId2=await findOrCreateFolder(clientName,recordsId);
+  // Upload file via multipart
+  const meta=JSON.stringify({name:file.name,parents:[clientId2]});
+  const form=new FormData();
+  form.append('metadata',new Blob([meta],{type:'application/json'}));
+  form.append('file',file);
+  const r=await fetch(`${DRIVE_API}upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink`,{
+    method:'POST',headers:{Authorization:`Bearer ${state.accessToken}`},body:form
+  });
+  return await r.json(); // {id, webViewLink}
+}
+async function parseVaccRecordWithGemini(file){
+  const key=state.settings.geminiApiKey;
+  if(!key)throw new Error('No Gemini API key set in Settings.');
+  // Read file as base64
+  const base64=await new Promise((res,rej)=>{
+    const fr=new FileReader();
+    fr.onload=e=>res(e.target.result.split(',')[1]);
+    fr.onerror=rej;
+    fr.readAsDataURL(file);
+  });
+  const mimeType=file.type||'application/pdf';
+  const prompt=`You are reading a veterinary vaccine record for a dog. Extract every vaccine and its expiration date.
+Return ONLY valid JSON, no markdown, no explanation:
+{"dogName":"name if visible or empty string","vaccines":[{"name":"Rabies","expiry":"YYYY-MM-DD"},{"name":"Bordetella","expiry":"YYYY-MM-DD"}]}
+Common vaccine names: Rabies, Bordetella, DHPP, DA2PP, Distemper, Parvo, Leptospirosis, Lyme, Canine Influenza.
+Normalize names (e.g. DA2PP→DHPP). If only an administration date is visible (no expiry), estimate: Rabies=3 years, Bordetella=1 year, others=1 year.
+If no expiry can be determined, omit the expiry field. Return an empty vaccines array if no vaccine info found.`;
+  const body={contents:[{parts:[
+    {inline_data:{mime_type:mimeType,data:base64}},
+    {text:prompt}
+  ]}]};
+  const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
+  });
+  const d=await r.json();
+  if(d.error)throw new Error(d.error.message||'Gemini error');
+  const text=d.candidates?.[0]?.content?.parts?.[0]?.text||'{}';
+  // Strip any markdown fences if present
+  const clean=text.replace(/```json?|```/g,'').trim();
+  return JSON.parse(clean);
+}
+async function handleVaccUpload(clientId, dogId){
+  const input=document.createElement('input');
+  input.type='file';
+  input.accept='image/*,application/pdf';
+  input.onchange=async()=>{
+    const file=input.files[0];
+    if(!file)return;
+    const cl=clients.find(c=>c.id===clientId);
+    const dog=cl?.dogs.find(d=>d.id===dogId);
+    if(!dog||!cl)return;
+    const btnId=`vbtn-${dogId}`;
+    const btn=document.getElementById(btnId);
+    if(btn){btn.disabled=true;btn.textContent='⏳ Uploading…';}
+    try{
+      // 1. Upload to Drive (if signed in to live mode)
+      let driveLink='';
+      if(state.mode==='live'&&state.accessToken){
+        try{
+          const df=await uploadVaccRecord(file,cl.name);
+          dog.driveFileLink=df.webViewLink||'';
+          driveLink=dog.driveFileLink;
+        }catch(e){showToast('Drive upload failed — parsing anyway.','#F97316');}
+      }
+      // 2. Parse with Gemini
+      if(btn)btn.textContent='🤖 Parsing…';
+      const result=await parseVaccRecordWithGemini(file);
+      if(result.vaccines&&result.vaccines.length>0){
+        dog.vaccines=result.vaccines;
+        // Update soonest vaccExpiry for legacy compat
+        const expDates=result.vaccines.filter(v=>v.expiry).map(v=>v.expiry).sort();
+        if(expDates.length)dog.vaccExpiry=expDates[0];
+        dog.vaccinated=true;
+        render();
+        showToast(`Found ${result.vaccines.length} vaccine${result.vaccines.length>1?'s':''} for ${dog.name}! 🐾`);
+        try{await persistClients();}catch(e){showToast('Parsed OK; sheet sync failed.','#F97316');}
+      }else{
+        showToast('No vaccines found in that file. Try a clearer photo or PDF.','#F97316');
+        if(btn){btn.disabled=false;btn.textContent='📄 Upload Record';}
+      }
+    }catch(err){
+      showToast(`Error: ${err.message}`,'#EF4444');
+      if(btn){btn.disabled=false;btn.textContent='📄 Upload Record';}
+    }
+  };
+  input.click();
+}
 async function submitBooking(e){
   e.preventDefault();
   const ci=document.getElementById('bk-checkin')?.value;
@@ -1502,6 +1645,8 @@ async function submitClient(e){
       birthday:document.getElementById('dog-birthday')?.value||'',
       vaccinated:document.getElementById('dog-vacc')?.value==='true',
       vaccExpiry:document.getElementById('dog-vacc-expiry')?.value||'',
+      vaccines:[],
+      driveFileLink:'',
       notes:document.getElementById('dog-notes')?.value||'',
     }]};
   clients.push(nc);state.showModal=null;render();
@@ -1588,6 +1733,7 @@ async function saveSettings(){
   if(owner)state.settings.ownerName=owner;
   const venmo=v('set-venmo')?.trim();if(venmo!==undefined)state.settings.venmoHandle=venmo;
   const sq=v('set-square')?.trim();if(sq!==undefined)state.settings.squareLink=sq;
+  const gk=v('set-gemini')?.trim();if(gk!==undefined)state.settings.geminiApiKey=gk;
   showToast('Settings saved!');render();
   try{await persistSettings();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
 }
