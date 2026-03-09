@@ -254,11 +254,21 @@ function vaccDaysLeft(expiry){
   if(!expiry)return null;
   return Math.round((new Date(expiry+'T00:00:00')-new Date(TODAY+'T00:00:00'))/864e5);
 }
-function vaccStatus(dog){
+// Returns one entry per vaccine TYPE — the one with the latest (highest) expiry date.
+function getLatestVaccsByType(dog){
   const vx=dog.vaccines||[];
-  if(!vx.length){return dog.vaccinated?'ok':'none';}
+  const map={};
+  vx.forEach(v=>{
+    const k=(v.name||'Unknown').trim();
+    if(!map[k]||(v.expiry||'0000')>(map[k].expiry||'0000'))map[k]=v;
+  });
+  return Object.values(map);
+}
+function vaccStatus(dog){
+  const latest=getLatestVaccsByType(dog);
+  if(!latest.length){return dog.vaccinated?'ok':'none';}
   let worst='ok';
-  for(const v of vx){
+  for(const v of latest){
     const d=vaccDaysLeft(v.expiry);
     if(d===null)continue;
     if(d<0){worst='expired';break;}
@@ -267,13 +277,14 @@ function vaccStatus(dog){
   return worst;
 }
 function vaccBadge(dog){
-  const vx=dog.vaccines||[];
+  const latest=getLatestVaccsByType(dog);
   const s=vaccStatus(dog);
-  if(!vx.length){
+  if(!latest.length){
     if(s==='none')return`<div class="text-xs text-gray-400">No vaccine records</div>`;
     return`<div class="text-xs text-green-600">✓ Vaccinated</div>`;
   }
-  const rows=vx.map(v=>{
+  // Show compact per-type pills (latest record per type only)
+  const rows=latest.map(v=>{
     const d=vaccDaysLeft(v.expiry);
     let cls='text-green-600',icon='✓';
     if(d!==null&&d<0){cls='text-red-500 font-semibold';icon='🚩';}
@@ -282,6 +293,46 @@ function vaccBadge(dog){
     return`<div class="text-xs ${cls}">${icon} ${v.name}${expStr}</div>`;
   }).join('');
   return rows;
+}
+// Builds the full vaccine records panel HTML — grouped by type with history rows.
+function buildVaccineRecordsHTML(dog){
+  const vx=dog.vaccines||[];
+  if(!vx.length)return`<div class="text-center py-6 text-gray-300"><div class="text-3xl mb-2">💉</div><p class="text-sm">No vaccination records yet.</p><p class="text-xs mt-1">Click "Upload Record" to scan &amp; auto-fill vaccines.</p></div>`;
+  // Group by vaccine type, sort each group descending by expiry (latest first)
+  const groups={};
+  vx.forEach(v=>{const k=(v.name||'Unknown').trim();if(!groups[k])groups[k]=[];groups[k].push(v);});
+  Object.values(groups).forEach(g=>g.sort((a,b)=>((b.expiry||'0000')>(a.expiry||'0000')?1:-1)));
+  const today=new Date();
+  const typeCount=Object.keys(groups).length;
+  const groupsHTML=Object.entries(groups).map(([typeName,records])=>{
+    const latest=records[0];const prior=records.slice(1);
+    const exp=latest.expiry?new Date(latest.expiry+'T00:00:00'):null;
+    const daysLeft=exp?Math.round((exp-today)/864e5):null;
+    const expired=daysLeft!==null&&daysLeft<0;
+    const expiring=daysLeft!==null&&daysLeft>=0&&daysLeft<=60;
+    const statusBg=expired?'bg-red-50 border-red-200':expiring?'bg-amber-50 border-amber-200':exp?'bg-green-50 border-green-100':'bg-gray-50 border-gray-200';
+    const statusIcon=expired?'🚩':expiring?'⚠️':exp?'✅':'📋';
+    const expiryColor=expired?'text-red-600':expiring?'text-amber-700':'text-green-700';
+    const daysText=daysLeft!==null?(daysLeft<0?Math.abs(daysLeft)+' days ago':daysLeft===0?'Today':'in '+daysLeft+' days'):'';
+    const priorRowsHTML=prior.map(p=>{
+      const pExp=p.expiry?new Date(p.expiry+'T00:00:00'):null;
+      const pDays=pExp?Math.round((pExp-today)/864e5):null;
+      return`<div class="flex items-center justify-between py-1 px-4 border-t border-gray-100 bg-white/50"><span class="text-xs text-gray-400 pl-4">↳ ${p.expiry||'no date'}</span>${pDays!==null?`<span class="text-xs text-gray-400">${Math.abs(pDays)}d ago</span>`:''}</div>`;
+    }).join('');
+    return`<div class="rounded-xl border overflow-hidden ${statusBg}">
+      <div class="flex items-center justify-between p-3">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span>${statusIcon}</span>
+          <span class="text-sm font-semibold text-gray-700">${typeName}</span>
+          ${prior.length>0?`<span class="text-xs bg-white/70 text-gray-500 px-2 py-0.5 rounded-full border border-gray-200">+${prior.length} prior</span>`:''}
+        </div>
+        <div class="text-right shrink-0">
+          ${latest.expiry?`<div class="text-xs font-semibold ${expiryColor}">Expires ${latest.expiry}</div>`:'<div class="text-xs text-gray-400">No expiry</div>'}
+          ${daysText?`<div class="text-xs text-gray-400">${daysText}</div>`:''}
+        </div>
+      </div>${priorRowsHTML}</div>`;
+  }).join('');
+  return`<div class="space-y-2">${groupsHTML}</div><div class="mt-3 text-xs text-gray-400">${typeCount} vaccine type${typeCount!==1?'s':''} · ${vx.length} total record${vx.length!==1?'s':''}</div>`;
 }
 function requestVaccInfoLinks(cl,dog){
   const phone=String(cl.phone||'').replace(/\D/g,'');
@@ -333,6 +384,10 @@ document.addEventListener('visibilitychange',()=>{
 // ═══════════════════════════════════════════════════
 let tokenClient=null,driveTokenClient=null,silentSignIn=false;
 let driveToken=null; // separate Drive token — only requested when uploading
+// Persistent folder ID cache — avoids duplicate folder creation across sessions.
+// Key = "parentId:folderName" (parentId is 'root' when no parent), value = Drive folder ID.
+let _folderIdCache={};
+try{_folderIdCache=JSON.parse(localStorage.getItem('np_folder_cache')||'{}');}catch(e){}
 function initGoogleAuth(){
   if(typeof google==='undefined'){setTimeout(initGoogleAuth,300);return;}
   tokenClient=google.accounts.oauth2.initTokenClient({
@@ -343,7 +398,7 @@ function initGoogleAuth(){
   // Separate Drive-scoped client — only invoked on demand when uploading vaccine records
   driveTokenClient=google.accounts.oauth2.initTokenClient({
     client_id:CONFIG.CLIENT_ID,
-    scope:'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file',
+    scope:'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive',
     callback:(resp)=>{
       if(!resp.error)driveToken=resp.access_token;
       else showToast('Drive access denied — file will not be saved to Drive.','#F97316');
@@ -983,29 +1038,7 @@ function buildDogsView(){
                 📄 Upload Record
               </button>
             </div>
-            ${dog.vaccines&&dog.vaccines.length>0?`
-            <div class="space-y-2">
-              ${dog.vaccines.map(v=>{
-                const today=new Date(); const exp=v.expiry?new Date(v.expiry):null;
-                const daysLeft=exp?Math.round((exp-today)/864e5):null;
-                const statusColor=!exp?'bg-gray-50 border-gray-200':'daysLeft<0?\'bg-red-50 border-red-200\':daysLeft<=60?\'bg-amber-50 border-amber-200\':\'bg-green-50 border-green-100\'';
-                const expired=exp&&daysLeft<0; const expiring=exp&&daysLeft>=0&&daysLeft<=60;
-                return`<div class="flex items-center justify-between p-3 rounded-xl border ${expired?'bg-red-50 border-red-200':expiring?'bg-amber-50 border-amber-200':exp?'bg-green-50 border-green-100':'bg-gray-50 border-gray-200'}">
-                  <div class="flex items-center gap-2">
-                    <span>${expired?'🚩':expiring?'⚠️':'✅'}</span>
-                    <span class="text-sm font-medium text-gray-700">${v.name}</span>
-                  </div>
-                  <div class="text-right">
-                    ${v.expiry?`<div class="text-xs font-semibold ${expired?'text-red-600':expiring?'text-amber-700':'text-green-700'}">Expires ${v.expiry}</div>`:''}
-                    ${daysLeft!==null?`<div class="text-xs text-gray-400">${daysLeft<0?Math.abs(daysLeft)+' days ago':daysLeft===0?'Today':'in '+daysLeft+' days'}</div>`:''}
-                  </div>
-                </div>`;
-              }).join('')}
-            </div>`:`<div class="text-center py-6 text-gray-300">
-              <div class="text-3xl mb-2">💉</div>
-              <p class="text-sm">No vaccination records yet.</p>
-              <p class="text-xs mt-1">Click "Upload Record" to scan & auto-fill vaccines.</p>
-            </div>`}
+            ${buildVaccineRecordsHTML(dog)}
             ${dog.driveFileLink?`<a href="${dog.driveFileLink}" target="_blank" class="mt-3 inline-flex items-center gap-1.5 text-xs text-blue-600 hover:underline">📂 View original record in Drive →</a>`:''}
           </div>
           <!-- Play Photos -->
@@ -1669,20 +1702,33 @@ function populateInvoiceItems(){
 // ═══════════════════════════════════════════════════
 const DRIVE_API = 'https://www.googleapis.com/';
 async function findOrCreateFolder(name, parentId){
+  // Check in-memory + localStorage cache first to avoid creating duplicate folders
+  const cacheKey=(parentId||'root')+':'+name;
+  if(_folderIdCache[cacheKey])return _folderIdCache[cacheKey];
+  // Search Drive for an existing folder with this name under this parent
   const q=`mimeType='application/vnd.google-apps.folder' and name='${name}' and trashed=false${parentId?` and '${parentId}' in parents`:''}`;
   const r=await fetch(`${DRIVE_API}drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`,{
     headers:{Authorization:`Bearer ${driveToken}`}
   });
   const d=await r.json();
-  if(d.files&&d.files.length>0)return d.files[0].id;
-  const body={name,mimeType:'application/vnd.google-apps.folder'};
-  if(parentId)body.parents=[parentId];
-  const cr=await fetch(`${DRIVE_API}drive/v3/files`,{
-    method:'POST',headers:{Authorization:`Bearer ${driveToken}`,'Content-Type':'application/json'},
-    body:JSON.stringify(body)
-  });
-  const cd=await cr.json();
-  return cd.id;
+  let folderId=d.files&&d.files.length>0?d.files[0].id:null;
+  if(!folderId){
+    // Not found — create it
+    const body={name,mimeType:'application/vnd.google-apps.folder'};
+    if(parentId)body.parents=[parentId];
+    const cr=await fetch(`${DRIVE_API}drive/v3/files`,{
+      method:'POST',headers:{Authorization:`Bearer ${driveToken}`,'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+    const cd=await cr.json();
+    folderId=cd.id;
+  }
+  // Cache the result so future calls skip the search entirely
+  if(folderId){
+    _folderIdCache[cacheKey]=folderId;
+    try{localStorage.setItem('np_folder_cache',JSON.stringify(_folderIdCache));}catch(e){}
+  }
+  return folderId;
 }
 async function uploadToDriveFolder(file, folderPath){
   // folderPath = array of folder names starting from root, e.g. ["Nigel's Place","Dog Photos","Buddy"]
@@ -1702,7 +1748,8 @@ async function uploadToDriveFolder(file, folderPath){
   return d;
 }
 async function uploadVaccRecord(file, clientName){
-  return uploadToDriveFolder(file,["Nigel's Place",'Client Vaccine Records',clientName]);
+  // Store under the existing Nigel's Place > Customer Relations > Client Vaccine Records structure
+  return uploadToDriveFolder(file,["Nigel's Place",'Customer Relations','Client Vaccine Records',clientName]);
 }
 // Preferred models in order — auto-selects the first one available for this API key
 const GEMINI_MODEL_PREFERENCE=['gemini-2.5-flash','gemini-2.5-pro','gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash-latest','gemini-1.5-pro-latest'];
