@@ -141,7 +141,7 @@ const state={
   settings:{
     businessName:"Nigel's Place",ownerName:'Kelly Hendrickson',
     dailyCapacity:10,fullDayRate:45,halfDayRate:25,groomingAddOn:20,
-    venmoHandle:'',squareLink:'',geminiApiKey:'',
+    venmoHandle:'',squareLink:'',geminiApiKey:'',nigelsDriveFolderId:'',
   },
 };
 
@@ -415,6 +415,45 @@ let driveToken=null; // separate Drive token — only requested when uploading
 // Key = "parentId:folderName" (parentId is 'root' when no parent), value = Drive folder ID.
 let _folderIdCache={};
 try{_folderIdCache=JSON.parse(localStorage.getItem('np_folder_cache')||'{}');}catch(e){}
+// Cache Drive image blob URLs by fileId — avoids re-fetching on every render()
+const _driveImgCache={};
+// Build an <img> tag for a Drive-stored image. Accepts raw file IDs or webViewLinks.
+// Renders immediately if already cached; otherwise shows placeholder and loads async via hydrateImages().
+function driveImgTag(link,cssClass,alt=''){
+  if(!link)return'';
+  // Extract Drive file ID from various link formats, or use raw ID directly
+  let fileId=null;
+  if(/^[A-Za-z0-9_-]{25,60}$/.test(link))fileId=link;                // bare file ID
+  else{const m=link.match(/\/d\/([A-Za-z0-9_-]{25,60})/);if(m)fileId=m[1];}  // webViewLink
+  if(fileId){
+    const src=_driveImgCache[fileId]||'';
+    return`<img data-driveid="${fileId}" src="${src}" alt="${alt||''}" class="${cssClass}"${src?'':' style="display:none"'} onerror="this.style.display='none'">`;
+  }
+  // Non-Drive URL (legacy or external) — render directly
+  return`<img src="${link}" alt="${alt||''}" class="${cssClass}" onerror="this.style.display='none'">`;
+}
+// Fetch Drive image content using the current access token and cache as blob URLs.
+// Called after every render() so new images appear without a full page reload.
+async function hydrateImages(){
+  if(!state.accessToken)return;
+  const imgs=[...document.querySelectorAll('img[data-driveid]')];
+  const needed=[...new Set(imgs.map(i=>i.dataset.driveid).filter(id=>id&&!_driveImgCache[id]))];
+  if(!needed.length)return;
+  await Promise.all(needed.map(async fileId=>{
+    try{
+      const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+        {headers:{Authorization:`Bearer ${state.accessToken}`}});
+      if(!r.ok)return;
+      const blob=await r.blob();
+      if(!blob.type.startsWith('image/'))return;
+      _driveImgCache[fileId]=URL.createObjectURL(blob);
+      // Patch every img with this fileId currently in the DOM
+      document.querySelectorAll(`img[data-driveid="${fileId}"]`).forEach(img=>{
+        img.src=_driveImgCache[fileId];img.style.display='';
+      });
+    }catch(e){console.warn('Drive image hydration failed:',fileId,e);}
+  }));
+}
 // Tracks which vaccine type groups are expanded in the dog detail view — persists across renders.
 let _expandedVaccGroups=new Set();
 function vaccTypeSlug(name){return String(name).replace(/[^a-zA-Z0-9]/g,'_');}
@@ -444,6 +483,13 @@ function initGoogleAuth(){
     }
   });
   const savedEmail=localStorage.getItem('np_email');
+  // Try cached access token first — if it's still valid, skip the sign-in round-trip entirely
+  const cachedTok=localStorage.getItem('np_access_token');
+  const cachedExp=parseInt(localStorage.getItem('np_token_expiry')||'0');
+  if(cachedTok&&cachedExp>Date.now()&&savedEmail){
+    onToken({access_token:cachedTok,expires_in:Math.floor((cachedExp-Date.now())/1000)});
+    return;
+  }
   if(savedEmail){silentSignIn=true;tokenClient.requestAccessToken({prompt:'none',login_hint:savedEmail});}
 }
 async function onToken(resp){
@@ -454,6 +500,11 @@ async function onToken(resp){
   silentSignIn=false;
   state.accessToken=resp.access_token;
   state.tokenExpiry=Date.now()+(resp.expires_in*1000);
+  // Cache token so the next refresh within ~1 hour skips the sign-in popup entirely
+  try{
+    localStorage.setItem('np_access_token',resp.access_token);
+    localStorage.setItem('np_token_expiry',String(state.tokenExpiry-30000)); // 30s safety buffer
+  }catch(e){}
   state.mode='live';state.isLoading=true;state.loadingMsg='Connecting to Google...';render();
   try{
     const info=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',
@@ -486,6 +537,14 @@ async function onToken(resp){
       if(cl){state.role='client';state.currentClientId=cl.id;}
       else{state.role='admin';state.view='dashboard';showToast('Welcome! Your email is not yet a registered client.');}
     }
+    // Restore last-viewed section so refreshing the page lands back where you were
+    if(state.role==='admin'){
+      const sv=localStorage.getItem('np_view');
+      const validViews=['dashboard','calendar','clients','dogs','invoices','settings','services'];
+      if(sv&&validViews.includes(sv))state.view=sv;
+      const sd=parseInt(localStorage.getItem('np_dog_id')||'0');
+      if(sd&&state.view==='dogs')state.selectedDogId=sd;
+    }
   }catch(e){showToast('Error: '+e.message,'#EF4444');console.error(e);state.role='login';}
   state.isLoading=false;render();
 }
@@ -505,6 +564,8 @@ function signOut(){
   Object.assign(state,{role:'login',mode:null,accessToken:null,userEmail:null,
     sheetId:CONFIG.SHEET_ID||null,sheetUrl:null,showModal:null,currentClientId:null});
   localStorage.removeItem('np_email');
+  localStorage.removeItem('np_access_token');
+  localStorage.removeItem('np_token_expiry');
   clients=[];bookings=[];invoices=[];services=[];lastSynced=null;render();
 }
 
@@ -552,10 +613,10 @@ async function initSheetHeaders(){
     writeRange('Dogs!A1:M1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos']]),
     writeRange('Bookings!A1:L1',[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price']]),
     writeRange('Invoices!A1:I1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items']]),
-    writeRange('Settings!A1:B9',[
+    writeRange('Settings!A1:B10',[
       ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
       ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
-      ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',''],['squareLink',''],['geminiApiKey',''],
+      ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',''],['squareLink',''],['geminiApiKey',''],['nigelsDriveFolderId',''],
     ]),
     writeRange('Services!A1:F1',[['id','name','type','price','active','frequency']]),
   ]);
@@ -610,6 +671,7 @@ async function loadAllData(){
     else if(k==='venmoHandle')state.settings.venmoHandle=v;
     else if(k==='squareLink')state.settings.squareLink=v;
     else if(k==='geminiApiKey')state.settings.geminiApiKey=v;
+    else if(k==='nigelsDriveFolderId')state.settings.nigelsDriveFolderId=v;
   });
   services.length=0;
   if(svR&&svR.length>0){
@@ -640,11 +702,12 @@ async function persistInvoices(){
 }
 async function persistSettings(){
   if(state.mode!=='live')return;
-  await writeRange('Settings!A1:B9',[
+  await writeRange('Settings!A1:B10',[
     ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
     ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
     ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',state.settings.venmoHandle||''],
     ['squareLink',state.settings.squareLink||''],['geminiApiKey',state.settings.geminiApiKey||''],
+    ['nigelsDriveFolderId',state.settings.nigelsDriveFolderId||''],
   ]);
 }
 async function persistServices(){
@@ -665,7 +728,11 @@ async function refreshData(){
 //  ⑨  RENDER
 // ═══════════════════════════════════════════════════
 function render(){
-  try{document.getElementById('app').innerHTML=buildApp();}
+  try{
+    document.getElementById('app').innerHTML=buildApp();
+    // Async: load any Drive images that aren't cached yet (no-op if all cached)
+    hydrateImages();
+  }
   catch(e){
     console.error('Render error:',e);
     state.isLoading=false;
@@ -997,7 +1064,7 @@ function buildClientsView(){
                 return`
                 <div class="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2 border ${vs==='expired'?'border-red-200':vs==='expiring'?'border-amber-200':'border-gray-100'}">
                   ${d.photoLink
-                    ?`<img src="${d.photoLink.replace('view?usp=drivesdk','uc?export=view')}" class="w-7 h-7 rounded-full object-cover">`
+                    ?driveImgTag(d.photoLink,'w-7 h-7 rounded-full object-cover',d.name)||`<span class="text-base">🐶</span>`
                     :`<span class="text-base">🐶</span>`}
                   <div>
                     <button onclick="setView('dogs');setDogDetail(${d.id})" class="text-sm font-semibold text-amber-800 hover:underline">${d.name}</button>
@@ -1036,7 +1103,7 @@ function buildDogsView(){
         <div class="md:col-span-1 space-y-4">
           <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
             ${dog.photoLink
-              ?`<img src="${dog.photoLink.replace('view?usp=drivesdk','uc?export=view')}" alt="${dog.name}" class="w-32 h-32 rounded-full object-cover mx-auto mb-3 border-4 border-amber-100">`
+              ?(driveImgTag(dog.photoLink,'w-32 h-32 rounded-full object-cover mx-auto mb-3 border-4 border-amber-100',dog.name)||`<div class="w-32 h-32 rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-3 border-4 border-amber-100 text-5xl">🐶</div>`)
               :`<div class="w-32 h-32 rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-3 border-4 border-amber-100 text-5xl">🐶</div>`}
             <h2 class="text-xl font-bold text-gray-800">${dog.name}</h2>
             <p class="text-gray-400 text-sm">${dog.breed} · ${dog.age}yr old</p>
@@ -1093,8 +1160,8 @@ function buildDogsView(){
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
               ${dog.playPhotos.map(p=>`
                 <div class="rounded-xl overflow-hidden bg-gray-50 border border-gray-100 relative group">
-                  <a href="${p.link}" target="_blank" title="${p.filename||''}">
-                    <div class="w-full h-28 bg-amber-50 flex items-center justify-center text-3xl">🐾</div>
+                  <a href="https://drive.google.com/file/d/${p.link.match(/^[A-Za-z0-9_-]{25,60}$/)?p.link:((p.link.match(/\/d\/([A-Za-z0-9_-]{25,60})/)||[])[1]||'')}/view" target="_blank" title="${p.filename||''}">
+                    ${driveImgTag(p.link,'w-full h-28 object-cover',p.filename||'')||`<div class="w-full h-28 bg-amber-50 flex items-center justify-center text-3xl">🐾</div>`}
                   </a>
                   <div class="p-1.5 text-xs text-gray-400 truncate">${p.date||''}</div>
                 </div>`).join('')}
@@ -1128,7 +1195,7 @@ function buildDogsList(){
         <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer" onclick="setDogDetail(${dog.id})">
           <div class="flex items-center gap-3 mb-3">
             ${dog.photoLink
-              ?`<img src="${dog.photoLink.replace('view?usp=drivesdk','uc?export=view')}" alt="${dog.name}" class="w-12 h-12 rounded-full object-cover border-2 border-amber-100">`
+              ?(driveImgTag(dog.photoLink,'w-12 h-12 rounded-full object-cover border-2 border-amber-100',dog.name)||`<div class="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center text-2xl border-2 border-amber-100">🐶</div>`)
               :`<div class="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center text-2xl border-2 border-amber-100">🐶</div>`}
             <div class="flex-1 min-w-0">
               <div class="font-semibold text-gray-800">${dog.name}</div>
@@ -1280,6 +1347,13 @@ function buildSettingsView(){
           <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Square Payment Link</label>
             <input id="set-square" type="url" placeholder="https://square.link/u/XXXXXXXX" value="${state.settings.squareLink||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
             <p class="text-xs text-gray-400 mt-1">In Square: Online → Payment Links → Create Link → copy URL</p></div>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <h2 class="font-semibold text-gray-800 mb-1">📁 Google Drive Folder</h2>
+        <p class="text-xs text-gray-400 mb-3">Paste your "Nigel's Place" Drive folder ID to prevent duplicate folders. In Drive: right-click your folder → Open in new tab → copy the ID from the URL (the long string after /folders/).</p>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Nigel's Place Folder ID</label>
+          <input id="set-drive-folder" type="text" placeholder="e.g. 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs" value="${state.settings.nigelsDriveFolderId||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
         </div>
       </div>
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
@@ -1620,7 +1694,13 @@ function buildAddClientModal(){
 // ═══════════════════════════════════════════════════
 //  ⑪  ACTION HANDLERS
 // ═══════════════════════════════════════════════════
-function setView(v){state.view=v;state.showModal=null;if(v!=='dogs')state.selectedDogId=null;render();}
+function setView(v){
+  state.view=v;state.showModal=null;
+  if(v!=='dogs')state.selectedDogId=null;
+  // Persist so a page refresh returns to the same section
+  try{localStorage.setItem('np_view',v);if(v!=='dogs')localStorage.removeItem('np_dog_id');}catch(e){}
+  render();
+}
 function setClientView(v) {state.clientView=v;state.showModal=null;render();}
 function prevMonth()      {state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()-1,1);render();}
 function nextMonth()      {state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()+1,1);render();}
@@ -1784,8 +1864,12 @@ async function findOrCreateFolder(name, parentId){
 }
 async function uploadToDriveFolder(file, folderPath){
   // folderPath = array of folder names starting from root, e.g. ["Nigel's Place","Dog Photos","Buddy"]
+  // If nigelsDriveFolderId is set in Settings, pin directly to that folder instead of searching for "Nigel's Place"
+  const rootId=(state.settings.nigelsDriveFolderId||'').trim();
   let parentId=null;
-  for(const name of folderPath)parentId=await findOrCreateFolder(name,parentId);
+  let pathToWalk=folderPath;
+  if(rootId&&folderPath[0]==="Nigel's Place"){parentId=rootId;pathToWalk=folderPath.slice(1);}
+  for(const name of pathToWalk)parentId=await findOrCreateFolder(name,parentId);
   const timestamp=new Date().toISOString().split('T')[0];
   const safeName=`${timestamp}_${file.name}`;
   const meta=JSON.stringify({name:safeName,parents:[parentId]});
@@ -2072,6 +2156,11 @@ async function handleDogPhotoUpload(clientId, dogId){
   // Request Drive token first, directly from button click user gesture
   await ensureDriveToken();
   openFilePickerForDog('image/*', async(file)=>{
+    // Reject non-image files (e.g. .aae Apple sidecars, Word docs, etc.)
+    if(!file.type.startsWith('image/')){
+      showToast(`❌ "${file.name}" is not an image. Please select a JPG, PNG, HEIC, or similar photo.`,'#EF4444');
+      return;
+    }
     const btnId=`dpbtn-${dogId}`;
     const btn=document.getElementById(btnId);
     if(btn){btn.disabled=true;btn.textContent='⏳ Uploading…';}
@@ -2081,7 +2170,8 @@ async function handleDogPhotoUpload(clientId, dogId){
       const freshDog=freshCl?.dogs.find(d=>d.id===dogId);
       if(!freshDog||!freshCl){showToast('Dog not found — please reload.','#EF4444');return;}
       const df=await uploadToDriveFolder(file,["Nigel's Place",'Dog Photos',freshDog.name]);
-      freshDog.photoLink=df.webViewLink||'';
+      // Store file ID (not webViewLink) — hydrateImages() fetches content via API with auth token
+      freshDog.photoLink=df.id||df.webViewLink||'';
       render();
       showToast(`📸 ${freshDog.name}'s photo saved to Google Drive!`);
       try{await persistClients();}catch(e){showToast('Photo saved; sheet sync failed.','#F97316');}
@@ -2096,6 +2186,11 @@ async function handlePlayPhotoUpload(clientId, dogId){
   // Request Drive token first, directly from button click user gesture
   await ensureDriveToken();
   openFilePickerForDog('image/*', async(file)=>{
+    // Reject non-image files (e.g. .aae Apple sidecars, Word docs, etc.)
+    if(!file.type.startsWith('image/')){
+      showToast(`❌ "${file.name}" is not an image. Please select a JPG, PNG, HEIC, or similar photo.`,'#EF4444');
+      return;
+    }
     const btnId=`ppbtn-${dogId}`;
     const btn=document.getElementById(btnId);
     if(btn){btn.disabled=true;btn.textContent='⏳ Uploading…';}
@@ -2105,7 +2200,8 @@ async function handlePlayPhotoUpload(clientId, dogId){
       const freshDog=freshCl?.dogs.find(d=>d.id===dogId);
       if(!freshDog||!freshCl){showToast('Dog not found — please reload.','#EF4444');return;}
       const df=await uploadToDriveFolder(file,["Nigel's Place",'Play Photos',freshDog.name]);
-      const entry={link:df.webViewLink||'',filename:df.name||file.name,date:new Date().toISOString().split('T')[0]};
+      // Store file ID for authenticated image loading; driveImgTag() uses it to fetch via API
+      const entry={link:df.id||df.webViewLink||'',filename:df.name||file.name,date:new Date().toISOString().split('T')[0]};
       freshDog.playPhotos=[...(freshDog.playPhotos||[]),entry];
       render();
       showToast(`🎉 Play photo added for ${freshDog.name}!`);
@@ -2116,7 +2212,11 @@ async function handlePlayPhotoUpload(clientId, dogId){
     }
   });
 }
-function setDogDetail(dogId){ state.selectedDogId=dogId; render(); }
+function setDogDetail(dogId){
+  state.selectedDogId=dogId;
+  try{localStorage.setItem('np_view','dogs');localStorage.setItem('np_dog_id',String(dogId));}catch(e){}
+  render();
+}
 function clearDogDetail(){ state.selectedDogId=null; render(); }
 async function submitBooking(e){
   e.preventDefault();
@@ -2289,6 +2389,13 @@ async function saveSettings(){
   const venmo=v('set-venmo')?.trim();if(venmo!==undefined)state.settings.venmoHandle=venmo;
   const sq=v('set-square')?.trim();if(sq!==undefined)state.settings.squareLink=sq;
   const gk=v('set-gemini')?.trim();if(gk!==undefined)state.settings.geminiApiKey=gk;
+  const dfid=v('set-drive-folder')?.trim();
+  if(dfid!==undefined){
+    const changed=dfid!==state.settings.nigelsDriveFolderId;
+    state.settings.nigelsDriveFolderId=dfid;
+    // Clear folder cache so new root ID takes effect immediately
+    if(changed){try{_folderIdCache={};localStorage.removeItem('np_folder_cache');}catch(e){}}
+  }
   showToast('Settings saved!');render();
   try{await persistSettings();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
 }
