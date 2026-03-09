@@ -26,6 +26,7 @@
     @keyframes spin { to { transform:rotate(360deg); } }
     .past-day  { opacity:0.5; pointer-events:none; }
     .weekend-day { background:#FAFAFA; }
+    .svc-radio-label { transition: border-color 0.15s, background 0.15s; }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -33,16 +34,13 @@
 <script>
 // ═══════════════════════════════════════════════════
 //  ①  CONFIGURATION
-//  After first sign-in, copy your SHEET_ID from
-//  Settings and paste it here so it persists.
 // ═══════════════════════════════════════════════════
 const CONFIG = {
   CLIENT_ID:    '951337618881-fdfr299vr6v12s5eh8n2ahtjt9f227n2.apps.googleusercontent.com',
-  SHEET_ID:     '1hQEJB1tFOAk8RoQTyH2Ovkk56psVIJfLjuvlj_URTeg',   // paste your Sheet ID here after first sign-in
+  SHEET_ID:     '1hQEJB1tFOAk8RoQTyH2Ovkk56psVIJfLjuvlj_URTeg',
   API_BASE:     'https://sheets.googleapis.com/v4/spreadsheets',
-  ADMIN_EMAILS: ['elyserwilson@gmail.com', 'kellyhendrickson1@yahoo.com'],  // add owner's email here too
+  ADMIN_EMAILS: ['elyserwilson@gmail.com', 'kellyhendrickson1@yahoo.com'],
 };
-
 const LOGO_URL = 'nigels-place-logo.jpg';
 
 // ═══════════════════════════════════════════════════
@@ -54,138 +52,156 @@ const BREEDS = [
   'American Foxhound','American Hairless Terrier','American Pit Bull Terrier',
   'American Staffordshire Terrier','American Water Spaniel','Anatolian Shepherd',
   'Australian Cattle Dog','Australian Shepherd','Australian Silky Terrier',
-  'Australian Terrier','Azawakh','Barbet','Basenji','Basset Fauve de Bretagne',
-  'Basset Hound','Beagle','Bearded Collie','Bedlington Terrier','Belgian Malinois',
-  'Belgian Sheepdog','Belgian Tervuren','Bergamasco Sheepdog','Berger Picard',
-  'Bernese Mountain Dog','Bichon Frise','Biewer Terrier','Black and Tan Coonhound',
-  'Black Russian Terrier','Bloodhound','Bluetick Coonhound','Boerboel','Bolognese',
-  'Border Collie','Border Terrier','Borzoi','Boston Terrier','Bouvier des Flandres',
-  'Boxer','Boykin Spaniel','Bracco Italiano','Braque du Bourbonnais','Briard',
-  'Brittany','Brussels Griffon','Bull Terrier','Bulldog','Bullmastiff',
-  'Cairn Terrier','Canaan Dog','Cane Corso','Cardigan Welsh Corgi','Catahoula Leopard Dog',
-  'Caucasian Shepherd','Cavalier King Charles Spaniel','Cesky Terrier','Chesapeake Bay Retriever',
-  'Chihuahua','Chinese Crested','Chinese Shar-Pei','Chinook','Chow Chow',
-  'Cirneco dell\'Etna','Clumber Spaniel','Cocker Spaniel','Collie','Coton de Tulear',
-  'Croatian Sheepdog','Curly-Coated Retriever','Dachshund','Dalmatian','Dandie Dinmont Terrier',
-  'Doberman Pinscher','Dogo Argentino','Dutch Shepherd','English Cocker Spaniel',
-  'English Foxhound','English Setter','English Springer Spaniel','English Toy Spaniel',
-  'Entlebucher Mountain Dog','Field Spaniel','Finnish Lapphund','Finnish Spitz',
+  'Australian Terrier','Azawakh','Barbet','Basenji','Basset Hound','Beagle',
+  'Bearded Collie','Bedlington Terrier','Belgian Malinois','Belgian Sheepdog',
+  'Belgian Tervuren','Bergamasco Sheepdog','Berger Picard','Bernese Mountain Dog',
+  'Bichon Frise','Biewer Terrier','Black and Tan Coonhound','Black Russian Terrier',
+  'Bloodhound','Bluetick Coonhound','Boerboel','Bolognese','Border Collie',
+  'Border Terrier','Borzoi','Boston Terrier','Bouvier des Flandres','Boxer',
+  'Boykin Spaniel','Bracco Italiano','Briard','Brittany','Brussels Griffon',
+  'Bull Terrier','Bulldog','Bullmastiff','Cairn Terrier','Canaan Dog','Cane Corso',
+  'Cardigan Welsh Corgi','Catahoula Leopard Dog','Cavalier King Charles Spaniel',
+  'Chesapeake Bay Retriever','Chihuahua','Chinese Crested','Chinese Shar-Pei',
+  'Chinook','Chow Chow','Clumber Spaniel','Cocker Spaniel','Collie','Coton de Tulear',
+  'Dachshund','Dalmatian','Doberman Pinscher','Dogo Argentino','Dutch Shepherd',
+  'English Cocker Spaniel','English Setter','English Springer Spaniel',
   'Flat-Coated Retriever','French Bulldog','German Pinscher','German Shepherd',
   'German Shorthaired Pointer','German Wirehaired Pointer','Giant Schnauzer',
-  'Glen of Imaal Terrier','Golden Retriever','Gordon Setter','Great Dane',
-  'Great Pyrenees','Greater Swiss Mountain Dog','Greyhound','Hamiltonstovare',
-  'Harrier','Havanese','Ibizan Hound','Icelandic Sheepdog','Irish Red and White Setter',
-  'Irish Setter','Irish Terrier','Irish Water Spaniel','Irish Wolfhound',
-  'Italian Greyhound','Japanese Chin','Keeshond','Kerry Blue Terrier','Komondor',
-  'Kooikerhondje','Kuvasz','Labrador Retriever','Lagotto Romagnolo','Leonberger',
-  'Lhasa Apso','Lowchen','Maltese','Manchester Terrier','Mastiff','Miniature American Shepherd',
-  'Miniature Bull Terrier','Miniature Pinscher','Miniature Schnauzer','Mountain Cur',
-  'Mudi','Neapolitan Mastiff','Nederlandse Kooikerhondje','Newfoundland','Norfolk Terrier',
-  'Norwegian Buhund','Norwegian Elkhound','Norwegian Lundehund','Norwich Terrier',
+  'Golden Retriever','Gordon Setter','Great Dane','Great Pyrenees',
+  'Greater Swiss Mountain Dog','Greyhound','Havanese','Irish Setter','Irish Terrier',
+  'Irish Water Spaniel','Irish Wolfhound','Italian Greyhound','Japanese Chin',
+  'Keeshond','Kerry Blue Terrier','Komondor','Kuvasz','Labrador Retriever',
+  'Leonberger','Lhasa Apso','Maltese','Manchester Terrier','Mastiff',
+  'Miniature American Shepherd','Miniature Bull Terrier','Miniature Pinscher',
+  'Miniature Schnauzer','Neapolitan Mastiff','Newfoundland','Norfolk Terrier',
+  'Norwegian Elkhound','Norwegian Lundehund','Norwich Terrier',
   'Nova Scotia Duck Tolling Retriever','Old English Sheepdog','Otterhound','Papillon',
-  'Parson Russell Terrier','Pekingese','Pembroke Welsh Corgi','Perro de Presa Canario',
-  'Petit Basset Griffon Vendeen','Pharaoh Hound','Plott Hound','Pointer',
-  'Polish Lowland Sheepdog','Pomeranian','Poodle (Miniature)','Poodle (Standard)',
-  'Poodle (Toy)','Portuguese Podengo','Portuguese Water Dog','Pudelpointer','Pug',
-  'Puli','Pumi','Pyrenean Mastiff','Pyrenean Shepherd','Rat Terrier','Redbone Coonhound',
-  'Rhodesian Ridgeback','Rottweiler','Russell Terrier','Saint Bernard','Saluki',
-  'Samoyed','Schipperke','Scottish Deerhound','Scottish Terrier','Sealyham Terrier',
-  'Shetland Sheepdog','Shiba Inu','Shih Tzu','Siberian Husky','Skye Terrier',
-  'Sloughi','Small Munsterlander','Soft Coated Wheaten Terrier','Spanish Water Dog',
-  'Spinone Italiano','Stabyhoun','Staffordshire Bull Terrier','Standard Schnauzer',
-  'Sussex Spaniel','Swedish Vallhund','Thai Ridgeback','Tibetan Mastiff','Tibetan Spaniel',
-  'Tibetan Terrier','Toy Fox Terrier','Treeing Tennessee Brindle','Treeing Walker Coonhound',
-  'Vizsla','Weimaraner','Welsh Springer Spaniel','Welsh Terrier','West Highland White Terrier',
-  'Whippet','Wire Fox Terrier','Wirehaired Pointing Griffon','Wirehaired Vizsla',
-  'Working Kelpie','Xoloitzcuintli','Yorkshire Terrier',
-  // Popular mixes / designer breeds
+  'Parson Russell Terrier','Pekingese','Pembroke Welsh Corgi','Pharaoh Hound',
+  'Plott Hound','Pointer','Pomeranian','Poodle (Miniature)','Poodle (Standard)',
+  'Poodle (Toy)','Portuguese Water Dog','Pug','Puli','Rat Terrier',
+  'Redbone Coonhound','Rhodesian Ridgeback','Rottweiler','Russell Terrier',
+  'Saint Bernard','Saluki','Samoyed','Schipperke','Scottish Deerhound',
+  'Scottish Terrier','Sealyham Terrier','Shetland Sheepdog','Shiba Inu','Shih Tzu',
+  'Siberian Husky','Skye Terrier','Soft Coated Wheaten Terrier','Spanish Water Dog',
+  'Spinone Italiano','Staffordshire Bull Terrier','Standard Schnauzer',
+  'Sussex Spaniel','Swedish Vallhund','Tibetan Mastiff','Tibetan Spaniel',
+  'Tibetan Terrier','Toy Fox Terrier','Treeing Walker Coonhound','Vizsla',
+  'Weimaraner','Welsh Springer Spaniel','Welsh Terrier','West Highland White Terrier',
+  'Whippet','Wire Fox Terrier','Wirehaired Pointing Griffon','Xoloitzcuintli',
+  'Yorkshire Terrier',
   'Aussiedoodle','Bernedoodle','Cavachon','Cavapoo','Cockapoo','Corgidor',
   'Goldendoodle','Labradoodle','Maltipoo','Morkie','Pomsky','Puggle',
-  'Schnoodle','Sheepadoodle','Shorkie','Springerdoodle','Yorkipoo',
-  'Mixed Breed',
+  'Schnoodle','Sheepadoodle','Shorkie','Springerdoodle','Yorkipoo','Mixed Breed',
 ].sort();
-function breedSelectHtml(selectId, otherInputId, currentVal=''){
-  const isOther = currentVal && !BREEDS.includes(currentVal);
-  return`
-    <select id="${selectId}" onchange="toggleBreedOther('${selectId}','${otherInputId}')"
-      class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-      <option value="">Select breed...</option>
-      ${BREEDS.map(b=>`<option value="${b}" ${b===currentVal?'selected':''}>${b}</option>`).join('')}
-      <option value="Other" ${isOther?'selected':''}>Other (type below)</option>
+function breedSelectHtml(selectId,otherInputId,currentVal=''){
+  const isOther=currentVal&&!BREEDS.includes(currentVal);
+  return`<select id="${selectId}" onchange="toggleBreedOther('${selectId}','${otherInputId}')"
+    class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+    <option value="">Select breed...</option>
+    ${BREEDS.map(b=>`<option value="${b}"${b===currentVal?' selected':''}>${b}</option>`).join('')}
+    <option value="Other"${isOther?' selected':''}>Other (type below)</option>
     </select>
-    <input id="${otherInputId}" type="text" placeholder="Type breed name..."
-      value="${isOther?currentVal:''}"
-      class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mt-2 ${isOther?'':'hidden'}">`;
+    <input id="${otherInputId}" type="text" placeholder="Type breed name..." value="${isOther?currentVal:''}"
+      class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mt-2${isOther?'':' hidden'}">`;
 }
-function toggleBreedOther(selId, inputId){
-  const sel=document.getElementById(selId);
-  const inp=document.getElementById(inputId);
-  if(inp) inp.classList.toggle('hidden', sel?.value!=='Other');
+function toggleBreedOther(selId,inputId){
+  const sel=document.getElementById(selId),inp=document.getElementById(inputId);
+  if(inp)inp.classList.toggle('hidden',sel?.value!=='Other');
 }
-function getBreedValue(selectId, otherInputId){
+function getBreedValue(selectId,otherInputId){
   const sel=document.getElementById(selectId)?.value;
-  if(sel==='Other') return document.getElementById(otherInputId)?.value?.trim()||'Mixed';
+  if(sel==='Other')return document.getElementById(otherInputId)?.value?.trim()||'Mixed';
   return sel||'Mixed';
 }
 
 // ═══════════════════════════════════════════════════
+//  DEFAULT SERVICES
+// ═══════════════════════════════════════════════════
+const DEFAULT_SERVICES=[
+  {id:1,name:'Full Day',             type:'base', price:45,active:true},
+  {id:2,name:'Half Day',             type:'base', price:25,active:true},
+  {id:3,name:'Grooming',             type:'addon',price:30,active:true},
+  {id:4,name:'Bath',                 type:'addon',price:20,active:true},
+  {id:5,name:'Nail Trim',            type:'addon',price:15,active:true},
+  {id:6,name:'Anal Gland Expression',type:'addon',price:20,active:true},
+  {id:7,name:'Extra Play Time',      type:'addon',price:10,active:true},
+  {id:8,name:'Snuggle Time',         type:'addon',price:10,active:true},
+];
+
+// ═══════════════════════════════════════════════════
 //  ②  STATE
 // ═══════════════════════════════════════════════════
-const state = {
-  role:'login', view:'dashboard', clientView:'home',
-  calendarDate:new Date(2026,2,1),
-  showModal:null, currentClientId:null,
-  mode:null, accessToken:null, tokenExpiry:null, userEmail:null,
-  isLoading:false, loadingMsg:'',
-  sheetId:CONFIG.SHEET_ID||null, sheetUrl:null,
+const state={
+  role:'login',view:'dashboard',clientView:'home',
+  calendarDate:new Date(),
+  showModal:null,currentClientId:null,
+  mode:null,accessToken:null,tokenExpiry:null,userEmail:null,
+  isLoading:false,loadingMsg:'',
+  sheetId:CONFIG.SHEET_ID||null,sheetUrl:null,
   settings:{
-    businessName:"Nigel's Place", ownerName:'Sarah Johnson',
-    dailyCapacity:10, fullDayRate:45, halfDayRate:25, groomingAddOn:20,
-    venmoHandle:'',
-    squareLink:'',
+    businessName:"Nigel's Place",ownerName:'Kelly Hendrickson',
+    dailyCapacity:10,fullDayRate:45,halfDayRate:25,groomingAddOn:20,
+    venmoHandle:'',squareLink:'',
   },
 };
 
 // ═══════════════════════════════════════════════════
 //  ③  LIVE DATA ARRAYS
 // ═══════════════════════════════════════════════════
-let clients=[], bookings=[], invoices=[];
+let clients=[],bookings=[],invoices=[],services=[];
+let lastSynced=null,autoRefreshTimer=null;
 
 // ═══════════════════════════════════════════════════
 //  ④  MOCK DATA (Demo Mode)
 // ═══════════════════════════════════════════════════
 const MC=[
-  {id:1,name:'Alice Chen',  email:'alice@email.com',  phone:'555-0101',dogs:[{id:1,name:'Buddy',breed:'Golden Retriever',age:3,vaccinated:true, notes:'Loves fetch'}]},
-  {id:2,name:'Mark Davis',  email:'mark@email.com',   phone:'555-0102',dogs:[
-    {id:2,name:'Luna',breed:'Toy Poodle',age:2,vaccinated:true, notes:'Shy at first'},
-    {id:3,name:'Max', breed:'Labrador',  age:5,vaccinated:true, notes:'Very energetic'}]},
-  {id:3,name:'Jessica Park',email:'jessica@email.com',phone:'555-0103',dogs:[{id:4,name:'Coco', breed:'French Bulldog',age:1,vaccinated:true, notes:'Needs breaks'}]},
-  {id:4,name:'Tom Wilson',  email:'tom@email.com',    phone:'555-0104',dogs:[{id:5,name:'Bear', breed:'Siberian Husky',age:4,vaccinated:false,notes:'Vacc update needed'}]},
-  {id:5,name:'Sarah Lee',   email:'sarah@email.com',  phone:'555-0105',dogs:[{id:6,name:'Daisy',breed:'Corgi',         age:2,vaccinated:true, notes:'Very social'}]},
+  {id:1,name:'Alice Chen',  email:'alice@email.com',  phone:'555-0101',photoConsent:true, dogs:[{id:1,name:'Buddy', breed:'Golden Retriever',age:3,vaccinated:true, notes:'Loves fetch',birthday:''}]},
+  {id:2,name:'Mark Davis',  email:'mark@email.com',   phone:'555-0102',photoConsent:false,dogs:[
+    {id:2,name:'Luna', breed:'Toy Poodle',  age:2,vaccinated:true, notes:'Shy at first',birthday:''},
+    {id:3,name:'Max',  breed:'Labrador',    age:5,vaccinated:true, notes:'Very energetic',birthday:''}]},
+  {id:3,name:'Jessica Park',email:'jessica@email.com',phone:'555-0103',photoConsent:true, dogs:[{id:4,name:'Coco', breed:'French Bulldog',age:1,vaccinated:true, notes:'Needs breaks',birthday:''}]},
+  {id:4,name:'Tom Wilson',  email:'tom@email.com',    phone:'555-0104',photoConsent:false,dogs:[{id:5,name:'Bear', breed:'Siberian Husky', age:4,vaccinated:false,notes:'Vacc update needed',birthday:''}]},
+  {id:5,name:'Sarah Lee',   email:'sarah@email.com',  phone:'555-0105',photoConsent:true, dogs:[{id:6,name:'Daisy',breed:'Corgi',          age:2,vaccinated:true, notes:'Very social',birthday:''}]},
 ];
-const mkB=(id,cId,dId,date,svc='Full Day',price=45)=>({
-  id,clientId:cId,dogId:dId,dogName:MC[cId-1].dogs[0]?.name||'Dog',
-  clientName:MC[cId-1].name,date,status:'confirmed',service:svc,price});
+function nightsCount(ci,co){
+  if(!ci)return 1;
+  const a=new Date(ci+'T00:00:00'),b=new Date((co||ci)+'T00:00:00');
+  return Math.max(1,Math.round((b-a)/864e5)+1);
+}
+const mkB=(id,cId,dId,checkIn,checkOut,svc='Full Day',addons='',priceOverride=null)=>{
+  const nights=nightsCount(checkIn,checkOut||checkIn);
+  const bRate=svc==='Full Day'?45:25;
+  const addonTotal=addons?addons.split(',').reduce((s,a)=>{
+    const sv=DEFAULT_SERVICES.find(x=>x.name===a.trim());return s+(sv?.price||0);},0):0;
+  return{id,clientId:cId,dogId:dId,dogName:MC[cId-1]?.dogs[0]?.name||'Dog',
+    clientName:MC[cId-1]?.name||'',checkIn,checkOut:checkOut||checkIn,nights,
+    status:'confirmed',service:svc,addons:addons||'',
+    price:priceOverride!==null?priceOverride:nights*bRate+addonTotal};
+};
 const MB=[
-  mkB(1,1,1,'2026-03-08'),mkB(2,2,2,'2026-03-08'),mkB(3,3,4,'2026-03-08','Half Day',25),
-  mkB(4,4,5,'2026-03-08'),mkB(5,5,6,'2026-03-08'),mkB(6,2,3,'2026-03-08'),mkB(7,1,1,'2026-03-08'),
-  mkB(8,1,1,'2026-03-09'),mkB(9,2,2,'2026-03-09'),mkB(10,3,4,'2026-03-09'),mkB(11,4,5,'2026-03-09'),
-  mkB(12,5,6,'2026-03-09'),mkB(13,2,3,'2026-03-09'),mkB(14,1,1,'2026-03-09'),mkB(15,3,4,'2026-03-09'),
-  mkB(16,5,6,'2026-03-09'),mkB(17,4,5,'2026-03-09'),
-  mkB(18,1,1,'2026-03-10'),mkB(19,2,2,'2026-03-10','Half Day',25),mkB(20,5,6,'2026-03-10'),
-  mkB(21,1,1,'2026-03-11'),mkB(22,2,2,'2026-03-11'),mkB(23,3,4,'2026-03-11'),mkB(24,4,5,'2026-03-11'),mkB(25,5,6,'2026-03-11'),
-  mkB(26,1,1,'2026-03-12'),mkB(27,2,2,'2026-03-12'),mkB(28,2,3,'2026-03-12'),mkB(29,3,4,'2026-03-12'),
-  mkB(30,4,5,'2026-03-12'),mkB(31,5,6,'2026-03-12'),mkB(32,1,1,'2026-03-12'),mkB(33,2,2,'2026-03-12'),
-  mkB(34,1,1,'2026-03-15'),mkB(35,2,2,'2026-03-15'),mkB(36,3,4,'2026-03-15'),mkB(37,4,5,'2026-03-15'),mkB(38,5,6,'2026-03-15'),mkB(39,2,3,'2026-03-15'),
-  mkB(40,1,1,'2026-03-16'),mkB(41,2,2,'2026-03-16'),mkB(42,2,3,'2026-03-16'),mkB(43,3,4,'2026-03-16'),
-  mkB(44,4,5,'2026-03-16'),mkB(45,5,6,'2026-03-16'),mkB(46,1,1,'2026-03-16'),mkB(47,3,4,'2026-03-16'),mkB(48,5,6,'2026-03-16'),
-  mkB(49,1,1,'2026-03-17'),mkB(50,2,3,'2026-03-17'),mkB(51,3,4,'2026-03-17'),mkB(52,5,6,'2026-03-17'),
-  mkB(53,1,1,'2026-03-19'),mkB(54,2,2,'2026-03-19'),mkB(55,2,3,'2026-03-19'),mkB(56,3,4,'2026-03-19'),
-  mkB(57,4,5,'2026-03-19'),mkB(58,5,6,'2026-03-19'),mkB(59,1,1,'2026-03-19'),
-  mkB(60,1,1,'2026-03-20'),mkB(61,2,2,'2026-03-20'),mkB(62,2,3,'2026-03-20'),mkB(63,3,4,'2026-03-20'),
-  mkB(64,4,5,'2026-03-20'),mkB(65,5,6,'2026-03-20'),mkB(66,1,1,'2026-03-20'),mkB(67,3,4,'2026-03-20'),mkB(68,5,6,'2026-03-20'),mkB(69,4,5,'2026-03-20'),
-  mkB(70,1,1,'2026-03-22'),mkB(71,3,4,'2026-03-22','Half Day',25),
-  mkB(72,1,1,'2026-03-25'),mkB(73,2,2,'2026-03-25'),mkB(74,3,4,'2026-03-25'),mkB(75,4,5,'2026-03-25'),mkB(76,5,6,'2026-03-25'),
+  mkB(1,1,1,'2026-03-08','2026-03-08'),mkB(2,2,2,'2026-03-08','2026-03-08'),
+  mkB(3,3,4,'2026-03-08','2026-03-08','Half Day'),mkB(4,4,5,'2026-03-08','2026-03-08'),
+  mkB(5,5,6,'2026-03-08','2026-03-08'),mkB(6,2,3,'2026-03-08','2026-03-08'),mkB(7,1,1,'2026-03-08','2026-03-08'),
+  mkB(8,1,1,'2026-03-09','2026-03-09'),mkB(9,2,2,'2026-03-09','2026-03-09'),mkB(10,3,4,'2026-03-09','2026-03-09'),
+  mkB(11,4,5,'2026-03-09','2026-03-09'),mkB(12,5,6,'2026-03-09','2026-03-09'),mkB(13,2,3,'2026-03-09','2026-03-09'),
+  mkB(14,1,1,'2026-03-09','2026-03-09'),mkB(15,3,4,'2026-03-09','2026-03-09'),mkB(16,5,6,'2026-03-09','2026-03-09'),mkB(17,4,5,'2026-03-09','2026-03-09'),
+  mkB(18,1,1,'2026-03-10','2026-03-10'),mkB(19,2,2,'2026-03-10','2026-03-10','Half Day'),mkB(20,5,6,'2026-03-10','2026-03-10'),
+  mkB(21,1,1,'2026-03-11','2026-03-11'),mkB(22,2,2,'2026-03-11','2026-03-11'),mkB(23,3,4,'2026-03-11','2026-03-11'),mkB(24,4,5,'2026-03-11','2026-03-11'),mkB(25,5,6,'2026-03-11','2026-03-11'),
+  mkB(26,1,1,'2026-03-12','2026-03-12'),mkB(27,2,2,'2026-03-12','2026-03-12'),mkB(28,2,3,'2026-03-12','2026-03-12'),
+  mkB(29,3,4,'2026-03-12','2026-03-12'),mkB(30,4,5,'2026-03-12','2026-03-12'),mkB(31,5,6,'2026-03-12','2026-03-12'),
+  mkB(32,1,1,'2026-03-12','2026-03-12'),mkB(33,2,2,'2026-03-12','2026-03-12'),
+  // Multi-day stay examples
+  mkB(34,1,1,'2026-03-15','2026-03-17','Full Day','Bath'),
+  mkB(35,2,2,'2026-03-15','2026-03-15'),mkB(36,3,4,'2026-03-15','2026-03-15'),mkB(37,4,5,'2026-03-15','2026-03-15'),mkB(38,5,6,'2026-03-15','2026-03-15'),mkB(39,2,3,'2026-03-15','2026-03-15'),
+  mkB(40,2,2,'2026-03-16','2026-03-16'),mkB(41,2,3,'2026-03-16','2026-03-16'),mkB(42,3,4,'2026-03-16','2026-03-16'),
+  mkB(43,4,5,'2026-03-16','2026-03-16'),mkB(44,5,6,'2026-03-16','2026-03-16'),mkB(45,3,4,'2026-03-16','2026-03-16'),mkB(46,5,6,'2026-03-16','2026-03-16'),
+  mkB(47,2,2,'2026-03-17','2026-03-17'),mkB(48,3,4,'2026-03-17','2026-03-17'),mkB(49,5,6,'2026-03-17','2026-03-17'),
+  mkB(50,2,3,'2026-03-19','2026-03-20','Full Day','Nail Trim'),
+  mkB(51,3,4,'2026-03-19','2026-03-19'),mkB(52,4,5,'2026-03-19','2026-03-19'),mkB(53,5,6,'2026-03-19','2026-03-19'),
+  mkB(54,2,2,'2026-03-20','2026-03-20'),mkB(55,3,4,'2026-03-20','2026-03-20'),mkB(56,4,5,'2026-03-20','2026-03-20'),
+  mkB(57,1,1,'2026-03-22','2026-03-22'),mkB(58,3,4,'2026-03-22','2026-03-22','Half Day'),
+  mkB(59,1,1,'2026-03-25','2026-03-27','Full Day','Grooming'),
+  mkB(60,2,2,'2026-03-25','2026-03-25'),mkB(61,3,4,'2026-03-25','2026-03-25'),mkB(62,4,5,'2026-03-25','2026-03-25'),mkB(63,5,6,'2026-03-25','2026-03-25'),
 ];
 const MI=[
   {id:1,clientId:1,clientName:'Alice Chen',  amount:180,paid:180,status:'paid',   dueDate:'2026-03-01',issueDate:'2026-02-25',items:'4x Full Day'},
@@ -195,24 +211,30 @@ const MI=[
   {id:5,clientId:5,clientName:'Sarah Lee',   amount:225,paid:225,status:'paid',   dueDate:'2026-03-05',issueDate:'2026-02-28',items:'5x Full Day'},
 ];
 function loadMockData(){
-  clients =MC.map(c=>({...c,dogs:c.dogs.map(d=>({...d}))}));
+  clients=MC.map(c=>({...c,dogs:c.dogs.map(d=>({...d}))}));
   bookings=MB.map(b=>({...b}));
   invoices=MI.map(i=>({...i}));
+  services=DEFAULT_SERVICES.map(s=>({...s}));
 }
 
 // ═══════════════════════════════════════════════════
 //  ⑤  HELPERS
 // ═══════════════════════════════════════════════════
-const TODAY='2026-03-08';
-const booksForDate=ds=>bookings.filter(b=>b.date===ds&&b.status!=='cancelled');
+const TODAY=new Date().toISOString().split('T')[0];
+const booksForDate=ds=>bookings.filter(b=>{
+  if(b.status==='cancelled')return false;
+  const ci=b.checkIn||b.date||'',co=b.checkOut||ci;
+  return ci&&ds>=ci&&ds<=co;
+});
 function capColor(n,cap){
   const p=n/cap;
-  if(n>=cap) return{bar:'#EF4444',bg:'#FEF2F2',txt:'#DC2626',label:'Full'};
+  if(n>=cap)return{bar:'#EF4444',bg:'#FEF2F2',txt:'#DC2626',label:'Full'};
   if(p>=0.8) return{bar:'#F97316',bg:'#FFF7ED',txt:'#EA580C',label:'Almost Full'};
   if(p>=0.5) return{bar:'#EAB308',bg:'#FEFCE8',txt:'#CA8A04',label:'Filling Up'};
-  return          {bar:'#10B981',bg:'#F0FDF4',txt:'#059669',label:'Available'};
+  return         {bar:'#10B981',bg:'#F0FDF4',txt:'#059669',label:'Available'};
 }
 function fmtDate(ds){return new Date(ds+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});}
+function fmtDateShort(ds){return new Date(ds+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});}
 function mkDs(y,m,d){return`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
 function nextId(arr){return arr.length>0?Math.max(...arr.map(x=>x.id))+1:1;}
 function showToast(msg,color='#059669'){
@@ -220,11 +242,39 @@ function showToast(msg,color='#059669'){
   t.style.cssText=`position:fixed;bottom:1.25rem;right:1.25rem;background:${color};color:white;padding:.75rem 1.25rem;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.15);z-index:100;font-size:14px;animation:fadeUp .25s ease;`;
   t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3500);
 }
+function fmtSynced(){
+  if(!lastSynced)return'';
+  const diff=Math.round((Date.now()-lastSynced)/1000);
+  if(diff<10)return'just now';
+  if(diff<60)return`${diff}s ago`;
+  if(diff<3600)return`${Math.floor(diff/60)}m ago`;
+  return`${Math.floor(diff/3600)}h ago`;
+}
+function getBaseRate(svcName){
+  const sv=services.find(s=>s.name===svcName&&s.type==='base');
+  if(sv)return sv.price;
+  return svcName==='Half Day'?state.settings.halfDayRate:state.settings.fullDayRate;
+}
 
 // ═══════════════════════════════════════════════════
-//  ⑥  GOOGLE AUTH
+//  ⑥  AUTO-REFRESH
 // ═══════════════════════════════════════════════════
-let tokenClient=null, silentSignIn=false;
+function startAutoRefresh(){
+  if(autoRefreshTimer)clearInterval(autoRefreshTimer);
+  autoRefreshTimer=setInterval(silentRefresh,60000);
+}
+async function silentRefresh(){
+  if(state.mode!=='live'||state.isLoading)return;
+  try{await loadAllData();lastSynced=Date.now();render();}catch(e){/* silent */}
+}
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden&&state.mode==='live')silentRefresh();
+});
+
+// ═══════════════════════════════════════════════════
+//  ⑦  GOOGLE AUTH
+// ═══════════════════════════════════════════════════
+let tokenClient=null,silentSignIn=false;
 function initGoogleAuth(){
   if(typeof google==='undefined'){setTimeout(initGoogleAuth,300);return;}
   tokenClient=google.accounts.oauth2.initTokenClient({
@@ -232,66 +282,70 @@ function initGoogleAuth(){
     scope:'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email',
     callback:onToken,
   });
-  // Auto sign-in if we have a saved session
   const savedEmail=localStorage.getItem('np_email');
-  if(savedEmail){silentSignIn=true; tokenClient.requestAccessToken({prompt:'none',login_hint:savedEmail});}
+  if(savedEmail){silentSignIn=true;tokenClient.requestAccessToken({prompt:'none',login_hint:savedEmail});}
 }
 async function onToken(resp){
   if(resp.error){
-    if(silentSignIn){silentSignIn=false;return;} // silent fail — just show login screen
+    if(silentSignIn){silentSignIn=false;return;}
     showToast('Sign-in failed: '+resp.error,'#EF4444');return;
   }
   silentSignIn=false;
   state.accessToken=resp.access_token;
   state.tokenExpiry=Date.now()+(resp.expires_in*1000);
-  state.mode='live'; state.isLoading=true; state.loadingMsg='Connecting to Google...'; render();
+  state.mode='live';state.isLoading=true;state.loadingMsg='Connecting to Google...';render();
   try{
     const info=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',
       {headers:{Authorization:`Bearer ${state.accessToken}`}}).then(r=>r.json());
     state.userEmail=info.email;
     localStorage.setItem('np_email',info.email);
     if(!state.sheetId){
-      state.loadingMsg='Creating your spreadsheet...'; render();
+      state.loadingMsg='Creating your spreadsheet...';render();
       state.sheetId=await createSpreadsheet();
       state.sheetUrl=`https://docs.google.com/spreadsheets/d/${state.sheetId}`;
       await initSheetHeaders();
+      services=DEFAULT_SERVICES.map(s=>({...s}));
+      await persistServices();
       showToast('Spreadsheet created in your Google Drive!');
-    } else {
-      state.loadingMsg='Loading your data...'; render();
+    }else{
+      state.loadingMsg='Loading your data...';render();
       state.sheetUrl=`https://docs.google.com/spreadsheets/d/${state.sheetId}`;
       await loadAllData();
     }
+    lastSynced=Date.now();
+    startAutoRefresh();
     const email=state.userEmail.toLowerCase();
     if(CONFIG.ADMIN_EMAILS.map(e=>e.toLowerCase()).includes(email)){
-      state.role='admin'; state.view='dashboard';
-    } else {
+      state.role='admin';state.view='dashboard';
+    }else{
       const cl=clients.find(c=>c.email.toLowerCase()===email);
       if(cl){state.role='client';state.currentClientId=cl.id;}
       else{state.role='admin';state.view='dashboard';showToast('Welcome! Your email is not yet a registered client.');}
     }
   }catch(e){showToast('Error: '+e.message,'#EF4444');console.error(e);state.role='login';}
-  state.isLoading=false; render();
+  state.isLoading=false;render();
 }
 function googleSignIn(){
   if(!tokenClient){showToast('Auth loading, try again','#EF4444');return;}
   tokenClient.requestAccessToken({prompt:'select_account'});
 }
 function enterDemo(roleChoice){
-  state.mode='demo'; loadMockData();
+  state.mode='demo';loadMockData();
   if(roleChoice==='admin'){state.role='admin';state.view='dashboard';}
   else{state.role='client';state.currentClientId=3;}
-  state.showModal=null; render();
+  state.showModal=null;render();
 }
 function signOut(){
-  if(state.accessToken&&typeof google!=='undefined') google.accounts.oauth2.revoke(state.accessToken);
+  if(state.accessToken&&typeof google!=='undefined')google.accounts.oauth2.revoke(state.accessToken);
+  if(autoRefreshTimer)clearInterval(autoRefreshTimer);
   Object.assign(state,{role:'login',mode:null,accessToken:null,userEmail:null,
     sheetId:CONFIG.SHEET_ID||null,sheetUrl:null,showModal:null,currentClientId:null});
   localStorage.removeItem('np_email');
-  clients=[];bookings=[];invoices=[];render();
+  clients=[];bookings=[];invoices=[];services=[];lastSynced=null;render();
 }
 
 // ═══════════════════════════════════════════════════
-//  ⑦  SHEETS API
+//  ⑧  SHEETS API
 // ═══════════════════════════════════════════════════
 async function sheetsReq(url,opts={}){
   const r=await fetch(url,{...opts,headers:{Authorization:`Bearer ${state.accessToken}`,'Content-Type':'application/json',...(opts.headers||{})}});
@@ -302,6 +356,7 @@ async function readRange(range){
   const d=await sheetsReq(`${CONFIG.API_BASE}/${state.sheetId}/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE`);
   return d.values||[];
 }
+async function readRangeSafe(range){try{return await readRange(range);}catch(e){return[];}}
 async function writeRange(range,values){
   await sheetsReq(`${CONFIG.API_BASE}/${state.sheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
     {method:'PUT',body:JSON.stringify({values})});
@@ -310,66 +365,96 @@ async function createSpreadsheet(){
   const d=await sheetsReq('https://sheets.googleapis.com/v4/spreadsheets',{method:'POST',body:JSON.stringify({
     properties:{title:"Nigel's Place - Live Data"},
     sheets:[
-      {properties:{title:'Clients', sheetId:0}},{properties:{title:'Dogs',     sheetId:1}},
-      {properties:{title:'Bookings',sheetId:2}},{properties:{title:'Invoices', sheetId:3}},
-      {properties:{title:'Settings',sheetId:4}},
+      {properties:{title:'Clients', sheetId:0}},{properties:{title:'Dogs',    sheetId:1}},
+      {properties:{title:'Bookings',sheetId:2}},{properties:{title:'Invoices',sheetId:3}},
+      {properties:{title:'Settings',sheetId:4}},{properties:{title:'Services',sheetId:5}},
     ]
   })});
   return d.spreadsheetId;
 }
+async function ensureServicesSheet(){
+  try{await readRange('Services!A1:E1');}
+  catch(e){
+    try{
+      await sheetsReq(`${CONFIG.API_BASE}/${state.sheetId}:batchUpdate`,
+        {method:'POST',body:JSON.stringify({requests:[{addSheet:{properties:{title:'Services'}}}]})});
+    }catch(e2){/* already exists */}
+  }
+}
 async function initSheetHeaders(){
   await Promise.all([
-    writeRange('Clients!A1:D1', [['id','name','email','phone']]),
+    writeRange('Clients!A1:E1', [['id','name','email','phone','photoConsent']]),
     writeRange('Dogs!A1:H1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday']]),
-    writeRange('Bookings!A1:I1',[['id','clientId','dogId','dogName','clientName','date','status','service','price']]),
+    writeRange('Bookings!A1:L1',[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price']]),
     writeRange('Invoices!A1:I1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items']]),
     writeRange('Settings!A1:B8',[
-      ['key','value'],
-      ['businessName', state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
-      ['fullDayRate',  state.settings.fullDayRate],  ['halfDayRate',  state.settings.halfDayRate],
+      ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
+      ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
       ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',''],['squareLink',''],
     ]),
+    writeRange('Services!A1:E1',[['id','name','type','price','active']]),
   ]);
 }
 async function loadAllData(){
   const[cR,dR,bR,iR,sR]=await Promise.all([
-    readRange('Clients!A2:D'),readRange('Dogs!A2:H'),readRange('Bookings!A2:I'),
+    readRange('Clients!A2:E'),readRange('Dogs!A2:H'),readRange('Bookings!A2:L'),
     readRange('Invoices!A2:I'),readRange('Settings!A2:B'),
   ]);
+  const svR=await readRangeSafe('Services!A2:E');
   clients.length=0;
-  (cR||[]).forEach(r=>{if(r[0])clients.push({id:+r[0],name:r[1]||'',email:r[2]||'',phone:r[3]||'',dogs:[]});});
+  (cR||[]).forEach(r=>{if(r[0])clients.push({id:+r[0],name:r[1]||'',email:r[2]||'',phone:r[3]||'',
+    photoConsent:String(r[4]).toLowerCase()==='true',dogs:[]});});
   (dR||[]).forEach(r=>{
     if(!r[0])return;
     const dog={id:+r[0],name:r[2]||'',breed:r[3]||'',age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',notes:r[6]||'',birthday:r[7]||''};
-    const cl=clients.find(c=>c.id===+r[1]); if(cl)cl.dogs.push(dog);
+    const cl=clients.find(c=>c.id===+r[1]);if(cl)cl.dogs.push(dog);
   });
   bookings.length=0;
-  (bR||[]).forEach(r=>{if(r[0])bookings.push({id:+r[0],clientId:+r[1],dogId:+r[2],dogName:r[3]||'',clientName:r[4]||'',date:r[5]||'',status:r[6]||'confirmed',service:r[7]||'Full Day',price:+r[8]||0});});
+  const statusWords=['confirmed','cancelled','pending'];
+  (bR||[]).forEach(r=>{
+    if(!r[0])return;
+    const isOld=statusWords.includes(String(r[6]).toLowerCase());
+    if(isOld){
+      bookings.push({id:+r[0],clientId:+r[1],dogId:+r[2],dogName:r[3]||'',clientName:r[4]||'',
+        checkIn:r[5]||'',checkOut:r[5]||'',nights:1,status:r[6]||'confirmed',
+        service:r[7]||'Full Day',addons:'',price:+r[8]||0});
+    }else{
+      bookings.push({id:+r[0],clientId:+r[1],dogId:+r[2],dogName:r[3]||'',clientName:r[4]||'',
+        checkIn:r[5]||'',checkOut:r[6]||r[5]||'',nights:+r[7]||1,status:r[8]||'confirmed',
+        service:r[9]||'Full Day',addons:r[10]||'',price:+r[11]||0});
+    }
+  });
   invoices.length=0;
   (iR||[]).forEach(r=>{if(r[0])invoices.push({id:+r[0],clientId:+r[1],clientName:r[2]||'',amount:+r[3]||0,paid:+r[4]||0,status:r[5]||'unpaid',dueDate:r[6]||'',issueDate:r[7]||'',items:r[8]||''});});
   (sR||[]).forEach(r=>{
-    if(!r[0])return; const[k,v]=r;
-    if(k==='dailyCapacity')state.settings.dailyCapacity=+v;
-    else if(k==='businessName')state.settings.businessName=v;
+    if(!r[0])return;const[k,v]=r;
+    if(k==='businessName')state.settings.businessName=v;
+    else if(k==='dailyCapacity')state.settings.dailyCapacity=+v;
     else if(k==='fullDayRate')state.settings.fullDayRate=+v;
     else if(k==='halfDayRate')state.settings.halfDayRate=+v;
     else if(k==='groomingAddOn')state.settings.groomingAddOn=+v;
     else if(k==='venmoHandle')state.settings.venmoHandle=v;
     else if(k==='squareLink')state.settings.squareLink=v;
   });
+  services.length=0;
+  if(svR&&svR.length>0){
+    (svR).forEach(r=>{if(r[0])services.push({id:+r[0],name:r[1]||'',type:r[2]||'addon',price:+r[3]||0,active:String(r[4]).toLowerCase()!=='false'});});
+  }else{
+    services.push(...DEFAULT_SERVICES.map(s=>({...s})));
+  }
 }
 async function persistBookings(){
   if(state.mode!=='live')return;
-  const rows=[['id','clientId','dogId','dogName','clientName','date','status','service','price'],
-    ...bookings.map(b=>[b.id,b.clientId,b.dogId,b.dogName,b.clientName,b.date,b.status,b.service,b.price])];
-  await writeRange(`Bookings!A1:I${rows.length}`,rows);
+  const rows=[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price'],
+    ...bookings.map(b=>[b.id,b.clientId,b.dogId,b.dogName,b.clientName,b.checkIn,b.checkOut,b.nights,b.status,b.service,b.addons||'',b.price])];
+  await writeRange(`Bookings!A1:L${rows.length}`,rows);
 }
 async function persistClients(){
   if(state.mode!=='live')return;
-  const cRows=[['id','name','email','phone'],...clients.map(c=>[c.id,c.name,c.email,c.phone])];
+  const cRows=[['id','name','email','phone','photoConsent'],...clients.map(c=>[c.id,c.name,c.email,c.phone,c.photoConsent?'true':'false'])];
   const dRows=[['id','clientId','name','breed','age','vaccinated','notes','birthday'],
     ...clients.flatMap(c=>c.dogs.map(d=>[d.id,c.id,d.name,d.breed,d.age,d.vaccinated,d.notes,d.birthday||'']))];
-  await writeRange(`Clients!A1:D${cRows.length}`,cRows);
+  await writeRange(`Clients!A1:E${cRows.length}`,cRows);
   await writeRange(`Dogs!A1:H${dRows.length}`,dRows);
 }
 async function persistInvoices(){
@@ -387,22 +472,28 @@ async function persistSettings(){
     ['squareLink',state.settings.squareLink||''],
   ]);
 }
+async function persistServices(){
+  if(state.mode!=='live')return;
+  await ensureServicesSheet();
+  const rows=[['id','name','type','price','active'],...services.map(s=>[s.id,s.name,s.type,s.price,s.active])];
+  await writeRange(`Services!A1:E${rows.length}`,rows);
+}
 async function refreshData(){
   if(state.mode!=='live')return;
   state.isLoading=true;state.loadingMsg='Refreshing data...';render();
-  try{await loadAllData();showToast('Data refreshed from Google Sheets!');}
+  try{await loadAllData();lastSynced=Date.now();showToast('Data refreshed from database!');}
   catch(e){showToast('Refresh failed: '+e.message,'#EF4444');}
   state.isLoading=false;render();
 }
 
 // ═══════════════════════════════════════════════════
-//  ⑧  RENDER
+//  ⑨  RENDER
 // ═══════════════════════════════════════════════════
 function render(){document.getElementById('app').innerHTML=buildApp();}
 function buildApp(){
   if(state.isLoading)return buildLoader();
-  if(state.role==='login') return buildLogin();
-  if(state.role==='admin') return buildAdminLayout();
+  if(state.role==='login')return buildLogin();
+  if(state.role==='admin')return buildAdminLayout();
   if(state.role==='client')return buildClientLayout();
   return'';
 }
@@ -442,12 +533,10 @@ function buildLogin(){
           <div class="flex-1 h-px bg-gray-100"></div>
         </div>
         <div class="grid grid-cols-2 gap-2">
-          <button onclick="enterDemo('admin')"
-            class="p-3 rounded-xl border border-gray-100 hover:bg-gray-50 transition-all text-center">
+          <button onclick="enterDemo('admin')" class="p-3 rounded-xl border border-gray-100 hover:bg-gray-50 transition-all text-center">
             <div class="text-xl mb-1">🏠</div><div class="text-xs font-semibold text-gray-600">Demo Admin</div>
           </button>
-          <button onclick="enterDemo('client')"
-            class="p-3 rounded-xl border border-gray-100 hover:bg-gray-50 transition-all text-center">
+          <button onclick="enterDemo('client')" class="p-3 rounded-xl border border-gray-100 hover:bg-gray-50 transition-all text-center">
             <div class="text-xl mb-1">🐶</div><div class="text-xs font-semibold text-gray-600">Demo Client</div>
           </button>
         </div>
@@ -461,22 +550,27 @@ function buildLogin(){
 function buildAdminLayout(){
   const nav=[
     {id:'dashboard',icon:'📊',label:'Dashboard'},{id:'calendar',icon:'📅',label:'Calendar'},
-    {id:'clients',  icon:'👥',label:'Clients'},  {id:'invoices',icon:'💰',label:'Invoices'},
-    {id:'settings', icon:'⚙️',label:'Settings'},
+    {id:'clients',  icon:'👥',label:'Clients'},  {id:'services',icon:'🛎️',label:'Services'},
+    {id:'invoices', icon:'💰',label:'Invoices'}, {id:'settings',icon:'⚙️',label:'Settings'},
   ];
   const dbNavItem=state.mode==='live'&&state.sheetUrl?`
     <button onclick="window.open('${state.sheetUrl}','_blank')"
       class="nav-item w-full text-left px-3 py-2.5 rounded-xl text-white flex items-center gap-3">
       <span>🗄️</span><span class="text-sm font-medium">Database</span>
     </button>`:'';
-  const views={dashboard:buildDashboard(),calendar:buildCalendarView('admin'),
-    clients:buildClientsView(),invoices:buildInvoicesView(),settings:buildSettingsView()};
+  const views={
+    dashboard:buildDashboard(),calendar:buildCalendarView('admin'),
+    clients:buildClientsView(),services:buildServicesView(),
+    invoices:buildInvoicesView(),settings:buildSettingsView()
+  };
+  const syncDisplay=state.mode==='live'&&lastSynced?`<div class="text-xs px-3 py-1" style="color:rgba(255,255,255,0.3)">⏱ Synced: ${fmtSynced()}</div>`:'';
   return`
   <div class="flex h-screen overflow-hidden bg-gray-50">
     <aside class="w-56 flex flex-col flex-shrink-0" style="background:linear-gradient(to bottom,#5C3317,#2A1408)">
       <div class="p-5 border-b border-white/10">
-        <img src="${LOGO_URL}" style="width:60px;margin:0 auto 0.2rem;display:block"><div class="text-white font-bold text-sm leading-tight text-center">Nigel's Place</div>
-        <div class="text-amber-300 text-xs mt-0.5">
+        <img src="${LOGO_URL}" style="width:60px;margin:0 auto 0.2rem;display:block">
+        <div class="text-white font-bold text-sm leading-tight text-center">Nigel's Place</div>
+        <div class="text-amber-300 text-xs mt-0.5 text-center">
           ${state.mode==='live'
             ?`<span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 bg-green-400 rounded-full inline-block"></span>Live · ${state.userEmail?.split('@')[0]||''}</span>`
             :`<span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 bg-amber-400 rounded-full inline-block"></span>Demo Mode</span>`}
@@ -488,14 +582,10 @@ function buildAdminLayout(){
             class="nav-item w-full text-left px-3 py-2.5 rounded-xl text-white flex items-center gap-3 ${state.view===n.id?'active':''}">
             <span>${n.icon}</span><span class="text-sm font-medium">${n.label}</span>
           </button>`).join('')}
-        ${dbNavItem?`<div class="pt-2 pb-0.5"><div class="text-xs text-white/30 px-3 uppercase tracking-widest font-semibold mb-1">Admin</div>${dbNavItem}</div>`:''}
+        ${dbNavItem?`<div class="pt-2 pb-0.5"><div class="text-xs px-3 uppercase tracking-widest font-semibold mb-1" style="color:rgba(255,255,255,0.3)">Admin</div>${dbNavItem}</div>`:''}
       </nav>
-      <div class="p-3 border-t border-white/10 space-y-1">
-        ${state.mode==='live'?`
-          <button onclick="refreshData()"
-            class="w-full px-3 py-2 rounded-xl text-amber-200 hover:text-white hover:bg-white/10 text-xs text-left transition-all">
-            ↻ Refresh from Sheets
-          </button>`:''}
+      <div class="p-3 border-t border-white/10 space-y-0.5">
+        ${syncDisplay}
         <button onclick="signOut()"
           class="w-full px-3 py-2 rounded-xl text-amber-200 hover:text-white hover:bg-white/10 text-xs text-left transition-all">
           ← Sign Out
@@ -512,7 +602,8 @@ function buildClientLayout(){
   <div class="min-h-screen bg-gray-50">
     <header class="bg-white border-b border-gray-100 px-6 py-3 flex items-center justify-between sticky top-0 z-10 shadow-sm">
       <div class="flex items-center gap-2">
-        <img src="${LOGO_URL}" style="width:34px;height:34px;object-fit:contain"><span class="font-bold text-gray-800 text-sm">Nigel's Place</span>
+        <img src="${LOGO_URL}" style="width:34px;height:34px;object-fit:contain">
+        <span class="font-bold text-gray-800 text-sm">Nigel's Place</span>
         ${state.mode==='demo'?'<span class="badge bg-amber-100 text-amber-600 ml-2">Demo</span>':''}
       </div>
       <div class="flex items-center gap-1">
@@ -525,7 +616,7 @@ function buildClientLayout(){
           📋 My Bookings
         </button>
         <div class="ml-2 pl-2 border-l flex items-center gap-2">
-          <div class="w-7 h-7 rounded-full" style="background:#7B4015" flex items-center justify-center text-white text-xs font-bold">
+          <div class="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold" style="background:#7B4015">
             ${cl?cl.name[0]:'?'}
           </div>
           <span class="text-sm text-gray-600 font-medium">${cl?.name||'Guest'}</span>
@@ -539,20 +630,28 @@ function buildClientLayout(){
   </div>
   ${state.showModal?buildModal():''}`;
 }
+
 function buildDashboard(){
-  const cap=state.settings.dailyCapacity, todayBks=booksForDate(TODAY), c=capColor(todayBks.length,cap);
-  const weekRev=bookings.filter(b=>b.date>=TODAY&&b.date<='2026-03-14'&&b.status==='confirmed').reduce((s,b)=>s+b.price,0);
-  const monthBks=bookings.filter(b=>b.date.startsWith('2026-03')&&b.status!=='cancelled').length;
+  const cap=state.settings.dailyCapacity,todayBks=booksForDate(TODAY),c=capColor(todayBks.length,cap);
+  const now=new Date();
+  const weekEnd=new Date(now); weekEnd.setDate(weekEnd.getDate()+7);
+  const weekEndStr=weekEnd.toISOString().split('T')[0];
+  const monthPfx=TODAY.substring(0,7);
+  const weekRev=bookings.filter(b=>b.checkIn>=TODAY&&b.checkIn<=weekEndStr&&b.status==='confirmed').reduce((s,b)=>s+b.price,0);
+  const monthBks=bookings.filter(b=>(b.checkIn||'').startsWith(monthPfx)&&b.status!=='cancelled').length;
   const overdue=invoices.filter(i=>i.status==='overdue').reduce((s,i)=>s+(i.amount-i.paid),0);
-  const upcoming=bookings.filter(b=>b.date>TODAY&&b.status==='confirmed').sort((a,b)=>a.date.localeCompare(b.date)).slice(0,5);
+  const upcoming=bookings.filter(b=>b.checkIn>TODAY&&b.status==='confirmed').sort((a,b)=>a.checkIn.localeCompare(b.checkIn)).slice(0,5);
+  const greetHour=now.getHours();
+  const greet=greetHour<12?'Good morning':greetHour<17?'Good afternoon':'Good evening';
+  const todayFmt=now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
   return`
   <div class="p-6 slide-in">
     <div class="flex items-center justify-between mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-gray-800">Good morning! ☀️</h1>
-        <p class="text-gray-400 text-sm">Sunday, March 8, 2026 · ${state.settings.businessName}</p>
+        <h1 class="text-2xl font-bold text-gray-800">${greetHour<12?'Good morning':greetHour<17?'Good afternoon':'Good evening'} ☀️</h1>
+        <p class="text-gray-400 text-sm">${todayFmt} · ${state.settings.businessName}</p>
       </div>
-      <button onclick="openBookingModal(null)" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'"">+ New Booking</button>
+      <button onclick="openBookingModal(null)" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ New Booking</button>
     </div>
     <div class="grid grid-cols-4 gap-4 mb-6">
       <div class="stat-card">
@@ -563,7 +662,7 @@ function buildDashboard(){
         <div class="text-xs mt-1" style="color:${c.txt}">${c.label}</div>
       </div>
       <div class="stat-card"><div class="text-2xl mb-1">💵</div><div class="text-2xl font-bold text-gray-800">$${weekRev}</div><div class="text-xs text-gray-400">This Week Revenue</div></div>
-      <div class="stat-card"><div class="text-2xl mb-1">📅</div><div class="text-2xl font-bold text-gray-800">${monthBks}</div><div class="text-xs text-gray-400">March Bookings</div></div>
+      <div class="stat-card"><div class="text-2xl mb-1">📅</div><div class="text-2xl font-bold text-gray-800">${monthBks}</div><div class="text-xs text-gray-400">${now.toLocaleString('default',{month:'long'})} Bookings</div></div>
       <div class="stat-card"><div class="text-2xl mb-1">⚠️</div><div class="text-2xl font-bold text-red-500">$${overdue}</div><div class="text-xs text-gray-400">Overdue Balance</div></div>
     </div>
     <div class="grid grid-cols-2 gap-5">
@@ -574,8 +673,10 @@ function buildDashboard(){
           todayBks.map(b=>`
           <div class="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
             <div class="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center">🐶</div>
-            <div class="flex-1 min-w-0"><div class="text-sm font-semibold text-gray-800">${b.dogName}</div>
-              <div class="text-xs text-gray-400 truncate">${b.clientName} · ${b.service}</div></div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-semibold text-gray-800">${b.dogName}</div>
+              <div class="text-xs text-gray-400 truncate">${b.clientName} · ${b.service}${b.checkIn!==b.checkOut?` · ${b.nights}d stay`:''}${b.addons?` · ${b.addons}`:''}</div>
+            </div>
             <span class="badge bg-amber-100 text-amber-800">confirmed</span>
           </div>`).join('')}
       </div>
@@ -586,7 +687,7 @@ function buildDashboard(){
             upcoming.map(b=>`
             <div class="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
               <div class="text-sm text-gray-700">${b.dogName} <span class="text-gray-400">· ${b.clientName}</span></div>
-              <div class="text-xs text-gray-400 font-medium">${fmtDate(b.date).replace(', 2026','')}</div>
+              <div class="text-xs text-gray-400 font-medium">${b.nights>1?`${fmtDateShort(b.checkIn)}–${fmtDateShort(b.checkOut)}`:fmtDate(b.checkIn).replace(', '+new Date().getFullYear(),'')}</div>
             </div>`).join('')}
           <button onclick="setView('calendar')" class="mt-3 w-full text-xs text-amber-700 hover:underline">View Calendar →</button>
         </div>
@@ -624,7 +725,7 @@ function buildCalendarView(role){
         <button onclick="prevMonth()" class="px-3 py-1.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-100 text-sm">← Prev</button>
         <span class="font-semibold text-gray-700 min-w-[140px] text-center">${MONTHS[mo]} ${yr}</span>
         <button onclick="nextMonth()" class="px-3 py-1.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-100 text-sm">Next →</button>
-        ${!isClient?`<button onclick="openBookingModal(null)" class="ml-2 px-4 py-1.5 text-white rounded-xl text-sm shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'"">+ Add Booking</button>`:''}
+        ${!isClient?`<button onclick="openBookingModal(null)" class="ml-2 px-4 py-1.5 text-white rounded-xl text-sm shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ Add Booking</button>`:''}
       </div>
     </div>
     <div class="flex items-center gap-5 mb-4 text-xs text-gray-500">
@@ -658,8 +759,8 @@ function buildCalendarView(role){
         }).join('')}
       </div>
     </div>
-    ${isClient?`<div class="mt-4 p-4 rounded-xl border text-sm text-amber-800" style="background:#FEF3C7;border-color:#FCD34D"">
-      💡 Click any <strong>available day</strong> to book a spot for your pup!</div>`:''}
+    ${isClient?`<div class="mt-4 p-4 rounded-xl border text-sm text-amber-800" style="background:#FEF3C7;border-color:#FCD34D">
+      💡 Click any <strong>available day</strong> to book a spot for your pup. You can select a date range for multi-day stays!</div>`:''}
   </div>`;
 }
 function buildClientsView(){
@@ -667,7 +768,7 @@ function buildClientsView(){
   <div class="p-6 slide-in">
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold text-gray-800">Clients & Dogs</h1>
-      <button onclick="openAddClientModal()" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'"">+ Add Client</button>
+      <button onclick="openAddClientModal()" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ Add Client</button>
     </div>
     ${clients.length===0?`<div class="text-center text-gray-300 py-16"><div class="text-5xl mb-3">👥</div><p>No clients yet. Add your first one!</p></div>`:''}
     <div class="space-y-3">
@@ -684,6 +785,7 @@ function buildClientsView(){
             </div>
             <div class="flex items-center gap-2">
               ${hasUnvacc?`<span class="badge bg-red-100 text-red-600">⚠️ Vacc Alert</span>`:''}
+              ${cl.photoConsent?`<span class="badge bg-blue-100 text-blue-600">📸 Photo OK</span>`:''}
               <span class="badge bg-blue-100 text-blue-600">${total} visit${total!==1?'s':''}</span>
               <span class="badge bg-gray-100 text-gray-600">${cl.dogs.length} dog${cl.dogs.length!==1?'s':''}</span>
             </div>
@@ -695,11 +797,69 @@ function buildClientsView(){
                 <div><div class="text-sm font-semibold text-gray-700">${d.name}</div>
                   <div class="text-xs text-gray-400">${d.breed} · ${d.age}yr</div>
                   ${d.vaccinated?`<div class="text-xs text-amber-700">✓ Vaccinated</div>`:`<div class="text-xs text-red-500">⚠️ Not current</div>`}
+                  ${d.birthday?`<div class="text-xs text-gray-400">🎂 ${d.birthday}</div>`:''}
                   ${d.notes?`<div class="text-xs text-gray-400 italic">"${d.notes}"</div>`:''}
                 </div>
               </div>`).join('')}
           </div>
         </div>`;}).join('')}
+    </div>
+  </div>`;
+}
+function buildServicesView(){
+  const base=services.filter(s=>s.type==='base');
+  const addons=services.filter(s=>s.type==='addon');
+  return`
+  <div class="p-6 slide-in">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-800">Services & Add-Ons</h1>
+        <p class="text-gray-400 text-sm mt-1">Manage what's available when clients book</p>
+      </div>
+      <button onclick="openAddServiceModal()" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ Add Service</button>
+    </div>
+    <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 mb-5">
+      <h2 class="font-semibold text-gray-800 mb-1">Base Services</h2>
+      <p class="text-xs text-gray-400 mb-4">Charged per day · clients choose one when booking</p>
+      ${base.length===0?`<p class="text-gray-300 text-sm text-center py-4">No base services. Add one above.</p>`:`
+      <div class="space-y-2">
+        ${base.map(s=>`
+          <div class="flex items-center justify-between p-3 rounded-xl ${s.active?'bg-gray-50':'bg-gray-50 opacity-50'}">
+            <div class="flex items-center gap-3">
+              <span class="text-xl">🏠</span>
+              <div>
+                <div class="font-semibold text-sm text-gray-700">${s.name} ${!s.active?'<span class="text-xs text-gray-400">(disabled)</span>':''}</div>
+                <div class="text-xs text-gray-400">$${s.price} per day</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="openEditServiceModal(${s.id})" class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100">Edit</button>
+              <button onclick="toggleService(${s.id})" class="text-xs px-3 py-1.5 rounded-lg ${s.active?'bg-red-50 text-red-500 hover:bg-red-100':'bg-green-50 text-green-600 hover:bg-green-100'}">${s.active?'Disable':'Enable'}</button>
+            </div>
+          </div>`).join('')}
+      </div>`}
+    </div>
+    <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+      <h2 class="font-semibold text-gray-800 mb-1">Add-Ons</h2>
+      <p class="text-xs text-gray-400 mb-4">Charged once per stay · clients can select any combination</p>
+      ${addons.length===0?`<div class="text-center py-8"><div class="text-4xl mb-2">✨</div><p class="text-gray-300 text-sm">No add-ons yet. Add your first one above!</p></div>`:`
+      <div class="space-y-2">
+        ${addons.map(s=>`
+          <div class="flex items-center justify-between p-3 rounded-xl ${s.active?'bg-gray-50':'bg-gray-50 opacity-50'}">
+            <div class="flex items-center gap-3">
+              <span class="text-xl">✨</span>
+              <div>
+                <div class="font-semibold text-sm text-gray-700">${s.name} ${!s.active?'<span class="text-xs text-gray-400">(hidden)</span>':''}</div>
+                <div class="text-xs text-gray-400">$${s.price} one-time per stay</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="openEditServiceModal(${s.id})" class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100">Edit</button>
+              <button onclick="toggleService(${s.id})" class="text-xs px-3 py-1.5 rounded-lg ${s.active?'bg-amber-50 text-amber-600 hover:bg-amber-100':'bg-green-50 text-green-600 hover:bg-green-100'}">${s.active?'Hide':'Show'}</button>
+              <button onclick="deleteService(${s.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100">Delete</button>
+            </div>
+          </div>`).join('')}
+      </div>`}
     </div>
   </div>`;
 }
@@ -733,9 +893,7 @@ function buildInvoicesView(){
             <td class="px-5 py-3.5"><span class="badge ${sCls[inv.status]||'bg-gray-100 text-gray-600'}">${inv.status}</span></td>
             <td class="px-5 py-3.5 flex items-center gap-2 flex-wrap">
               ${inv.status!=='paid'?`
-                <button onclick="sendInvoiceText(${inv.id})"
-                  class="text-xs px-2 py-1 rounded-lg text-white" style="background:#7B4015"
-                  title="Open pre-filled text message">📱 Text</button>
+                <button onclick="sendInvoiceText(${inv.id})" class="text-xs px-2 py-1 rounded-lg text-white" style="background:#7B4015" title="Send text message">📱 Text</button>
                 <button onclick="markInvoicePaid(${inv.id})" class="text-xs text-blue-600 hover:underline">Mark Paid</button>`
               :`<span class="text-xs text-gray-300">Paid ✓</span>`}
             </td>
@@ -756,7 +914,7 @@ function buildSettingsView(){
         <div class="text-xs text-amber-800 font-mono break-all mb-2">${state.sheetId}</div>
         <a href="${state.sheetUrl}" target="_blank" class="text-xs text-amber-800 hover:underline font-medium">Open in Google Sheets ↗</a>
         <div class="mt-2 p-2 bg-amber-100 rounded-lg text-xs text-amber-800">
-          <strong>Important:</strong> Copy the Sheet ID above and paste it into <code>CONFIG.SHEET_ID</code> in this HTML file so it persists next time you sign in.
+          <strong>Important:</strong> Copy the Sheet ID above and paste it into <code>CONFIG.SHEET_ID</code> in this HTML file so it persists.
         </div>
       </div>`:state.mode==='live'?`<div class="bg-blue-50 rounded-2xl p-4 border border-blue-100 text-sm text-blue-700">No sheet yet. Sign out and sign back in to create one.</div>`:''}
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
@@ -769,18 +927,11 @@ function buildSettingsView(){
           <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Venmo Handle</label>
             <div class="flex items-center border border-gray-200 rounded-xl overflow-hidden">
               <span class="px-3 py-2 bg-gray-50 text-gray-400 text-sm border-r border-gray-200">@</span>
-              <input id="set-venmo" type="text" placeholder="your-venmo-handle"
-                value="${state.settings.venmoHandle||''}"
-                class="flex-1 px-3 py-2 text-sm outline-none">
-            </div>
-            <p class="text-xs text-gray-400 mt-1">Used in invoice text messages for payment requests</p>
-          </div>
+              <input id="set-venmo" type="text" placeholder="your-venmo-handle" value="${state.settings.venmoHandle||''}" class="flex-1 px-3 py-2 text-sm outline-none">
+            </div></div>
           <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Square Payment Link</label>
-            <input id="set-square" type="url" placeholder="https://square.link/u/XXXXXXXX"
-              value="${state.settings.squareLink||''}"
-              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-            <p class="text-xs text-gray-400 mt-1">In Square: Online → Payment Links → Create Link → copy URL</p>
-          </div>
+            <input id="set-square" type="url" placeholder="https://square.link/u/XXXXXXXX" value="${state.settings.squareLink||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            <p class="text-xs text-gray-400 mt-1">In Square: Online → Payment Links → Create Link → copy URL</p></div>
         </div>
       </div>
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
@@ -788,41 +939,37 @@ function buildSettingsView(){
         <p class="text-xs text-gray-400 mb-3">Clients cannot book days that reach this limit.</p>
         <input id="set-cap" type="number" value="${state.settings.dailyCapacity}" min="1" max="100" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
       </div>
-      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h2 class="font-semibold text-gray-800 mb-4">Service Rates</h2>
-        <div class="grid grid-cols-2 gap-3">
-          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Full Day ($)</label>
-            <input id="set-full" type="number" value="${state.settings.fullDayRate}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
-          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Half Day ($)</label>
-            <input id="set-half" type="number" value="${state.settings.halfDayRate}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
-          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Grooming Add-on ($)</label>
-            <input id="set-groom" type="number" value="${state.settings.groomingAddOn}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
-        </div>
+      <div class="bg-amber-50 rounded-xl p-4 border border-amber-100 text-sm text-amber-800">
+        🛎️ Service rates are managed in the <button onclick="setView('services')" class="underline font-semibold">Services</button> section.
       </div>
-      <button onclick="saveSettings()" class="w-full py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'" shadow-sm">Save Settings</button>
+      <button onclick="saveSettings()" class="w-full py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">Save Settings</button>
     </div>
   </div>`;
 }
 function buildClientHome(){
   const cl=clients.find(c=>c.id===state.currentClientId);
-  return`<div class="slide-in"><div class="mb-5"><h1 class="text-2xl font-bold text-gray-800">Book a Day 🐾</h1>
-    <p class="text-gray-400 text-sm mt-1">Select an available day to book ${cl?.dogs[0]?.name||'your pup'}.</p></div>
+  return`<div class="slide-in"><div class="mb-5">
+    <h1 class="text-2xl font-bold text-gray-800">Book a Stay 🐾</h1>
+    <p class="text-gray-400 text-sm mt-1">Select available days to book a stay for ${cl?.dogs[0]?.name||'your pup'}.</p></div>
     ${buildCalendarView('client')}</div>`;
 }
 function buildClientBookings(){
-  const myBks=bookings.filter(b=>b.clientId===state.currentClientId).sort((a,b)=>b.date.localeCompare(a.date));
+  const myBks=bookings.filter(b=>b.clientId===state.currentClientId).sort((a,b)=>b.checkIn.localeCompare(a.checkIn));
   const sCls={confirmed:'bg-amber-100 text-amber-800',pending:'bg-yellow-100 text-yellow-700',cancelled:'bg-red-100 text-red-600'};
   return`
   <div class="slide-in">
     <h1 class="text-2xl font-bold text-gray-800 mb-5">My Bookings</h1>
     ${myBks.length===0?`<div class="text-center text-gray-300 py-16"><div class="text-5xl mb-3">🐾</div>
       <div class="text-lg font-medium text-gray-400">No bookings yet!</div>
-      <button onclick="setClientView('home')" class="mt-3 text-amber-800 hover:underline text-sm">Book your first day →</button></div>`
+      <button onclick="setClientView('home')" class="mt-3 text-amber-800 hover:underline text-sm">Book your first stay →</button></div>`
     :`<div class="space-y-3">${myBks.map(b=>`
       <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-4">
         <div class="text-3xl">🐶</div>
-        <div class="flex-1"><div class="font-semibold text-gray-800">${b.dogName}</div>
-          <div class="text-sm text-gray-400">${fmtDate(b.date)} · ${b.service}</div></div>
+        <div class="flex-1">
+          <div class="font-semibold text-gray-800">${b.dogName}</div>
+          <div class="text-sm text-gray-400">${b.checkIn===b.checkOut?fmtDate(b.checkIn):`${fmtDateShort(b.checkIn)} – ${fmtDateShort(b.checkOut)} (${b.nights} days)`} · ${b.service}</div>
+          ${b.addons?`<div class="text-xs text-gray-400">Add-ons: ${b.addons}</div>`:''}
+        </div>
         <div class="text-right"><div class="font-bold text-gray-800">$${b.price}</div>
           <span class="badge ${sCls[b.status]||'bg-gray-100 text-gray-600'}">${b.status}</span></div>
       </div>`).join('')}</div>`}
@@ -830,14 +977,16 @@ function buildClientBookings(){
 }
 
 // ═══════════════════════════════════════════════════
-//  ⑨  MODALS
+//  ⑩  MODALS
 // ═══════════════════════════════════════════════════
 function buildModal(){
-  const m=state.showModal; if(!m)return'';
-  if(m.type==='day')        return buildDayModal(m.date);
-  if(m.type==='booking')    return buildBookingModal(m.date);
-  if(m.type==='addClient')  return buildAddClientModal();
-  if(m.type==='addInvoice') return buildAddInvoiceModal();
+  const m=state.showModal;if(!m)return'';
+  if(m.type==='day')         return buildDayModal(m.date);
+  if(m.type==='booking')     return buildBookingModal(m.date);
+  if(m.type==='addClient')   return buildAddClientModal();
+  if(m.type==='addInvoice')  return buildAddInvoiceModal();
+  if(m.type==='addService')  return buildServiceModal(null);
+  if(m.type==='editService') return buildServiceModal(m.serviceId);
   return'';
 }
 function buildAddInvoiceModal(){
@@ -851,48 +1000,28 @@ function buildAddInvoiceModal(){
         <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
       </div>
       <form onsubmit="submitInvoice(event)" class="space-y-4">
-        <div>
-          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Client *</label>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Client *</label>
           <select id="inv-client" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="populateInvoiceItems()">
             <option value="">Select client...</option>
             ${clients.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
-          </select>
-        </div>
-        <div>
-          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Services / Description *</label>
-          <input id="inv-items" type="text" required placeholder="e.g. 4x Full Day, 1x Half Day"
-            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-          <p class="text-xs text-gray-400 mt-1">Tip: click a client above to auto-fill recent bookings</p>
+          </select></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Services / Description *</label>
+          <input id="inv-items" type="text" required placeholder="e.g. 3x Full Day (Mon–Wed)" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+          <p class="text-xs text-gray-400 mt-1">Tip: select a client above to auto-fill recent bookings</p></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Amount ($) *</label>
+            <input id="inv-amount" type="number" min="0" step="0.01" required placeholder="0.00" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Amount Paid ($)</label>
+            <input id="inv-paid" type="number" min="0" step="0.01" placeholder="0.00" value="0" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
         </div>
         <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Amount ($) *</label>
-            <input id="inv-amount" type="number" min="0" step="0.01" required placeholder="0.00"
-              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-          </div>
-          <div>
-            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Amount Paid ($)</label>
-            <input id="inv-paid" type="number" min="0" step="0.01" placeholder="0.00" value="0"
-              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Issue Date</label>
-            <input id="inv-issue" type="date" value="${today}"
-              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-          </div>
-          <div>
-            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Due Date</label>
-            <input id="inv-due" type="date" value="${due}"
-              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-          </div>
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Issue Date</label>
+            <input id="inv-issue" type="date" value="${today}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Due Date</label>
+            <input id="inv-due" type="date" value="${due}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
         </div>
         <div class="flex gap-2 pt-1">
-          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold"
-            style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">
-            Create Invoice
-          </button>
+          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">Create Invoice</button>
           <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
         </div>
       </form>
@@ -907,23 +1036,27 @@ function buildDayModal(ds){
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 slide-in">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-bold text-gray-800">${fmtDate(ds)}</h2>
-        <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">x</button>
+        <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
       </div>
       <div class="flex items-center gap-3 p-3 rounded-xl mb-4" style="background:${c.bg}">
         <div class="text-2xl">${full?'🚫':'🐾'}</div>
         <div><div class="font-semibold text-sm" style="color:${c.txt}">${bks.length}/${cap} dogs · ${c.label}</div>
           <div class="cap-bar mt-1 w-48"><div class="cap-fill" style="width:${Math.min(100,bks.length/cap*100)}%;background:${c.bar}"></div></div></div>
       </div>
-      ${bks.length>0?`<div class="space-y-1.5 mb-4 max-h-48 overflow-y-auto">
-        ${bks.map(b=>`<div class="flex items-center gap-2.5 p-2.5 bg-gray-50 rounded-xl">
-          <span class="text-lg">🐶</span>
-          <div class="flex-1 min-w-0"><span class="text-sm font-semibold text-gray-700">${b.dogName}</span>
-            <span class="text-xs text-gray-400 ml-1.5">${b.clientName} · ${b.service}</span></div>
-          <span class="text-sm text-gray-500">$${b.price}</span>
+      ${bks.length>0?`<div class="space-y-1.5 mb-4 max-h-52 overflow-y-auto">
+        ${bks.map(b=>`<div class="flex items-start gap-2.5 p-2.5 bg-gray-50 rounded-xl">
+          <span class="text-lg mt-0.5">🐶</span>
+          <div class="flex-1 min-w-0">
+            <span class="text-sm font-semibold text-gray-700">${b.dogName}</span>
+            <span class="text-xs text-gray-400 ml-1.5">${b.clientName} · ${b.service}</span>
+            ${b.checkIn!==b.checkOut?`<div class="text-xs text-amber-700 mt-0.5">📅 ${fmtDateShort(b.checkIn)} → ${fmtDateShort(b.checkOut)} (${b.nights} days)</div>`:''}
+            ${b.addons?`<div class="text-xs text-gray-400">✨ ${b.addons}</div>`:''}
+          </div>
+          <span class="text-sm text-gray-600 font-medium whitespace-nowrap">$${b.price}</span>
         </div>`).join('')}</div>`:`<p class="text-gray-300 text-sm text-center py-4 mb-4">No bookings yet.</p>`}
       ${!isPast?`<div class="flex gap-2">
         ${!full
-          ?`<button onclick="openBookingModal('${ds}')" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'"">${isAdm?'+ Add Booking':'📅 Book This Day'}</button>`
+          ?`<button onclick="openBookingModal('${ds}')" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">${isAdm?'+ Add Booking':'📅 Book This Day'}</button>`
           :`<div class="flex-1 py-2.5 bg-red-50 text-red-400 rounded-xl text-sm text-center font-medium">Day Fully Booked</div>`}
         <button onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Close</button>
       </div>`:`<button onclick="closeModal()" class="w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Close</button>`}
@@ -933,12 +1066,19 @@ function buildDayModal(ds){
 function buildBookingModal(selectedDate){
   const isClient=state.role==='client';
   const cl=isClient?clients.find(c=>c.id===state.currentClientId):null;
+  const activeAddons=services.filter(s=>s.type==='addon'&&s.active);
+  const baseServices=services.filter(s=>s.type==='base'&&s.active);
+  const fallbackBase=[
+    {name:'Full Day',price:state.settings.fullDayRate},
+    {name:'Half Day',price:state.settings.halfDayRate}
+  ];
+  const displayBase=baseServices.length>0?baseServices:fallbackBase;
   return`
   <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 slide-in">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 slide-in max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-5">
         <h2 class="text-lg font-bold text-gray-800">New Booking</h2>
-        <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">x</button>
+        <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
       </div>
       <form onsubmit="submitBooking(event)" class="space-y-4">
         ${!isClient?`
@@ -951,28 +1091,84 @@ function buildBookingModal(selectedDate){
           <select id="bk-dog" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"><option>Select client first...</option></select></div>`
         :`<div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Dog</label>
           <select id="bk-dog" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-            ${cl?.dogs.map(d=>`<option value="${d.id}">${d.name} (${d.breed})</option>`).join('')||''}
+            ${cl?.dogs.map(d=>`<option value="${d.id}">${d.name} (${d.breed})</option>`).join('')||'<option>No dogs on file</option>'}
           </select></div>`}
-        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Date</label>
-          <input type="date" id="bk-date" value="${selectedDate||''}" min="${TODAY}"
-            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="checkDateCapacity()">
-          <div id="cap-warning" class="text-xs text-red-500 mt-1 hidden">This date is fully booked!</div></div>
-        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Service</label>
-          <div class="grid grid-cols-2 gap-2">
-            <label class="flex items-center gap-2.5 p-3 rounded-xl cursor-pointer" style="border:2px solid #C4952A;background:#FEF3C7"">
-              <input type="radio" name="svc" value="Full Day" checked class="accent-amber-700">
-              <div><div class="text-sm font-semibold text-gray-700">Full Day</div><div class="text-xs text-gray-400">$${state.settings.fullDayRate}</div></div>
-            </label>
-            <label class="flex items-center gap-2.5 p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50">
-              <input type="radio" name="svc" value="Half Day" class="accent-amber-700">
-              <div><div class="text-sm font-semibold text-gray-700">Half Day</div><div class="text-xs text-gray-400">$${state.settings.halfDayRate}</div></div>
-            </label>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">First Day</label>
+            <input type="date" id="bk-checkin" value="${selectedDate||''}" min="${TODAY}"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="syncCheckout()"></div>
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Last Day</label>
+            <input type="date" id="bk-checkout" value="${selectedDate||''}" min="${TODAY}"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="updateBookingPrice()"></div>
+        </div>
+        <div id="cap-warning" class="text-xs text-red-500 hidden">⚠️ One or more days in this range is fully booked!</div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Service (per day)</label>
+          <div class="grid grid-cols-2 gap-2" id="svc-grid">
+            ${displayBase.map((s,i)=>`
+              <label class="svc-radio-label flex items-center gap-2.5 p-3 rounded-xl cursor-pointer" style="border:${i===0?'2px solid #C4952A;background:#FEF3C7':'1px solid #E5E7EB'}">
+                <input type="radio" name="svc" value="${s.name}" data-price="${s.price}" ${i===0?'checked':''} class="accent-amber-700" onchange="updateBookingPrice()">
+                <div><div class="text-sm font-semibold text-gray-700">${s.name}</div>
+                  <div class="text-xs text-gray-400">$${s.price}/day</div></div>
+              </label>`).join('')}
           </div></div>
+        ${activeAddons.length>0?`
+        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Add-Ons <span class="font-normal text-gray-400">(charged once per stay)</span></label>
+          <div class="space-y-1.5">
+            ${activeAddons.map(s=>`
+              <label class="flex items-center gap-3 p-2.5 rounded-xl cursor-pointer hover:bg-gray-50 border border-gray-100 transition-colors">
+                <input type="checkbox" name="addon" value="${s.name}" data-price="${s.price}" class="accent-amber-700 w-4 h-4" onchange="updateBookingPrice()">
+                <span class="flex-1 text-sm text-gray-700">${s.name}</span>
+                <span class="text-xs font-medium text-gray-500">+$${s.price}</span>
+              </label>`).join('')}
+          </div></div>`:''}
+        <div id="price-preview" class="hidden rounded-xl p-3 border border-amber-100 text-sm" style="background:#FFFBEB">
+          <div class="font-semibold text-amber-900 mb-1">💰 Booking Summary</div>
+          <div id="price-lines" class="text-amber-800 space-y-0.5 text-xs"></div>
+          <div id="price-total" class="font-bold text-amber-900 text-base mt-2"></div>
+        </div>
         <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Notes (optional)</label>
           <textarea id="bk-notes" rows="2" placeholder="Any special requests..."
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none"></textarea></div>
+        ${isClient?`
+        <div class="p-3.5 rounded-xl border border-blue-100" style="background:#EFF6FF">
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" id="bk-photo" class="mt-0.5 accent-amber-700 w-4 h-4" ${cl?.photoConsent?'checked':''}>
+            <span class="text-xs text-blue-800 leading-relaxed">I consent to photos and videos of my dog being taken at Nigel's Place and posted to social media (Instagram, Facebook, etc.).</span>
+          </label>
+        </div>`:''}
         <div class="flex gap-2 pt-1">
-          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'"">Confirm Booking</button>
+          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">Confirm Booking</button>
+          <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>`;
+}
+function buildServiceModal(editId){
+  const svc=editId?services.find(s=>s.id===editId):null;
+  const isEdit=!!svc;
+  return`
+  <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 slide-in">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-lg font-bold text-gray-800">${isEdit?'Edit Service':'Add Service'}</h2>
+        <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
+      </div>
+      <form onsubmit="submitService(event)" class="space-y-4">
+        ${isEdit?`<input type="hidden" id="svc-edit-id" value="${svc.id}">`:''}
+        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Service Name *</label>
+          <input id="svc-name" type="text" required value="${svc?.name||''}" placeholder="e.g. Nail Trim"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Type</label>
+          <select id="svc-type" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            <option value="base" ${svc?.type==='base'?'selected':''}>Base Service (charged per day)</option>
+            <option value="addon" ${!svc||svc?.type==='addon'?'selected':''}>Add-On (charged once per stay)</option>
+          </select></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Price ($) *</label>
+          <input id="svc-price" type="number" min="0" step="0.01" required value="${svc?.price||''}" placeholder="0.00"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+        <div class="flex gap-2 pt-1">
+          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">${isEdit?'Save Changes':'Add Service'}</button>
           <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
         </div>
       </form>
@@ -985,7 +1181,7 @@ function buildAddClientModal(){
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 slide-in max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-5">
         <h2 class="text-lg font-bold text-gray-800">Add New Client</h2>
-        <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">x</button>
+        <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
       </div>
       <form onsubmit="submitClient(event)" class="space-y-4">
         <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Full Name *</label>
@@ -1010,14 +1206,14 @@ function buildAddClientModal(){
                 <option value="true">Up to Date</option><option value="false">Not Current</option>
               </select></div>
           </div>
-          <div class="mt-3"><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Birthday <span class="text-gray-400 font-normal">(optional)</span></label>
+          <div class="mt-3"><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Birthday <span class="font-normal text-gray-400">(optional)</span></label>
             <input id="dog-birthday" type="date" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
           <div class="mt-3"><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Notes</label>
             <textarea id="dog-notes" rows="2" placeholder="Allergies, temperament, special needs..."
               class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none"></textarea></div>
         </div>
         <div class="flex gap-2 pt-1">
-          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'"">Add Client</button>
+          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">Add Client</button>
           <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
         </div>
       </form>
@@ -1026,7 +1222,7 @@ function buildAddClientModal(){
 }
 
 // ═══════════════════════════════════════════════════
-//  ⑩  ACTION HANDLERS
+//  ⑪  ACTION HANDLERS
 // ═══════════════════════════════════════════════════
 function setView(v)       {state.view=v;state.showModal=null;render();}
 function setClientView(v) {state.clientView=v;state.showModal=null;render();}
@@ -1035,59 +1231,123 @@ function nextMonth()      {state.calendarDate=new Date(state.calendarDate.getFul
 function closeModal()     {state.showModal=null;render();}
 function openDayModal(ds)     {state.showModal={type:'day',date:ds};render();}
 function openBookingModal(ds) {state.showModal={type:'booking',date:ds};render();}
-function openAddClientModal()  {state.showModal={type:'addClient'};render();}
-function openAddInvoiceModal() {state.showModal={type:'addInvoice'};render();}
+function openAddClientModal() {state.showModal={type:'addClient'};render();}
+function openAddInvoiceModal(){state.showModal={type:'addInvoice'};render();}
+function openAddServiceModal(){state.showModal={type:'addService'};render();}
+function openEditServiceModal(id){state.showModal={type:'editService',serviceId:id};render();}
+
+function syncCheckout(){
+  const ci=document.getElementById('bk-checkin')?.value;
+  const co=document.getElementById('bk-checkout');
+  if(ci&&co&&co.value&&co.value<ci)co.value=ci;
+  checkDateCapacity();
+  updateBookingPrice();
+}
+function updateBookingPrice(){
+  const ci=document.getElementById('bk-checkin')?.value;
+  const co=document.getElementById('bk-checkout')?.value||ci;
+  if(!ci)return;
+  const days=nightsCount(ci,co);
+  const svcEl=document.querySelector('input[name="svc"]:checked');
+  const baseRate=svcEl?+(svcEl.dataset.price||getBaseRate(svcEl.value)):state.settings.fullDayRate;
+  const addonEls=[...(document.querySelectorAll('input[name="addon"]:checked')||[])];
+  const addonTotal=addonEls.reduce((s,el)=>s+(+el.dataset.price||0),0);
+  const total=days*baseRate+addonTotal;
+  const preview=document.getElementById('price-preview');
+  const lines=document.getElementById('price-lines');
+  const totalEl=document.getElementById('price-total');
+  if(preview&&lines&&totalEl){
+    let html=`<div>${days} day${days>1?'s':''} × $${baseRate} = $${days*baseRate}</div>`;
+    if(addonTotal>0){
+      addonEls.forEach(el=>{html+=`<div>+ ${el.value}: $${el.dataset.price}</div>`;});
+    }
+    lines.innerHTML=html;
+    totalEl.textContent=`Total: $${total}`;
+    preview.classList.remove('hidden');
+  }
+}
+function checkDateCapacity(){
+  const ci=document.getElementById('bk-checkin')?.value;
+  const co=document.getElementById('bk-checkout')?.value||ci;
+  const warn=document.getElementById('cap-warning');if(!warn||!ci)return;
+  const cap=state.settings.dailyCapacity;
+  let anyFull=false;
+  const a=new Date(ci+'T00:00:00'),b=new Date(co+'T00:00:00');
+  for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1)){
+    if(booksForDate(d.toISOString().split('T')[0]).length>=cap){anyFull=true;break;}
+  }
+  warn.classList.toggle('hidden',!anyFull);
+}
+function updateDogSelect(){
+  const cId=parseInt(document.getElementById('bk-client')?.value);
+  const sel=document.getElementById('bk-dog');if(!sel)return;
+  const cl=clients.find(c=>c.id===cId);
+  sel.innerHTML=cl?cl.dogs.map(d=>`<option value="${d.id}">${d.name} (${d.breed})</option>`).join(''):'<option>Select client first...</option>';
+}
 function populateInvoiceItems(){
-  const cId=parseInt(document.getElementById('inv-client')?.value);
-  if(!cId)return;
-  const cl=clients.find(c=>c.id===cId); if(!cl)return;
+  const cId=parseInt(document.getElementById('inv-client')?.value);if(!cId)return;
+  const cl=clients.find(c=>c.id===cId);if(!cl)return;
   const recent=bookings.filter(b=>b.clientId===cId&&b.status==='confirmed')
-    .sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10);
+    .sort((a,b)=>b.checkIn.localeCompare(a.checkIn)).slice(0,10);
   if(!recent.length)return;
   const counts={};
-  recent.forEach(b=>{counts[b.service]=(counts[b.service]||0)+1;});
+  recent.forEach(b=>{
+    const key=b.addons?`${b.service}+${b.addons}`:b.service;
+    counts[key]=(counts[key]||0)+(b.nights||1);
+  });
   const desc=Object.entries(counts).map(([svc,n])=>`${n}x ${svc}`).join(', ');
   const total=recent.reduce((s,b)=>s+b.price,0);
-  const itemsEl=document.getElementById('inv-items');
-  const amtEl=document.getElementById('inv-amount');
+  const itemsEl=document.getElementById('inv-items'),amtEl=document.getElementById('inv-amount');
   if(itemsEl)itemsEl.value=desc;
   if(amtEl)amtEl.value=total;
 }
 
-function updateDogSelect(){
-  const cId=parseInt(document.getElementById('bk-client')?.value);
-  const sel=document.getElementById('bk-dog'); if(!sel)return;
-  const cl=clients.find(c=>c.id===cId);
-  sel.innerHTML=cl?cl.dogs.map(d=>`<option value="${d.id}">${d.name} (${d.breed})</option>`).join(''):'<option>Select client first...</option>';
-}
-function checkDateCapacity(){
-  const ds=document.getElementById('bk-date')?.value;
-  const warn=document.getElementById('cap-warning'); if(!warn||!ds)return;
-  warn.classList.toggle('hidden',booksForDate(ds).length<state.settings.dailyCapacity);
-}
 async function submitBooking(e){
   e.preventDefault();
-  const ds=document.getElementById('bk-date')?.value;
-  const svc=document.querySelector('input[name="svc"]:checked')?.value||'Full Day';
-  if(!ds){showToast('Please select a date.','#EF4444');return;}
-  if(booksForDate(ds).length>=state.settings.dailyCapacity){showToast('That day is fully booked!','#EF4444');return;}
+  const ci=document.getElementById('bk-checkin')?.value;
+  const co=document.getElementById('bk-checkout')?.value||ci;
+  if(!ci){showToast('Please select a start date.','#EF4444');return;}
+  if(co<ci){showToast('Last day must be on or after first day.','#EF4444');return;}
+  const days=nightsCount(ci,co);
+  const svcEl=document.querySelector('input[name="svc"]:checked');
+  const svc=svcEl?.value||'Full Day';
+  const baseRate=svcEl?+(svcEl.dataset.price||getBaseRate(svc)):getBaseRate(svc);
+  // Check capacity for each day
+  const cap=state.settings.dailyCapacity;
+  const a=new Date(ci+'T00:00:00'),b=new Date(co+'T00:00:00');
+  for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1)){
+    const ds=d.toISOString().split('T')[0];
+    if(booksForDate(ds).length>=cap){showToast(`${fmtDate(ds)} is fully booked!`,'#EF4444');return;}
+  }
+  const addonEls=[...(document.querySelectorAll('input[name="addon"]:checked')||[])];
+  const addonNames=addonEls.map(el=>el.value);
+  const addonTotal=addonEls.reduce((s,el)=>s+(+el.dataset.price||0),0);
+  const totalPrice=days*baseRate+addonTotal;
   let clientId,dogId,dogName,clientName;
   if(state.role==='client'){
-    clientId=state.currentClientId; dogId=parseInt(document.getElementById('bk-dog')?.value);
+    clientId=state.currentClientId;
+    dogId=parseInt(document.getElementById('bk-dog')?.value);
     const cl=clients.find(c=>c.id===clientId),dg=cl?.dogs.find(d=>d.id===dogId);
-    dogName=dg?.name||'Dog'; clientName=cl?.name||'Client';
+    dogName=dg?.name||'Dog';clientName=cl?.name||'Client';
+    const photoConsent=document.getElementById('bk-photo')?.checked||false;
+    if(cl)cl.photoConsent=photoConsent;
   }else{
     clientId=parseInt(document.getElementById('bk-client')?.value);
     dogId=parseInt(document.getElementById('bk-dog')?.value);
     if(!clientId||!dogId){showToast('Please select a client and dog.','#EF4444');return;}
     const cl=clients.find(c=>c.id===clientId),dg=cl?.dogs.find(d=>d.id===dogId);
-    dogName=dg?.name||'Dog'; clientName=cl?.name||'Client';
+    dogName=dg?.name||'Dog';clientName=cl?.name||'Client';
   }
-  const price=svc==='Full Day'?state.settings.fullDayRate:state.settings.halfDayRate;
-  bookings.push({id:nextId(bookings),clientId,dogId,dogName,clientName,date:ds,status:'confirmed',service:svc,price});
-  state.showModal=null; render();
-  showToast(`Booked ${dogName} for ${fmtDate(ds)}!`);
-  try{await persistBookings();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+  bookings.push({id:nextId(bookings),clientId,dogId,dogName,clientName,
+    checkIn:ci,checkOut:co,nights:days,status:'confirmed',service:svc,
+    addons:addonNames.join(','),price:totalPrice});
+  state.showModal=null;render();
+  const dateStr=ci===co?fmtDate(ci):`${fmtDateShort(ci)} – ${fmtDateShort(co)} (${days} days)`;
+  showToast(`Booked ${dogName} · ${dateStr}!`);
+  try{
+    await persistBookings();
+    if(state.role==='client')await persistClients();
+  }catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
 }
 async function submitClient(e){
   e.preventDefault();
@@ -1097,35 +1357,57 @@ async function submitClient(e){
   const nc={id:nextId(clients),name,
     email:document.getElementById('cl-email')?.value||'',
     phone:document.getElementById('cl-phone')?.value||'',
+    photoConsent:false,
     dogs:[{id:maxDogId+1,
-      name: document.getElementById('dog-name')?.value||'Dog',
+      name:document.getElementById('dog-name')?.value||'Dog',
       breed:getBreedValue('dog-breed','dog-breed-other'),
-      age:  parseFloat(document.getElementById('dog-age')?.value)||0,
-      birthday: document.getElementById('dog-birthday')?.value||'',
+      age:parseFloat(document.getElementById('dog-age')?.value)||0,
+      birthday:document.getElementById('dog-birthday')?.value||'',
       vaccinated:document.getElementById('dog-vacc')?.value==='true',
       notes:document.getElementById('dog-notes')?.value||'',
-    }]
-  };
-  clients.push(nc); state.showModal=null; render();
+    }]};
+  clients.push(nc);state.showModal=null;render();
   showToast(`${name} added as a client!`);
   try{await persistClients();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
 }
+async function submitService(e){
+  e.preventDefault();
+  const name=document.getElementById('svc-name')?.value?.trim();
+  const type=document.getElementById('svc-type')?.value||'addon';
+  const price=parseFloat(document.getElementById('svc-price')?.value)||0;
+  const editId=document.getElementById('svc-edit-id')?parseInt(document.getElementById('svc-edit-id').value):null;
+  if(!name){showToast('Service name is required.','#EF4444');return;}
+  if(editId){
+    const svc=services.find(s=>s.id===editId);
+    if(svc){svc.name=name;svc.type=type;svc.price=price;}
+  }else{
+    services.push({id:nextId(services),name,type,price,active:true});
+  }
+  state.showModal=null;render();
+  showToast(editId?'Service updated!':'Service added!');
+  try{await persistServices();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+}
+async function toggleService(id){
+  const svc=services.find(s=>s.id===id);
+  if(svc)svc.active=!svc.active;
+  render();
+  try{await persistServices();}catch(err){showToast('Sheet sync failed.','#F97316');}
+}
+async function deleteService(id){
+  const idx=services.findIndex(s=>s.id===id);
+  if(idx>=0)services.splice(idx,1);
+  render();showToast('Service deleted.');
+  try{await persistServices();}catch(err){showToast('Sheet sync failed.','#F97316');}
+}
 function sendInvoiceText(invId){
-  const inv=invoices.find(i=>i.id===invId); if(!inv)return;
+  const inv=invoices.find(i=>i.id===invId);if(!inv)return;
   const cl=clients.find(c=>c.id===inv.clientId);
   const phone=(cl?.phone||'').replace(/\D/g,'');
   const owed=inv.amount-inv.paid;
-  const venmo=state.settings.venmoHandle;
-  const square=state.settings.squareLink;
+  const venmo=state.settings.venmoHandle,square=state.settings.squareLink;
   const payLines=(square?`\nPay by card: ${square}`:'')+(venmo?`\nPay by Venmo: venmo.com/${venmo} (@${venmo})`:'');
-  const msg=`Hi ${inv.clientName}! 🐾 This is a payment reminder from Nigel's Place.`
-    +`\n\nServices: ${inv.items}`
-    +`\nAmount due: $${owed}`
-    +`\nDue date: ${inv.dueDate}`
-    +payLines
-    +`\n\nThank you! 🐶`;
-  const encoded=encodeURIComponent(msg);
-  const smsLink=phone?`sms:${phone}?&body=${encoded}`:`sms:?&body=${encoded}`;
+  const msg=`Hi ${inv.clientName}! 🐾 This is a payment reminder from Nigel's Place.\n\nServices: ${inv.items}\nAmount due: $${owed}\nDue date: ${inv.dueDate}${payLines}\n\nThank you! 🐶`;
+  const smsLink=phone?`sms:${phone}?&body=${encodeURIComponent(msg)}`:`sms:?&body=${encodeURIComponent(msg)}`;
   window.open(smsLink,'_self');
 }
 async function submitInvoice(e){
@@ -1140,43 +1422,34 @@ async function submitInvoice(e){
   const dueDate=document.getElementById('inv-due')?.value||'';
   if(!amount){showToast('Please enter an amount.','#EF4444');return;}
   let status='unpaid';
-  if(paid>=amount) status='paid';
-  else if(paid>0)  status='partial';
-  else if(dueDate&&dueDate<TODAY) status='overdue';
-  const ni={id:nextId(invoices),clientId:cId,clientName:cl?.name||'',
-    amount,paid,status,dueDate,issueDate,items};
-  invoices.push(ni);
-  state.showModal=null; render();
+  if(paid>=amount)status='paid';
+  else if(paid>0)status='partial';
+  else if(dueDate&&dueDate<TODAY)status='overdue';
+  const ni={id:nextId(invoices),clientId:cId,clientName:cl?.name||'',amount,paid,status,dueDate,issueDate,items};
+  invoices.push(ni);state.showModal=null;render();
   showToast(`Invoice created for ${cl?.name||'client'}!`);
   try{await persistInvoices();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
 }
 async function markInvoicePaid(id){
   const inv=invoices.find(i=>i.id===id);
   if(inv){inv.paid=inv.amount;inv.status='paid';}
-  render(); showToast('Invoice marked as paid!');
+  render();showToast('Invoice marked as paid!');
   try{await persistInvoices();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
 }
 async function saveSettings(){
   const v=id=>document.getElementById(id)?.value;
-  const cap=parseInt(v('set-cap')),full=parseFloat(v('set-full'));
-  const half=parseFloat(v('set-half')),groom=parseFloat(v('set-groom'));
-  const biz=v('set-biz')?.trim(),owner=v('set-owner')?.trim();
-  if(cap>0)  state.settings.dailyCapacity=cap;
-  if(full>0) state.settings.fullDayRate=full;
-  if(half>0) state.settings.halfDayRate=half;
-  if(groom>0)state.settings.groomingAddOn=groom;
-  if(biz)    state.settings.businessName=biz;
-  if(owner)  state.settings.ownerName=owner;
-  const venmo=v('set-venmo')?.trim();
-  if(venmo!==undefined) state.settings.venmoHandle=venmo;
-  const sq=v('set-square')?.trim();
-  if(sq!==undefined) state.settings.squareLink=sq;
-  showToast('Settings saved!'); render();
+  const cap=parseInt(v('set-cap')),biz=v('set-biz')?.trim(),owner=v('set-owner')?.trim();
+  if(cap>0)state.settings.dailyCapacity=cap;
+  if(biz)state.settings.businessName=biz;
+  if(owner)state.settings.ownerName=owner;
+  const venmo=v('set-venmo')?.trim();if(venmo!==undefined)state.settings.venmoHandle=venmo;
+  const sq=v('set-square')?.trim();if(sq!==undefined)state.settings.squareLink=sq;
+  showToast('Settings saved!');render();
   try{await persistSettings();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
 }
 
 // ═══════════════════════════════════════════════════
-//  ⑪  INIT
+//  ⑫  INIT
 // ═══════════════════════════════════════════════════
 initGoogleAuth();
 render();
