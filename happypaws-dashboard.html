@@ -1568,7 +1568,10 @@ async function handleVaccUpload(clientId, dogId){
   const input=document.createElement('input');
   input.type='file';
   input.accept='image/*,application/pdf';
+  input.style.display='none';
+  document.body.appendChild(input);
   input.onchange=async()=>{
+    document.body.removeChild(input);
     const file=input.files[0];
     if(!file)return;
     const cl=clients.find(c=>c.id===clientId);
@@ -1627,6 +1630,10 @@ async function handleVaccUpload(clientId, dogId){
       if(btn){btn.disabled=false;btn.textContent='📄 Upload Record';}
     }
   };
+  // Clean up if user cancels without selecting a file
+  input.addEventListener('cancel',()=>{
+    if(document.body.contains(input))document.body.removeChild(input);
+  });
   input.click();
 }
 async function submitBooking(e){
