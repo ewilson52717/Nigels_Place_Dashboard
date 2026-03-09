@@ -609,7 +609,7 @@ function buildInvoicesView(){
   <div class="p-6 slide-in">
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold text-gray-800">Invoices</h1>
-      <button class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'"">+ New Invoice</button>
+      <button onclick="openAddInvoiceModal()" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ New Invoice</button>
     </div>
     <div class="grid grid-cols-3 gap-4 mb-6">
       <div class="stat-card text-center"><div class="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Invoiced</div><div class="text-2xl font-bold text-gray-800">$${total}</div></div>
@@ -714,10 +714,70 @@ function buildClientBookings(){
 // ═══════════════════════════════════════════════════
 function buildModal(){
   const m=state.showModal; if(!m)return'';
-  if(m.type==='day')      return buildDayModal(m.date);
-  if(m.type==='booking')  return buildBookingModal(m.date);
-  if(m.type==='addClient')return buildAddClientModal();
+  if(m.type==='day')        return buildDayModal(m.date);
+  if(m.type==='booking')    return buildBookingModal(m.date);
+  if(m.type==='addClient')  return buildAddClientModal();
+  if(m.type==='addInvoice') return buildAddInvoiceModal();
   return'';
+}
+function buildAddInvoiceModal(){
+  const today=new Date().toISOString().split('T')[0];
+  const due=new Date(Date.now()+14*864e5).toISOString().split('T')[0];
+  return`
+  <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 slide-in max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-lg font-bold text-gray-800">New Invoice</h2>
+        <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
+      </div>
+      <form onsubmit="submitInvoice(event)" class="space-y-4">
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Client *</label>
+          <select id="inv-client" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="populateInvoiceItems()">
+            <option value="">Select client...</option>
+            ${clients.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Services / Description *</label>
+          <input id="inv-items" type="text" required placeholder="e.g. 4x Full Day, 1x Half Day"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+          <p class="text-xs text-gray-400 mt-1">Tip: click a client above to auto-fill recent bookings</p>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Amount ($) *</label>
+            <input id="inv-amount" type="number" min="0" step="0.01" required placeholder="0.00"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Amount Paid ($)</label>
+            <input id="inv-paid" type="number" min="0" step="0.01" placeholder="0.00" value="0"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Issue Date</label>
+            <input id="inv-issue" type="date" value="${today}"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Due Date</label>
+            <input id="inv-due" type="date" value="${due}"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+          </div>
+        </div>
+        <div class="flex gap-2 pt-1">
+          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold"
+            style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">
+            Create Invoice
+          </button>
+          <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>`;
 }
 function buildDayModal(ds){
   const bks=booksForDate(ds),cap=state.settings.dailyCapacity,c=capColor(bks.length,cap);
@@ -853,7 +913,24 @@ function nextMonth()      {state.calendarDate=new Date(state.calendarDate.getFul
 function closeModal()     {state.showModal=null;render();}
 function openDayModal(ds)     {state.showModal={type:'day',date:ds};render();}
 function openBookingModal(ds) {state.showModal={type:'booking',date:ds};render();}
-function openAddClientModal() {state.showModal={type:'addClient'};render();}
+function openAddClientModal()  {state.showModal={type:'addClient'};render();}
+function openAddInvoiceModal() {state.showModal={type:'addInvoice'};render();}
+function populateInvoiceItems(){
+  const cId=parseInt(document.getElementById('inv-client')?.value);
+  if(!cId)return;
+  const cl=clients.find(c=>c.id===cId); if(!cl)return;
+  const recent=bookings.filter(b=>b.clientId===cId&&b.status==='confirmed')
+    .sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10);
+  if(!recent.length)return;
+  const counts={};
+  recent.forEach(b=>{counts[b.service]=(counts[b.service]||0)+1;});
+  const desc=Object.entries(counts).map(([svc,n])=>`${n}x ${svc}`).join(', ');
+  const total=recent.reduce((s,b)=>s+b.price,0);
+  const itemsEl=document.getElementById('inv-items');
+  const amtEl=document.getElementById('inv-amount');
+  if(itemsEl)itemsEl.value=desc;
+  if(amtEl)amtEl.value=total;
+}
 
 function updateDogSelect(){
   const cId=parseInt(document.getElementById('bk-client')?.value);
@@ -909,6 +986,28 @@ async function submitClient(e){
   clients.push(nc); state.showModal=null; render();
   showToast(`${name} added as a client!`);
   try{await persistClients();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+}
+async function submitInvoice(e){
+  e.preventDefault();
+  const cId=parseInt(document.getElementById('inv-client')?.value);
+  if(!cId){showToast('Please select a client.','#EF4444');return;}
+  const cl=clients.find(c=>c.id===cId);
+  const amount=parseFloat(document.getElementById('inv-amount')?.value)||0;
+  const paid=parseFloat(document.getElementById('inv-paid')?.value)||0;
+  const items=document.getElementById('inv-items')?.value?.trim()||'';
+  const issueDate=document.getElementById('inv-issue')?.value||'';
+  const dueDate=document.getElementById('inv-due')?.value||'';
+  if(!amount){showToast('Please enter an amount.','#EF4444');return;}
+  let status='unpaid';
+  if(paid>=amount) status='paid';
+  else if(paid>0)  status='partial';
+  else if(dueDate&&dueDate<TODAY) status='overdue';
+  const ni={id:nextId(invoices),clientId:cId,clientName:cl?.name||'',
+    amount,paid,status,dueDate,issueDate,items};
+  invoices.push(ni);
+  state.showModal=null; render();
+  showToast(`Invoice created for ${cl?.name||'client'}!`);
+  try{await persistInvoices();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
 }
 async function markInvoicePaid(id){
   const inv=invoices.find(i=>i.id===id);
