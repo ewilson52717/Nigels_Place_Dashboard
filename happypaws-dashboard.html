@@ -454,6 +454,7 @@ let driveToken=null;
 // Key = "parentId:folderName" (parentId is 'root' when no parent), value = Drive folder ID.
 let _folderIdCache={};
 let _bkType='daycare'; // 'daycare' | 'boarding' — persists while modal is open, reset on open
+let _dailySchedule={}; // { 'YYYY-MM-DD': 'Full Day' | 'Half Day' | 'Boarding' }
 try{_folderIdCache=JSON.parse(localStorage.getItem('np_folder_cache')||'{}');}catch(e){}
 // Cache Drive image blob URLs by fileId — avoids re-fetching on every render()
 const _driveImgCache={};
@@ -869,22 +870,12 @@ function buildLogin(){
           </div>
           <div class="text-gray-300 group-hover:text-amber-600">→</div>
         </button>
-        <div class="relative flex items-center gap-3">
-          <div class="flex-1 h-px bg-gray-100"></div>
-          <span class="text-xs text-gray-300 uppercase tracking-widest">or try demo</span>
-          <div class="flex-1 h-px bg-gray-100"></div>
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <button onclick="enterDemo('admin')" class="p-3 rounded-xl border border-gray-100 hover:bg-gray-50 transition-all text-center">
-            <div class="text-xl mb-1">🏠</div><div class="text-xs font-semibold text-gray-600">Demo Admin</div>
-          </button>
-          <button onclick="enterDemo('client')" class="p-3 rounded-xl border border-gray-100 hover:bg-gray-50 transition-all text-center">
-            <div class="text-xl mb-1">🐶</div><div class="text-xs font-semibold text-gray-600">Demo Client</div>
-          </button>
+        <div class="mt-1 text-center text-xs text-gray-400">
+          Admins and approved clients can sign in above.
         </div>
       </div>
       <div class="mt-5 p-3 bg-amber-50 rounded-xl border border-amber-100 text-center">
-        <p class="text-amber-600 text-xs font-medium">⚡ Google sign-in saves real data to your Drive</p>
+        <p class="text-amber-600 text-xs font-medium">Sign in with the Google email on file with your host</p>
       </div>
       <div class="mt-4 text-center" style="font-size:0.7rem;color:#D1D5DB;">
         <button onclick="showPolicyModal('privacy')" style="background:none;border:none;cursor:pointer;color:#D1D5DB;text-decoration:underline;font-size:0.7rem;font-family:inherit;">Privacy Policy</button>
@@ -1693,44 +1684,43 @@ function buildBookingModal(selectedDate){
           <select id="bk-dog" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="checkDogVaccWarning()">
             ${cl?.dogs.map(d=>`<option value="${d.id}">${d.name} (${d.breed})</option>`).join('')||'<option>No dogs on file</option>'}
           </select></div>`}
-        <!-- ── STEP 1: BOOKING TYPE ─────────────────────────── -->
+        <!-- ── STEP 1: QUICK SET ALL DAYS ──────────────────── -->
         <div>
-          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Booking Type</label>
-          <div class="grid grid-cols-2 gap-2">
-            <label id="bkt-daycare-card" class="svc-radio-label flex items-center gap-2.5 p-3 rounded-xl cursor-pointer" style="border:2px solid #C4952A;background:#FEF3C7">
-              <input type="radio" name="bk-type" value="daycare" checked class="accent-amber-700" onchange="onBkTypeChange()">
-              <div>
-                <div class="text-sm font-semibold text-gray-700">☀️ Daycare</div>
-                <div class="text-xs text-gray-400">Dog goes home daily</div>
-              </div>
-            </label>
-            <label id="bkt-boarding-card" class="svc-radio-label flex items-center gap-2.5 p-3 rounded-xl cursor-pointer" style="border:1px solid #E5E7EB">
-              <input type="radio" name="bk-type" value="boarding" class="accent-amber-700" onchange="onBkTypeChange()">
-              <div>
-                <div class="text-sm font-semibold text-gray-700">🏡 Boarding</div>
-                <div class="text-xs text-gray-400">Dog stays overnight</div>
-              </div>
-            </label>
+          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Quick Set — Apply to All Days</label>
+          <p class="text-xs text-gray-400 mb-2">Select dates first, then customize each day individually below.</p>
+          <div class="flex gap-2">
+            <button type="button" id="qs-fullday" onclick="applyQuickSet('daycare')"
+              class="flex-1 py-2 rounded-xl text-xs font-semibold transition-all border-2"
+              style="border-color:#C4952A;background:#FEF3C7;color:#7B4015">☀️ Full Day</button>
+            <button type="button" id="qs-halfday" onclick="applyQuickSet('halfday')"
+              class="flex-1 py-2 rounded-xl text-xs font-semibold transition-all border-2"
+              style="border-color:#E5E7EB;background:#F9FAFB;color:#6B7280">½ Half Day</button>
+            <button type="button" id="qs-boarding" onclick="applyQuickSet('boarding')"
+              class="flex-1 py-2 rounded-xl text-xs font-semibold transition-all border-2"
+              style="border-color:#E5E7EB;background:#F9FAFB;color:#6B7280">🏡 Boarding</button>
           </div>
         </div>
 
-        <!-- ── STEP 2: DATES (labels update via JS) ─────────── -->
+        <!-- ── STEP 2: DATES ─────────────────────────────────── -->
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label id="bk-checkin-label" class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Date</label>
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Start Date</label>
             <input type="date" id="bk-checkin" value="${selectedDate||''}" min="${TODAY}"
               class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="syncCheckout()">
           </div>
           <div>
-            <label id="bk-checkout-label" class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Last Day</label>
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">End Date</label>
             <input type="date" id="bk-checkout" value="${selectedDate||''}" min="${TODAY}"
-              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="updateBookingPrice();onBkTypeChange()">
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="syncCheckout()">
           </div>
         </div>
 
-        <!-- Inline note for multi-day half-day daycare -->
-        <div id="halfday-multiday-note" class="hidden text-xs p-2.5 rounded-xl bg-blue-50 text-blue-700 border border-blue-200">
-          📋 You're booking <strong id="halfday-multiday-count"></strong> consecutive half-day visits — the dog will be dropped off and picked up each day.
+        <!-- ── STEP 3: PER-DAY SCHEDULE GRID ─────────────────── -->
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Daily Schedule</label>
+          <div id="daily-sched-grid" class="rounded-xl border border-gray-100 bg-gray-50/60 px-3 py-2">
+            <div class="text-xs text-gray-400 text-center py-2">Select dates above to build your schedule</div>
+          </div>
         </div>
 
         <div id="vacc-warning" class="text-xs hidden p-2.5 rounded-xl"></div>
@@ -1742,26 +1732,7 @@ function buildBookingModal(selectedDate){
         </div>
         <div id="cap-warning" class="text-xs text-red-500 hidden">⚠️ One or more days in this range is fully booked!</div>
 
-        <!-- ── STEP 3: SERVICE (daycare only; boarding hides this) ── -->
-        <div id="svc-section">
-          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Service <span id="svc-section-sublabel" class="font-normal normal-case text-gray-400">(per visit)</span></label>
-          <div class="grid grid-cols-2 gap-2" id="svc-grid">
-            ${displayBase.map((s,i)=>`
-              <label class="svc-radio-label flex items-center gap-2.5 p-3 rounded-xl cursor-pointer${s.name.toLowerCase().includes('half')?' svc-halfday-opt':''}" style="border:${i===0?'2px solid #C4952A;background:#FEF3C7':'1px solid #E5E7EB'}">
-                <input type="radio" name="svc" value="${s.name}" data-price="${s.price}" ${i===0?'checked':''} class="accent-amber-700" onchange="updateBookingPrice();onBkTypeChange()">
-                <div><div class="text-sm font-semibold text-gray-700">${s.name}</div>
-                  <div class="text-xs text-gray-400 svc-rate-label">$${s.price}/visit</div></div>
-              </label>`).join('')}
-          </div>
-        </div>
-        <!-- Boarding implied service pill (shown instead of svc-section when boarding) -->
-        <div id="boarding-svc-pill" class="hidden flex items-center gap-3 p-3 rounded-xl border border-amber-200 bg-amber-50/60">
-          <span class="text-xl">🏡</span>
-          <div>
-            <div class="text-sm font-semibold text-gray-700">Boarding (Full Day Rate)</div>
-            <div class="text-xs text-gray-400">$${state.settings.fullDayRate}/night · drop-off &amp; pick-up arranged separately</div>
-          </div>
-        </div>
+        <!-- service section removed — scheduling handled by per-day grid above -->
         ${activeAddons.length>0?`
         <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Add-Ons</label>
           <div class="space-y-1.5">
@@ -1923,14 +1894,14 @@ function nextMonth()      {state.calendarDate=new Date(state.calendarDate.getFul
 function closeModal()     {state.showModal=null;render();}
 function openDayModal(ds)     {state.showModal={type:'day',date:ds};render();}
 function openBookingModal(ds) {
-  _bkType='daycare'; // always start fresh as daycare; user selects boarding if needed
+  _bkType='daycare';
+  _dailySchedule={}; // reset per-day schedule on each open
   state.showModal={type:'booking',date:ds};
   render();
-  // Initialize vaccine warning and booking type UI immediately after modal renders
   setTimeout(()=>{
     if(state.role!=='client')updateDogSelect();
     checkDogVaccWarning();
-    onBkTypeChange(); // set correct initial service/label state
+    rebuildDailySchedule(); // build initial grid for the pre-selected date
   },0);
 }
 function openAddClientModal() {state.showModal={type:'addClient'};render();}
@@ -1938,89 +1909,87 @@ function openAddInvoiceModal(){state.showModal={type:'addInvoice'};render();}
 function openAddServiceModal(){state.showModal={type:'addService'};render();}
 function openEditServiceModal(id){state.showModal={type:'editService',serviceId:id};render();}
 
-// ─── BOOKING TYPE LOGIC ──────────────────────────────────────────────────────
-function onBkTypeChange(){
-  const radio=document.querySelector('input[name="bk-type"]:checked');
-  const type=radio?.value||_bkType||'daycare';
-  _bkType=type;
-  const isBoarding=type==='boarding';
-
-  // Style the type selector cards
-  const dcCard=document.getElementById('bkt-daycare-card');
-  const bdCard=document.getElementById('bkt-boarding-card');
-  if(dcCard)dcCard.style.cssText=!isBoarding?'border:2px solid #C4952A;background:#FEF3C7':'border:1px solid #E5E7EB';
-  if(bdCard)bdCard.style.cssText=isBoarding?'border:2px solid #C4952A;background:#FEF3C7':'border:1px solid #E5E7EB';
-
-  // Update date field labels
-  const ciLbl=document.getElementById('bk-checkin-label');
-  const coLbl=document.getElementById('bk-checkout-label');
-  if(ciLbl)ciLbl.textContent=isBoarding?'Check-In Date':'Date';
-  if(coLbl)coLbl.textContent=isBoarding?'Check-Out Date':'Last Day';
-
-  // Show date range label only if checkout is different from checkin
+// ─── PER-DAY SCHEDULE LOGIC ──────────────────────────────────────────────────
+function getDatesInRange(ci,co){
+  const dates=[];
+  const a=new Date(ci+'T00:00:00'),b=new Date(co+'T00:00:00');
+  for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1))dates.push(d.toISOString().split('T')[0]);
+  return dates;
+}
+function rebuildDailySchedule(){
   const ci=document.getElementById('bk-checkin')?.value;
   const co=document.getElementById('bk-checkout')?.value||ci;
-  const multiDay=ci&&co&&ci!==co;
-  if(ciLbl&&multiDay)ciLbl.textContent=isBoarding?'Check-In':'First Day';
-
-  // Boarding vs daycare service display
-  const svcSection=document.getElementById('svc-section');
-  const boardingPill=document.getElementById('boarding-svc-pill');
-  if(isBoarding){
-    if(svcSection)svcSection.style.display='none';
-    if(boardingPill)boardingPill.style.display='flex';
-  }else{
-    if(svcSection)svcSection.style.display='';
-    if(boardingPill)boardingPill.style.display='none';
-  }
-
-  // When boarding: ensure full-day radio is selected (force select even if half-day was checked)
-  if(isBoarding){
-    const fullDayInput=document.querySelector('input[name="svc"][value="Full Day"],input[name="svc"]:not([value*="Half"]):not([value*="half"])');
-    if(fullDayInput&&!fullDayInput.checked){
-      fullDayInput.checked=true;
-      // Reset card styles in svc-grid to reflect new selection
-      document.querySelectorAll('.svc-radio-label').forEach(el=>{
-        const inp=el.querySelector('input[name="svc"]');
-        if(inp)el.style.cssText=inp.checked?'border:2px solid #C4952A;background:#FEF3C7':'border:1px solid #E5E7EB';
-      });
-    }
-  }
-
-  // Service sublabel text
-  const svcSublbl=document.getElementById('svc-section-sublabel');
-  if(svcSublbl)svcSublbl.textContent='(per visit)';
-
-  // Half-day consecutive note: show when daycare + multi-day + half-day selected
-  const hdChecked=document.querySelector('input[name="svc"][value*="Half"],input[name="svc"][value*="half"]')?.checked||false;
-  const hdNote=document.getElementById('halfday-multiday-note');
-  const hdCount=document.getElementById('halfday-multiday-count');
-  if(hdNote){
-    const showNote=!isBoarding&&multiDay&&hdChecked;
-    hdNote.classList.toggle('hidden',!showNote);
-    if(showNote&&ci&&co){
-      const days=nightsCount(ci,co);
-      if(hdCount)hdCount.textContent=`${days} half-day`;
-    }
-  }
-
-  // Rate labels on service options
-  document.querySelectorAll('.svc-rate-label').forEach(el=>{
-    el.textContent=el.closest('label')?.querySelector('input')?.checked
-      ?`$${el.closest('label')?.querySelector('input')?.dataset.price||''}/visit`
-      :`$${el.closest('label')?.querySelector('input')?.dataset.price||''}/visit`;
-  });
-
+  if(!ci){_dailySchedule={};renderDailyScheduleGrid();return;}
+  const dates=getDatesInRange(ci,co);
+  const def=_bkType==='boarding'?'Boarding':'Full Day';
+  const next={};
+  dates.forEach(ds=>{next[ds]=_dailySchedule[ds]||def;});
+  _dailySchedule=next;
+  renderDailyScheduleGrid();
   updateBookingPrice();
 }
+function applyQuickSet(qtype){
+  const ci=document.getElementById('bk-checkin')?.value;
+  const co=document.getElementById('bk-checkout')?.value||ci;
+  if(!ci)return;
+  const svcType=qtype==='boarding'?'Boarding':qtype==='halfday'?'Half Day':'Full Day';
+  _bkType=qtype==='boarding'?'boarding':'daycare';
+  getDatesInRange(ci,co).forEach(ds=>{_dailySchedule[ds]=svcType;});
+  // Update quick-set button highlight
+  ['qs-fullday','qs-halfday','qs-boarding'].forEach(id=>{
+    const el=document.getElementById(id);if(!el)return;
+    const active=(id==='qs-boarding'&&qtype==='boarding')||(id==='qs-halfday'&&qtype==='halfday')||(id==='qs-fullday'&&qtype==='daycare');
+    el.style.borderColor=active?'#C4952A':'#E5E7EB';
+    el.style.background=active?'#FEF3C7':'#F9FAFB';
+    el.style.color=active?'#7B4015':'#6B7280';
+  });
+  renderDailyScheduleGrid();
+  updateBookingPrice();
+}
+function setDayType(ds,type){
+  _dailySchedule[ds]=type;
+  renderDailyScheduleGrid();
+  updateBookingPrice();
+}
+function renderDailyScheduleGrid(){
+  const container=document.getElementById('daily-sched-grid');if(!container)return;
+  const ci=document.getElementById('bk-checkin')?.value;
+  const co=document.getElementById('bk-checkout')?.value||ci;
+  if(!ci||Object.keys(_dailySchedule).length===0){
+    container.innerHTML='<div class="text-xs text-gray-400 text-center py-2">Select dates above to build your schedule</div>';
+    return;
+  }
+  const dates=getDatesInRange(ci,co);
+  const fullRate=state.settings.fullDayRate;
+  const halfRate=state.settings.halfDayRate;
+  const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  container.innerHTML=dates.map(ds=>{
+    const dt=new Date(ds+'T00:00:00');
+    const dayLbl=`${dayNames[dt.getDay()]} ${fmtDateShort(ds)}`;
+    const cur=_dailySchedule[ds]||'Full Day';
+    const btn=(label,val)=>{
+      const active=cur===val;
+      return `<button type="button" onclick="setDayType('${ds}','${val}')"
+        class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all"
+        style="${active?'background:#C4952A;color:#fff;border:2px solid #C4952A':'background:#F9FAFB;color:#6B7280;border:2px solid #E5E7EB'}">${label}</button>`;
+    };
+    const rateLabel=cur==='Half Day'?`$${halfRate}`:`$${fullRate}${cur==='Boarding'?'/nt':'/day'}`;
+    return `<div class="flex items-center gap-2 py-1.5 border-b border-gray-100 last:border-0">
+      <span class="text-xs text-gray-500 w-20 flex-shrink-0 font-medium">${dayLbl}</span>
+      <div class="flex gap-1">${btn('☀️ Full','Full Day')}${btn('½ Half','Half Day')}${btn('🏡 Board','Boarding')}</div>
+      <span class="text-xs text-gray-400 ml-auto">${rateLabel}</span>
+    </div>`;
+  }).join('');
+}
+// Legacy stub — kept so any remaining callers don't throw
+function onBkTypeChange(){rebuildDailySchedule();}
 
 function syncCheckout(){
   const ci=document.getElementById('bk-checkin')?.value;
   const co=document.getElementById('bk-checkout');
   if(ci&&co&&co.value&&co.value<ci)co.value=ci;
   checkDateCapacity();
-  onBkTypeChange(); // re-evaluate labels + half-day visibility when dates change
-  updateBookingPrice();
+  rebuildDailySchedule(); // re-sync day grid whenever dates change
 }
 function stepAddon(inputId,delta){
   const el=document.getElementById(inputId);if(!el)return;
@@ -2028,46 +1997,38 @@ function stepAddon(inputId,delta){
   updateBookingPrice();
 }
 function updateBookingPrice(){
-  const ci=document.getElementById('bk-checkin')?.value;
-  const co=document.getElementById('bk-checkout')?.value||ci;
-  if(!ci)return;
-  const count=nightsCount(ci,co);
-  const isBoarding=_bkType==='boarding';
-  // For boarding: always use full day rate; for daycare: use selected service
-  const svcEl=document.querySelector('input[name="svc"]:checked');
-  const baseRate=isBoarding
-    ?state.settings.fullDayRate
-    :(svcEl?+(svcEl.dataset.price||getBaseRate(svcEl.value)):state.settings.fullDayRate);
-  const isHalfDay=!isBoarding&&(svcEl?.value||'').toLowerCase().includes('half');
-  // Unit terminology: boarding→nights, half-day→visits, full-day→days
-  const unit=isBoarding?(count===1?'night':'nights'):isHalfDay?(count===1?'visit':'visits'):(count===1?'day':'days');
-  // Stay add-ons (checkbox)
+  if(Object.keys(_dailySchedule).length===0)return;
+  const fullRate=state.settings.fullDayRate;
+  const halfRate=state.settings.halfDayRate;
+  // Tally per-day types
+  let boardingNts=0,fullDays=0,halfDays=0;
+  Object.values(_dailySchedule).forEach(t=>{
+    if(t==='Boarding')boardingNts++;
+    else if(t==='Half Day')halfDays++;
+    else fullDays++;
+  });
+  const baseTotal=boardingNts*fullRate+fullDays*fullRate+halfDays*halfRate;
+  // Add-ons
   const stayEls=[...(document.querySelectorAll('input[name="addon"]:checked')||[])];
   let addonTotal=stayEls.reduce((s,el)=>s+(+el.dataset.price||0),0);
-  // Qty add-ons (stepper)
   const qtyEls=[...(document.querySelectorAll('input[name="addon-qty"]')||[])];
   qtyEls.forEach(el=>{
     const qty=+el.value||0;
     const lbl=document.getElementById('aqty-lbl-'+el.dataset.svcid);
-    if(qty>0){
-      addonTotal+=qty*(+el.dataset.price||0);
-      if(lbl){lbl.textContent=`$${qty*(+el.dataset.price||0)}`;lbl.classList.remove('hidden');}
-    }else{
-      if(lbl)lbl.classList.add('hidden');
-    }
+    if(qty>0){addonTotal+=qty*(+el.dataset.price||0);if(lbl){lbl.textContent=`$${qty*(+el.dataset.price||0)}`;lbl.classList.remove('hidden');}}
+    else{if(lbl)lbl.classList.add('hidden');}
   });
-  const total=count*baseRate+addonTotal;
+  const total=baseTotal+addonTotal;
   const preview=document.getElementById('price-preview');
   const lines=document.getElementById('price-lines');
   const totalEl=document.getElementById('price-total');
   if(preview&&lines&&totalEl){
-    const svcLabel=isBoarding?'Boarding':svcEl?.value||'Full Day';
-    let html=`<div>${count} ${unit} · ${svcLabel} · $${baseRate}/${unit.replace(/s$/,'')} = $${count*baseRate}</div>`;
+    let html='';
+    if(boardingNts>0)html+=`<div>🏡 ${boardingNts} boarding ${boardingNts===1?'night':'nights'} · $${fullRate}/night = $${boardingNts*fullRate}</div>`;
+    if(fullDays>0)html+=`<div>☀️ ${fullDays} full ${fullDays===1?'day':'days'} · $${fullRate}/day = $${fullDays*fullRate}</div>`;
+    if(halfDays>0)html+=`<div>½ ${halfDays} half ${halfDays===1?'day':'days'} · $${halfRate}/visit = $${halfDays*halfRate}</div>`;
     stayEls.forEach(el=>{html+=`<div>+ ${el.value}: $${el.dataset.price}</div>`;});
-    qtyEls.forEach(el=>{
-      const qty=+el.value||0;
-      if(qty>0)html+=`<div>+ ${el.dataset.svcname}: ${qty} × $${el.dataset.price} = $${qty*(+el.dataset.price||0)}</div>`;
-    });
+    qtyEls.forEach(el=>{const qty=+el.value||0;if(qty>0)html+=`<div>+ ${el.dataset.svcname}: ${qty} × $${el.dataset.price} = $${qty*(+el.dataset.price||0)}</div>`;});
     lines.innerHTML=html;
     totalEl.textContent=`Total: $${total}`;
     preview.classList.remove('hidden');
@@ -2538,11 +2499,15 @@ async function submitBooking(e){
   if(!ci){showToast('Please select a start date.','#EF4444');return;}
   if(co<ci){showToast('Last day must be on or after first day.','#EF4444');return;}
   const days=nightsCount(ci,co);
-  const isBoarding=_bkType==='boarding';
-  const svcEl=document.querySelector('input[name="svc"]:checked');
-  // Boarding always uses Full Day rate and shows as "Boarding" service
-  const svc=isBoarding?'Boarding':(svcEl?.value||'Full Day');
-  const baseRate=isBoarding?state.settings.fullDayRate:(svcEl?+(svcEl.dataset.price||getBaseRate(svc)):getBaseRate(svc));
+  // Service label from per-day schedule
+  const typeSet=[...new Set(Object.values(_dailySchedule))];
+  const svc=typeSet.length===1?typeSet[0]:'Mixed';
+  // Per-day pricing
+  const fullRate=state.settings.fullDayRate;
+  const halfRate=state.settings.halfDayRate;
+  let baseRate=0; // kept for compat; actual base total computed below
+  let perDayTotal=0;
+  Object.values(_dailySchedule).forEach(t=>{perDayTotal+=(t==='Half Day'?halfRate:fullRate);});
   // Check capacity for each day (respects per-date overrides)
   const a=new Date(ci+'T00:00:00'),b=new Date(co+'T00:00:00');
   for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1)){
@@ -2562,7 +2527,7 @@ async function submitBooking(e){
       addonTotal+=qty*(+el.dataset.price||0);
     }
   });
-  const totalPrice=days*baseRate+addonTotal;
+  const totalPrice=perDayTotal+addonTotal;
   let clientId,dogId,dogName,clientName;
   if(state.role==='client'){
     clientId=state.currentClientId;
@@ -2594,6 +2559,7 @@ async function submitBooking(e){
   }
   bookings.push({id:nextId(bookings),clientId,dogId,dogName,clientName,
     checkIn:ci,checkOut:co,nights:days,status:'confirmed',service:svc,
+    dailySchedule:{..._dailySchedule},
     addons:addonNames.join(','),price:totalPrice});
   state.showModal=null;render();
   const dateStr=ci===co?fmtDate(ci):`${fmtDateShort(ci)} – ${fmtDateShort(co)} (${days} days)`;
