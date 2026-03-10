@@ -40,6 +40,29 @@
     .policy-footer { padding:0.85rem 1.5rem; text-align:center; border-top:1px solid #F3F4F6; background:white; font-size:0.72rem; color:#9CA3AF; }
     .policy-footer a, .policy-footer button.policy-link { color:#9CA3AF; text-decoration:underline; background:none; border:none; cursor:pointer; font-size:0.72rem; font-family:inherit; padding:0; }
     .policy-footer a:hover, .policy-footer button.policy-link:hover { color:#6B7280; }
+    /* ── Mobile nav drawer ── */
+    #admin-sidebar { transition: transform 0.26s cubic-bezier(0.4,0,0.2,1); }
+    #mob-overlay   { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.42); z-index:290; }
+    #mob-overlay.mob-open { display:block; }
+    @media (max-width:767px){
+      #admin-sidebar {
+        position:fixed !important; top:0; left:0; bottom:0; height:100%;
+        z-index:300; transform:translateX(-100%); width:260px !important;
+      }
+      #admin-sidebar.mob-open { transform:translateX(0); box-shadow:6px 0 28px rgba(0,0,0,0.35); }
+      /* Push content below mobile top bar */
+      #admin-main { padding-top:52px; }
+      /* Tighter page padding on phones */
+      .mob-px { padding-left:1rem !important; padding-right:1rem !important; }
+      .mob-pt { padding-top:1rem !important; }
+      /* Stat cards tighter on mobile */
+      .stat-card { padding:0.85rem; }
+      /* Modal inner padding reduced */
+      .modal-overlay > div { padding:1rem !important; }
+    }
+    /* Mobile top bar (only on small screens) */
+    #mob-topbar { display:none; }
+    @media (max-width:767px){ #mob-topbar { display:flex; } }
     /* Policy modal overlay */
     .policy-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9000; display:flex; align-items:center; justify-content:center; padding:1rem; }
     .policy-modal-box { background:white; border-radius:16px; max-width:680px; width:100%; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.3); overflow:hidden; }
@@ -540,6 +563,7 @@ document.addEventListener('visibilitychange',()=>{
 //  ⑦  GOOGLE AUTH
 // ═══════════════════════════════════════════════════
 let tokenClient=null,silentSignIn=false;
+let _mobileMenuOpen=false;
 // driveToken mirrors state.accessToken — they are the same token now that all scopes are consolidated.
 let driveToken=null;
 // Persistent folder ID cache — avoids duplicate folder creation across sessions.
@@ -1308,8 +1332,28 @@ function buildAdminLayout(){
   };
   const syncDisplay=state.mode==='live'&&lastSynced?`<div class="text-xs px-3 py-1" style="color:rgba(255,255,255,0.3)">⏱ Synced: ${fmtSynced()}</div>`:'';
   return`
+  <!-- ── Mobile top bar ── -->
+  <div id="mob-topbar" class="fixed top-0 left-0 right-0 z-[250] items-center justify-between px-4"
+       style="background:linear-gradient(90deg,#5C3317,#2A1408);height:52px;min-height:52px;">
+    <button onclick="toggleMobileMenu()" aria-label="Open menu"
+      style="background:rgba(255,255,255,0.13);border:1px solid rgba(255,255,255,0.22);border-radius:10px;padding:7px 10px;cursor:pointer;display:flex;align-items:center;justify-content:center;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+        <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+    <div class="flex items-center gap-2">
+      <img src="${LOGO_URL}" style="width:30px;height:30px;object-fit:contain;border-radius:6px;">
+      <span style="color:#fff;font-weight:700;font-size:0.95rem;">Nigel's Place</span>
+    </div>
+    <button onclick="openBookingModal(null)"
+      style="background:#C4952A;border:none;border-radius:10px;padding:7px 12px;color:#fff;font-size:0.78rem;font-weight:600;cursor:pointer;">
+      + Book
+    </button>
+  </div>
+  <!-- ── Mobile overlay ── -->
+  <div id="mob-overlay" onclick="toggleMobileMenu(false)"></div>
   <div class="flex h-screen overflow-hidden bg-gray-50">
-    <aside class="w-56 flex flex-col flex-shrink-0" style="background:linear-gradient(to bottom,#5C3317,#2A1408)">
+    <aside id="admin-sidebar" class="w-56 flex flex-col flex-shrink-0" style="background:linear-gradient(to bottom,#5C3317,#2A1408)">
       <div class="p-5 border-b border-white/10">
         <img src="${LOGO_URL}" style="width:60px;margin:0 auto 0.2rem;display:block">
         <div class="text-white font-bold text-sm leading-tight text-center">Nigel's Place</div>
@@ -1350,7 +1394,7 @@ function buildAdminLayout(){
         </div>
       </div>
     </aside>
-    <main class="flex-1 overflow-auto">${views[state.view]||views.dashboard}</main>
+    <main id="admin-main" class="flex-1 overflow-auto">${views[state.view]||views.dashboard}</main>
   </div>
   ${state.showModal?buildModal():''}`;
 }
@@ -1358,31 +1402,32 @@ function buildClientLayout(){
   const cl=clients.find(c=>c.id===state.currentClientId);
   return`
   <div class="min-h-screen bg-gray-50">
-    <header class="bg-white border-b border-gray-100 px-6 py-3 flex items-center justify-between sticky top-0 z-10 shadow-sm">
+    <header class="bg-white border-b border-gray-100 px-4 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-10 shadow-sm">
       <div class="flex items-center gap-2">
-        <img src="${LOGO_URL}" style="width:34px;height:34px;object-fit:contain">
-        <span class="font-bold text-gray-800 text-sm">Nigel's Place</span>
-        ${state.mode==='demo'?'<span class="badge bg-amber-100 text-amber-600 ml-2">Demo</span>':''}
+        <img src="${LOGO_URL}" style="width:32px;height:32px;object-fit:contain;border-radius:6px;">
+        <span class="font-bold text-gray-800 text-sm hidden sm:inline">Nigel's Place</span>
+        ${state.mode==='demo'?'<span class="badge bg-amber-100 text-amber-600">Demo</span>':''}
       </div>
+      <!-- Nav tabs centred on mobile -->
       <div class="flex items-center gap-1">
         <button onclick="setClientView('home')"
-          class="px-3 py-1.5 text-sm rounded-lg transition-all ${state.clientView==='home'?'text-amber-800 font-semibold" style="background:#FEF3C7"':'text-gray-500 hover:bg-gray-100'}">
-          📅 Book
+          class="px-3 py-2 text-sm rounded-xl transition-all font-medium ${state.clientView==='home'?'text-amber-800" style="background:#FEF3C7"':'text-gray-500 hover:bg-gray-100'}">
+          📅 <span class="hidden sm:inline">Book</span>
         </button>
         <button onclick="setClientView('bookings')"
-          class="px-3 py-1.5 text-sm rounded-lg transition-all ${state.clientView==='bookings'?'text-amber-800 font-semibold" style="background:#FEF3C7"':'text-gray-500 hover:bg-gray-100'}">
-          📋 My Bookings
+          class="px-3 py-2 text-sm rounded-xl transition-all font-medium ${state.clientView==='bookings'?'text-amber-800" style="background:#FEF3C7"':'text-gray-500 hover:bg-gray-100'}">
+          📋 <span class="hidden sm:inline">My Bookings</span>
         </button>
-        <div class="ml-2 pl-2 border-l flex items-center gap-2">
-          <div class="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold" style="background:#7B4015">
-            ${cl?cl.name[0]:'?'}
-          </div>
-          <span class="text-sm text-gray-600 font-medium">${cl?.name||'Guest'}</span>
-          <button onclick="signOut()" class="text-xs text-gray-400 hover:text-gray-600 ml-1">Sign out</button>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <div class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style="background:#7B4015">
+          ${cl?cl.name[0]:'?'}
         </div>
+        <span class="text-sm text-gray-600 font-medium hidden sm:inline max-w-[100px] truncate">${cl?.name||'Guest'}</span>
+        <button onclick="signOut()" class="text-xs text-gray-400 hover:text-gray-600 px-1">✕</button>
       </div>
     </header>
-    <div class="max-w-5xl mx-auto p-5">
+    <div class="max-w-5xl mx-auto p-3 sm:p-5">
       ${state.clientView==='home'?buildClientHome():buildClientBookings()}
     </div>
     <div class="policy-footer">
@@ -1411,15 +1456,15 @@ function buildDashboard(){
   const greet=greetHour<12?'Good morning':greetHour<17?'Good afternoon':'Good evening';
   const todayFmt=now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
   return`
-  <div class="p-6 slide-in">
+  <div class="p-4 sm:p-6 slide-in">
     <div class="flex items-center justify-between mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-gray-800">${greetHour<12?'Good morning':greetHour<17?'Good afternoon':'Good evening'} ☀️</h1>
+        <h1 class="text-xl sm:text-2xl font-bold text-gray-800">${greetHour<12?'Good morning':greetHour<17?'Good afternoon':'Good evening'} ☀️</h1>
         <p class="text-gray-400 text-sm">${todayFmt} · ${state.settings.businessName}</p>
       </div>
-      <button onclick="openBookingModal(null)" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ New Booking</button>
+      <button onclick="openBookingModal(null)" class="hidden sm:block px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ New Booking</button>
     </div>
-    <div class="grid grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
       <div class="stat-card">
         <div class="text-2xl mb-1">🐕</div>
         <div class="text-2xl font-bold" style="color:${c.txt}">${todayBks.length}<span class="text-gray-300 font-normal text-lg">/${cap}</span></div>
@@ -1431,8 +1476,8 @@ function buildDashboard(){
       <div class="stat-card"><div class="text-2xl mb-1">📅</div><div class="text-2xl font-bold text-gray-800">${monthBks}</div><div class="text-xs text-gray-400">${now.toLocaleString('default',{month:'long'})} Bookings</div></div>
       <div class="stat-card"><div class="text-2xl mb-1">⚠️</div><div class="text-2xl font-bold text-red-500">$${overdue}</div><div class="text-xs text-gray-400">Overdue Balance</div></div>
     </div>
-    <div class="grid grid-cols-2 gap-5">
-      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+      <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
         <h2 class="font-semibold text-gray-800 mb-3">Today's Roster 🐾 <span class="text-sm font-normal text-gray-400">${todayBks.length} of ${cap}</span></h2>
         <div class="cap-bar mb-3"><div class="cap-fill" style="width:${Math.min(100,todayBks.length/cap*100)}%;background:${c.bar}"></div></div>
         ${todayBks.length===0?'<p class="text-gray-300 text-sm text-center py-6">No bookings today</p>':
@@ -1509,23 +1554,26 @@ function buildCalendarView(role){
   while(cells.length%7)cells.push(null);
   const isClient=role==='client';
   return`
-  <div class="p-6 slide-in">
-    <div class="flex items-center justify-between mb-5">
-      <h1 class="text-2xl font-bold text-gray-800">${isClient?'Availability':'Schedule'}</h1>
-      <div class="flex items-center gap-2">
+  <div class="p-4 sm:p-6 slide-in">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+      <h1 class="text-xl sm:text-2xl font-bold text-gray-800">${isClient?'Availability':'Schedule'}</h1>
+      <div class="flex items-center gap-2 flex-wrap">
         <button onclick="prevMonth()" class="px-3 py-1.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-100 text-sm">← Prev</button>
-        <span class="font-semibold text-gray-700 min-w-[140px] text-center">${MONTHS[mo]} ${yr}</span>
+        <span class="font-semibold text-gray-700 min-w-[120px] text-center text-sm sm:text-base">${MONTHS[mo]} ${yr}</span>
         <button onclick="nextMonth()" class="px-3 py-1.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-100 text-sm">Next →</button>
-        ${!isClient?`<button onclick="openBookingModal(null)" class="ml-2 px-4 py-1.5 text-white rounded-xl text-sm shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ Add Booking</button>`:''}
-        <button class="fs-btn ml-1" data-fs-btn title="Go fullscreen" onclick="toggleFullscreen()">${_FS_ENTER}</button>
+        ${!isClient?`<button onclick="openBookingModal(null)" class="px-3 py-1.5 text-white rounded-xl text-sm shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ Book</button>`:''}
+        <button class="fs-btn" data-fs-btn title="Go fullscreen" onclick="toggleFullscreen()">${_FS_ENTER}</button>
       </div>
     </div>
-    <div class="flex items-center gap-5 mb-4 text-xs text-gray-500">
+    <div class="flex items-center gap-3 sm:gap-5 mb-4 text-xs text-gray-500 flex-wrap">
       <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#10B981;display:inline-block"></span>Available</span>
       <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#EAB308;display:inline-block"></span>Filling Up</span>
       <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#F97316;display:inline-block"></span>Almost Full</span>
       <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#EF4444;display:inline-block"></span>Full 🚫</span>
     </div>
+    <!-- Horizontal scroll on mobile so the 7-col grid stays usable -->
+    <div class="overflow-x-auto -mx-1 pb-1">
+    <div style="min-width:420px">
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       <div class="grid grid-cols-7 bg-gray-50 border-b border-gray-100">
         ${DAYS.map(d=>`<div class="text-center text-xs font-semibold text-gray-400 py-3 uppercase tracking-wide">${d}</div>`).join('')}
@@ -1552,8 +1600,10 @@ function buildCalendarView(role){
         }).join('')}
       </div>
     </div>
+    </div><!-- /min-width -->
+    </div><!-- /overflow-x-auto -->
     ${isClient?`<div class="mt-4 p-4 rounded-xl border text-sm text-amber-800" style="background:#FEF3C7;border-color:#FCD34D">
-      💡 Click any <strong>available day</strong> to book a spot for your pup. You can select a date range for multi-day stays!</div>`:''}
+      💡 Tap any <strong>available day</strong> to book a spot for your pup. Swipe the calendar left/right to see more days!</div>`:''}
   </div>`;
 }
 function buildClientsView(){
@@ -1862,21 +1912,22 @@ function buildInvoicesView(){
   const total=invoices.reduce((s,i)=>s+i.amount,0),collected=invoices.reduce((s,i)=>s+i.paid,0);
   const sCls={paid:'bg-amber-100 text-amber-800',unpaid:'bg-yellow-100 text-yellow-700',overdue:'bg-red-100 text-red-600',partial:'bg-blue-100 text-blue-600'};
   return`
-  <div class="p-6 slide-in">
+  <div class="p-4 sm:p-6 slide-in">
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-bold text-gray-800">Invoices</h1>
+      <h1 class="text-xl sm:text-2xl font-bold text-gray-800">Invoices</h1>
       <button onclick="openAddInvoiceModal()" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ New Invoice</button>
     </div>
-    <div class="grid grid-cols-3 gap-4 mb-6">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
       <div class="stat-card text-center"><div class="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Invoiced</div><div class="text-2xl font-bold text-gray-800">$${total}</div></div>
       <div class="stat-card text-center"><div class="text-xs text-gray-400 uppercase tracking-wide mb-1">Collected</div><div class="text-2xl font-bold text-amber-700">$${collected}</div></div>
       <div class="stat-card text-center"><div class="text-xs text-gray-400 uppercase tracking-wide mb-1">Outstanding</div><div class="text-2xl font-bold text-red-500">$${total-collected}</div></div>
     </div>
     ${invoices.length===0?`<div class="text-center text-gray-300 py-16"><div class="text-5xl mb-3">💰</div><p>No invoices yet.</p></div>`:''}
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <table class="w-full text-sm">
+      <div class="overflow-x-auto">
+      <table class="w-full text-sm" style="min-width:580px">
         <thead class="bg-gray-50 border-b border-gray-100">
-          <tr>${['Client','Services','Amount','Due Date','Status','Actions'].map(h=>`<th class="px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">${h}</th>`).join('')}</tr>
+          <tr>${['Client','Services','Amount','Due Date','Status','Actions'].map(h=>`<th class="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">${h}</th>`).join('')}</tr>
         </thead>
         <tbody class="divide-y divide-gray-50">
           ${invoices.map(inv=>`
@@ -1899,6 +1950,7 @@ function buildInvoicesView(){
           </tr>`).join('')}
         </tbody>
       </table>
+      </div><!-- /overflow-x-auto -->
     </div>
   </div>`;
 }
@@ -2608,7 +2660,19 @@ function buildEditInvoiceModal(invoiceId){
 // ═══════════════════════════════════════════════════
 //  ⑪  ACTION HANDLERS
 // ═══════════════════════════════════════════════════
+// ── Mobile drawer toggle ──────────────────────────
+function toggleMobileMenu(open){
+  _mobileMenuOpen=(open!==undefined)?open:!_mobileMenuOpen;
+  document.getElementById('admin-sidebar')?.classList.toggle('mob-open',_mobileMenuOpen);
+  document.getElementById('mob-overlay')?.classList.toggle('mob-open',_mobileMenuOpen);
+  document.body.style.overflow=_mobileMenuOpen?'hidden':'';
+}
 function setView(v){
+  // Close mobile drawer when navigating
+  _mobileMenuOpen=false;
+  document.getElementById('admin-sidebar')?.classList.remove('mob-open');
+  document.getElementById('mob-overlay')?.classList.remove('mob-open');
+  document.body.style.overflow='';
   state.view=v;state.showModal=null;
   if(v!=='dogs')state.selectedDogId=null;
   // Persist so a page refresh returns to the same section
