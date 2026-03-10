@@ -200,7 +200,7 @@ const state={
   settings:{
     businessName:"Nigel's Place",ownerName:'Kelly Hendrickson',
     dailyCapacity:5,fullDayRate:45,halfDayRate:25,groomingAddOn:20,
-    venmoHandle:'',squareLink:'',geminiApiKey:'',nigelsDriveFolderId:'',
+    venmoHandle:'',squareLink:'',squareApiKey:'',squareLocationId:'',geminiApiKey:'',nigelsDriveFolderId:'',
     capacityOverrides:{}, // { 'YYYY-MM-DD': number } — per-date overrides
   },
 };
@@ -1114,7 +1114,7 @@ async function loadAllData(){
     }
   });
   invoices.length=0;
-  (iR||[]).forEach(r=>{if(r[0])invoices.push({id:+r[0],clientId:+r[1],clientName:r[2]||'',amount:+r[3]||0,paid:+r[4]||0,status:r[5]||'unpaid',dueDate:r[6]||'',issueDate:r[7]||'',items:r[8]||''});});
+  (iR||[]).forEach(r=>{if(r[0])invoices.push({id:+r[0],clientId:+r[1],clientName:r[2]||'',amount:+r[3]||0,paid:+r[4]||0,status:r[5]||'unpaid',dueDate:r[6]||'',issueDate:r[7]||'',items:r[8]||'',externalPaid:+r[9]||0,paymentNote:r[10]||''});});
   (sR||[]).forEach(r=>{
     if(!r[0])return;const[k,v]=r;
     if(k==='businessName')state.settings.businessName=v;
@@ -1124,6 +1124,8 @@ async function loadAllData(){
     else if(k==='groomingAddOn')state.settings.groomingAddOn=+v;
     else if(k==='venmoHandle')state.settings.venmoHandle=v;
     else if(k==='squareLink')state.settings.squareLink=v;
+    else if(k==='squareApiKey')state.settings.squareApiKey=v;
+    else if(k==='squareLocationId')state.settings.squareLocationId=v;
     else if(k==='geminiApiKey')state.settings.geminiApiKey=v;
     else if(k==='nigelsDriveFolderId')state.settings.nigelsDriveFolderId=v;
     else if(k==='capacityOverrides'){try{state.settings.capacityOverrides=JSON.parse(v)||{};}catch(e){}}
@@ -1165,18 +1167,20 @@ async function persistClients(){
 }
 async function persistInvoices(){
   if(state.mode!=='live')return;
-  const rows=[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items'],
-    ...invoices.map(i=>[i.id,i.clientId,i.clientName,i.amount,i.paid,i.status,i.dueDate,i.issueDate,i.items])];
-  await writeRange(`Invoices!A1:I${rows.length}`,rows);
+  const rows=[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items','externalPaid','paymentNote'],
+    ...invoices.map(i=>[i.id,i.clientId,i.clientName,i.amount,i.paid,i.status,i.dueDate,i.issueDate,i.items,i.externalPaid||0,i.paymentNote||''])];
+  await writeRange(`Invoices!A1:K${rows.length}`,rows);
 }
 async function persistSettings(){
   if(state.mode!=='live')return;
   const overridesJson=JSON.stringify(state.settings.capacityOverrides||{});
-  await writeRange('Settings!A1:B11',[
+  await writeRange('Settings!A1:B13',[
     ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
     ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
     ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',state.settings.venmoHandle||''],
-    ['squareLink',state.settings.squareLink||''],['geminiApiKey',state.settings.geminiApiKey||''],
+    ['squareLink',state.settings.squareLink||''],['squareApiKey',state.settings.squareApiKey||''],
+    ['squareLocationId',state.settings.squareLocationId||''],
+    ['geminiApiKey',state.settings.geminiApiKey||''],
     ['nigelsDriveFolderId',state.settings.nigelsDriveFolderId||''],
     ['capacityOverrides',overridesJson],
   ]);
@@ -2235,7 +2239,7 @@ function buildInvoicesView(){
           <tr class="hover:bg-gray-50">
             <td class="px-5 py-3.5 font-semibold text-gray-800">${inv.clientName}</td>
             <td class="px-5 py-3.5 text-gray-500">${inv.items}</td>
-            <td class="px-5 py-3.5"><div class="font-bold text-gray-800">$${inv.amount}</div>${inv.paid>0&&inv.paid<inv.amount?`<div class="text-xs text-gray-400">$${inv.paid} paid</div>`:''}</td>
+            <td class="px-5 py-3.5"><div class="font-bold text-gray-800">$${inv.amount}</div>${(()=>{const t=(inv.paid||0)+(inv.externalPaid||0);if(t<=0)return'';if(t>=inv.amount)return'<div class="text-xs text-green-600">Paid in full ✓</div>';let parts=[];if(inv.paid>0)parts.push(`$${inv.paid} Square`);if(inv.externalPaid>0)parts.push(`$${inv.externalPaid} cash/ext`);return`<div class="text-xs text-gray-400">${parts.join(' + ')} paid</div>`;})()}</td>
             <td class="px-5 py-3.5 text-gray-500">${inv.dueDate}</td>
             <td class="px-5 py-3.5"><span class="badge ${sCls[inv.status]||'bg-gray-100 text-gray-600'}">${inv.status}</span></td>
             <td class="px-5 py-3.5">
@@ -2276,14 +2280,21 @@ function buildSettingsView(){
             <input id="set-biz" type="text" value="${state.settings.businessName}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
           <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Owner Name</label>
             <input id="set-owner" type="text" value="${state.settings.ownerName}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
-          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Venmo Handle</label>
-            <div class="flex items-center border border-gray-200 rounded-xl overflow-hidden">
-              <span class="px-3 py-2 bg-gray-50 text-gray-400 text-sm border-r border-gray-200">@</span>
-              <input id="set-venmo" type="text" placeholder="your-venmo-handle" value="${state.settings.venmoHandle||''}" class="flex-1 px-3 py-2 text-sm outline-none">
-            </div></div>
           <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Square Payment Link</label>
             <input id="set-square" type="url" placeholder="https://square.link/u/XXXXXXXX" value="${state.settings.squareLink||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-            <p class="text-xs text-gray-400 mt-1">In Square: Online → Payment Links → Create Link → copy URL</p></div>
+            <p class="text-xs text-gray-400 mt-1">In Square: Online → Payment Links → Create Link → copy URL. Clients pay by card or Cash App via this link.</p></div>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <h2 class="font-semibold text-gray-800 mb-1">🟦 Square API Integration</h2>
+        <p class="text-xs text-gray-400 mb-3">Connect to Square to automatically sync payment totals on invoices. Get your credentials at <a href="https://developer.squareup.com/apps" target="_blank" class="underline text-amber-700">developer.squareup.com/apps</a> → create an app → Production → copy the Access Token and Location ID.</p>
+        <div class="space-y-3">
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Square Access Token</label>
+            <input id="set-square-api-key" type="password" placeholder="EAAAl..." value="${state.settings.squareApiKey||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
+            <p class="text-xs text-gray-400 mt-1">Production → Access Token (starts with EAAA). Keep this private — admin only.</p></div>
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Square Location ID</label>
+            <input id="set-square-location" type="text" placeholder="LxxxxxxxxxxxxX" value="${state.settings.squareLocationId||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
+            <p class="text-xs text-gray-400 mt-1">Production → Location ID (under Locations in your Square dashboard).</p></div>
         </div>
       </div>
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
@@ -2523,8 +2534,15 @@ function buildAddInvoiceModal(){
         <div class="grid grid-cols-2 gap-3">
           <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Amount ($) *</label>
             <input id="inv-amount" type="number" min="0" step="0.01" required placeholder="0.00" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
-          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Amount Paid ($)</label>
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Square Paid ($)</label>
             <input id="inv-paid" type="number" min="0" step="0.01" placeholder="0.00" value="0" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">External / Cash ($)</label>
+            <input id="inv-external-paid" type="number" min="0" step="0.01" placeholder="0.00" value="0" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            <p class="text-xs text-gray-400 mt-0.5">Cash, Zelle, other</p></div>
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Payment Notes</label>
+            <input id="inv-payment-note" type="text" placeholder="e.g. Cash $50 on 3/10" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Issue Date</label>
@@ -3042,8 +3060,20 @@ function buildEditInvoiceModal(invoiceId){
         <div class="grid grid-cols-2 gap-3">
           <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Amount ($)</label>
             <input id="einv-amount" type="number" min="0" step="0.01" value="${inv.amount||0}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
-          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Amount Paid ($)</label>
-            <input id="einv-paid" type="number" min="0" step="0.01" value="${inv.paid||0}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Square Paid ($)</label>
+              ${state.settings.squareApiKey?`<button type="button" onclick="syncSquarePayments(${invoiceId})" class="text-xs text-blue-600 hover:underline font-medium">🔄 Sync</button>`:''}
+            </div>
+            <input id="einv-paid" type="number" min="0" step="0.01" value="${inv.paid||0}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">External / Cash ($)</label>
+            <input id="einv-external-paid" type="number" min="0" step="0.01" value="${inv.externalPaid||0}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            <p class="text-xs text-gray-400 mt-0.5">Cash, Zelle, other</p></div>
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Payment Notes</label>
+            <input id="einv-payment-note" type="text" placeholder="e.g. Cash $50 on 3/10" value="${inv.paymentNote||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Due Date</label>
@@ -4037,8 +4067,15 @@ async function submitEditInvoice(e,invoiceId){
   inv.items=document.getElementById('einv-items')?.value?.trim()||inv.items;
   inv.amount=parseFloat(document.getElementById('einv-amount')?.value)||inv.amount;
   inv.paid=parseFloat(document.getElementById('einv-paid')?.value)||0;
+  inv.externalPaid=parseFloat(document.getElementById('einv-external-paid')?.value)||0;
+  inv.paymentNote=document.getElementById('einv-payment-note')?.value?.trim()||'';
   inv.dueDate=document.getElementById('einv-due')?.value||inv.dueDate;
-  inv.status=document.getElementById('einv-status')?.value||inv.status;
+  // Recalculate status based on combined totals unless manually overridden
+  const manualStatus=document.getElementById('einv-status')?.value;
+  const totalReceived=inv.paid+inv.externalPaid;
+  if(manualStatus){inv.status=manualStatus;}
+  else if(totalReceived>=inv.amount)inv.status='paid';
+  else if(totalReceived>0)inv.status='partial';
   state.showModal=null;render();showToast('Invoice updated.');
   try{await persistInvoices();}catch(e){showToast('Sheet sync failed.','#F97316');}
 }
@@ -4051,8 +4088,8 @@ function sendInvoiceText(invId){
   const cl=clients.find(c=>c.id===inv.clientId);
   const phone=String(cl?.phone||'').replace(/\D/g,'');
   const owed=inv.amount-inv.paid;
-  const venmo=state.settings.venmoHandle,square=state.settings.squareLink;
-  const payLines=(square?`\nPay by card: ${square}`:'')+(venmo?`\nPay by Venmo: venmo.com/${venmo} (@${venmo})`:'');
+  const square=state.settings.squareLink;
+  const payLines=square?`\nPay by card or Cash App: ${square}`:'';
   const msg=`Hi ${inv.clientName}! 🐾 This is a payment reminder from Nigel's Place.\n\nServices: ${inv.items}\nAmount due: $${owed}\nDue date: ${inv.dueDate}${payLines}\n\nThank you! 🐶`;
   const smsLink=phone?`sms:${phone}?&body=${encodeURIComponent(msg)}`:`sms:?&body=${encodeURIComponent(msg)}`;
   window.open(smsLink,'_self');
@@ -4064,15 +4101,18 @@ async function submitInvoice(e){
   const cl=clients.find(c=>c.id===cId);
   const amount=parseFloat(document.getElementById('inv-amount')?.value)||0;
   const paid=parseFloat(document.getElementById('inv-paid')?.value)||0;
+  const externalPaid=parseFloat(document.getElementById('inv-external-paid')?.value)||0;
+  const paymentNote=document.getElementById('inv-payment-note')?.value?.trim()||'';
   const items=document.getElementById('inv-items')?.value?.trim()||'';
   const issueDate=document.getElementById('inv-issue')?.value||'';
   const dueDate=document.getElementById('inv-due')?.value||'';
   if(!amount){showToast('Please enter an amount.','#EF4444');return;}
+  const totalReceived=paid+externalPaid;
   let status='unpaid';
-  if(paid>=amount)status='paid';
-  else if(paid>0)status='partial';
+  if(totalReceived>=amount)status='paid';
+  else if(totalReceived>0)status='partial';
   else if(dueDate&&dueDate<TODAY)status='overdue';
-  const ni={id:nextId(invoices),clientId:cId,clientName:cl?.name||'',amount,paid,status,dueDate,issueDate,items};
+  const ni={id:nextId(invoices),clientId:cId,clientName:cl?.name||'',amount,paid,status,dueDate,issueDate,items,externalPaid,paymentNote};
   invoices.push(ni);state.showModal=null;render();
   showToast(`Invoice created for ${cl?.name||'client'}!`);
   try{await persistInvoices();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
@@ -4105,8 +4145,9 @@ async function saveSettings(){
   if(cap>0)state.settings.dailyCapacity=cap;
   if(biz)state.settings.businessName=biz;
   if(owner)state.settings.ownerName=owner;
-  const venmo=v('set-venmo')?.trim();if(venmo!==undefined)state.settings.venmoHandle=venmo;
   const sq=v('set-square')?.trim();if(sq!==undefined)state.settings.squareLink=sq;
+  const sqKey=v('set-square-api-key')?.trim();if(sqKey!==undefined)state.settings.squareApiKey=sqKey;
+  const sqLoc=v('set-square-location')?.trim();if(sqLoc!==undefined)state.settings.squareLocationId=sqLoc;
   const gk=v('set-gemini')?.trim();if(gk!==undefined)state.settings.geminiApiKey=gk;
   const dfid=v('set-drive-folder')?.trim();
   if(dfid!==undefined){
@@ -4139,6 +4180,51 @@ document.addEventListener('fullscreenchange',()=>{
   });
 });
 
+// ─── Square Payment Sync ──────────────────────────────────────────────────────
+async function syncSquarePayments(invoiceId){
+  const inv=invoices.find(i=>i.id===invoiceId);if(!inv)return;
+  const apiKey=state.settings.squareApiKey;
+  if(!apiKey){showToast('Add your Square API key in Settings first','#F97316');return;}
+  const cl=clients.find(c=>c.id===inv.clientId);if(!cl){showToast('Client not found','#EF4444');return;}
+  showToast('Syncing from Square…','#0EA5E9');
+  try{
+    // Step 1: find Square customer by email
+    const searchResp=await fetch('https://connect.squareup.com/v2/customers/search',{
+      method:'POST',
+      headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json','Square-Version':'2024-01-18'},
+      body:JSON.stringify({query:{filter:{email_address:{exact:cl.email}}}})
+    });
+    if(!searchResp.ok)throw new Error(`Square search: ${searchResp.status}`);
+    const searchData=await searchResp.json();
+    const customers=searchData.customers||[];
+    if(!customers.length){showToast(`No Square customer found for ${cl.email}`,'#F97316');return;}
+    const customerId=customers[0].id;
+    // Step 2: get completed payments for this customer
+    const payResp=await fetch(`https://connect.squareup.com/v2/payments?customer_id=${customerId}&sort_order=DESC&limit=50`,{
+      headers:{'Authorization':`Bearer ${apiKey}`,'Square-Version':'2024-01-18'}
+    });
+    if(!payResp.ok)throw new Error(`Square payments: ${payResp.status}`);
+    const payData=await payResp.json();
+    const completed=(payData.payments||[]).filter(p=>p.status==='COMPLETED');
+    const totalPaidCents=completed.reduce((s,p)=>s+(p.total_money?.amount||0),0);
+    const squarePaid=totalPaidCents/100;
+    // Update invoice
+    inv.paid=squarePaid;
+    const totalReceived=squarePaid+(inv.externalPaid||0);
+    if(totalReceived>=inv.amount)inv.status='paid';
+    else if(totalReceived>0)inv.status='partial';
+    else if(inv.dueDate&&inv.dueDate<TODAY)inv.status='overdue';
+    else inv.status='unpaid';
+    // Update the input field live if modal is still open
+    const el=document.getElementById('einv-paid');if(el)el.value=squarePaid.toFixed(2);
+    render();
+    try{await persistInvoices();}catch(e){}
+    showToast(`Square sync: $${squarePaid.toFixed(2)} found across ${completed.length} payment${completed.length===1?'':'s'}`);
+  }catch(err){
+    showToast('Square sync failed: '+err.message,'#EF4444');
+  }
+}
+
 // ─── Client Booking Cancellation ─────────────────────────────────────────────
 function showClientCancelConfirm(bookingId){
   const b=bookings.find(bk=>bk.id===bookingId||bk.id==bookingId);
@@ -4146,9 +4232,9 @@ function showClientCancelConfirm(bookingId){
   const checkInDate=new Date(b.checkIn+'T00:00:00');
   const todayDate=new Date(TODAY+'T00:00:00');
   const daysUntil=Math.ceil((checkInDate-todayDate)/864e5);
-  // Find any paid amount on invoices linked to this client
-  const clientInvoices=invoices.filter(i=>i.clientId===state.currentClientId&&i.paid>0);
-  const totalPaid=clientInvoices.reduce((s,i)=>s+i.paid,0);
+  // Find any paid amount on invoices linked to this client (Square + external)
+  const clientInvoices=invoices.filter(i=>i.clientId===state.currentClientId&&((i.paid||0)+(i.externalPaid||0))>0);
+  const totalPaid=clientInvoices.reduce((s,i)=>s+(i.paid||0)+(i.externalPaid||0),0);
   let feeHtml,feeLevel;
   if(daysUntil>=7){
     feeLevel='green';
