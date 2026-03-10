@@ -1471,6 +1471,14 @@ function buildOnboarding(){
       <!-- Step form -->
       ${formContent}
 
+      <!-- Escape hatch — go back to login and force account picker -->
+      <div style="text-align:center;margin-top:1.25rem;">
+        <button onclick="onboardingCancel()"
+          style="background:none;border:none;cursor:pointer;font-size:.75rem;color:#9CA3AF;text-decoration:underline;font-family:inherit;">
+          ← Use a different Google account
+        </button>
+      </div>
+
     </div>
   </div>`;
 }
@@ -1494,6 +1502,22 @@ function onboardingNext(fromStep){
     d.dogNotes=(document.getElementById('ob-notes')?.value||'').trim();
     state.onboardingStep=3;
   }
+  render();
+}
+
+function onboardingCancel(){
+  // Clear cached email so the login screen forces the full Google account picker,
+  // allowing the user to sign in with a different account.
+  try{
+    localStorage.removeItem('np_email');
+    localStorage.removeItem('np_access_token');
+    localStorage.removeItem('np_token_expiry');
+  }catch(e){}
+  state.role='login';
+  state.accessToken=null;
+  state.userEmail=null;
+  state.onboardingStep=1;
+  state.onboardingData={};
   render();
 }
 
