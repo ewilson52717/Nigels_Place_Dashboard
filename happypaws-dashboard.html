@@ -1429,7 +1429,7 @@ function buildOnboarding(){
           <div style="display:flex;flex-direction:column;gap:.75rem;">
             <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
               <input type="checkbox" id="ob-agree-terms" ${d.agreeTerms?'checked':''} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
-              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I agree to Nigel's Place <strong>Terms &amp; Conditions</strong> — including payment, pick-up/drop-off times (8–10 AM drop-off, 4–6 PM pick-up), and <button type="button" onclick="showCancellationPolicyModal()" style="background:none;border:none;padding:0;cursor:pointer;font-size:.75rem;color:#7B4015;text-decoration:underline;font-weight:600;font-family:inherit;">cancellation policies</button>. <span style="color:#DC2626;">*</span></span>
+              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I agree to Nigel's Place <button type="button" onclick="showPolicyModal('terms')" style="background:none;border:none;padding:0;cursor:pointer;font-size:.75rem;color:#7B4015;text-decoration:underline;font-weight:600;font-family:inherit;">Terms &amp; Conditions</button> — including payment, pick-up/drop-off times (8–10 AM drop-off, 4–6 PM pick-up), and <button type="button" onclick="showCancellationPolicyModal()" style="background:none;border:none;padding:0;cursor:pointer;font-size:.75rem;color:#7B4015;text-decoration:underline;font-weight:600;font-family:inherit;">cancellation policies</button>. <span style="color:#DC2626;">*</span></span>
             </label>
             <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
               <input type="checkbox" id="ob-agree-liability" ${d.agreeLiability?'checked':''} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
@@ -2380,17 +2380,25 @@ function buildClientBookings(){
     ${myBks.length===0?`<div class="text-center text-gray-300 py-16"><div class="text-5xl mb-3">🐾</div>
       <div class="text-lg font-medium text-gray-400">No bookings yet!</div>
       <button onclick="setClientView('home')" class="mt-3 text-amber-800 hover:underline text-sm">Book your first stay →</button></div>`
-    :`<div class="space-y-3">${myBks.map(b=>`
-      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-4">
-        <div class="text-3xl">🐶</div>
-        <div class="flex-1">
-          <div class="font-semibold text-gray-800">${b.dogName}</div>
-          <div class="text-sm text-gray-400">${b.checkIn===b.checkOut?fmtDate(b.checkIn):`${fmtDateShort(b.checkIn)} – ${fmtDateShort(b.checkOut)} (${b.nights} days)`} · ${b.service}</div>
-          ${b.addons?`<div class="text-xs text-gray-400">Add-ons: ${b.addons}</div>`:''}
+    :`<div class="space-y-3">${myBks.map(b=>{
+      const isUpcoming=b.checkIn>=TODAY&&b.status!=='cancelled';
+      return`
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+        <div class="flex items-center gap-4">
+          <div class="text-3xl">🐶</div>
+          <div class="flex-1">
+            <div class="font-semibold text-gray-800">${b.dogName}</div>
+            <div class="text-sm text-gray-400">${b.checkIn===b.checkOut?fmtDate(b.checkIn):`${fmtDateShort(b.checkIn)} – ${fmtDateShort(b.checkOut)} (${b.nights} days)`} · ${b.service}</div>
+            ${b.addons?`<div class="text-xs text-gray-400">Add-ons: ${b.addons}</div>`:''}
+          </div>
+          <div class="text-right"><div class="font-bold text-gray-800">$${b.price}</div>
+            <span class="badge ${sCls[b.status]||'bg-gray-100 text-gray-600'}">${b.status}</span></div>
         </div>
-        <div class="text-right"><div class="font-bold text-gray-800">$${b.price}</div>
-          <span class="badge ${sCls[b.status]||'bg-gray-100 text-gray-600'}">${b.status}</span></div>
-      </div>`).join('')}</div>`}
+        ${isUpcoming?`<div class="mt-3 pt-3 border-t border-gray-100">
+          <button onclick="showClientCancelConfirm('${b.id}')" style="background:none;border:1px solid #FCA5A5;border-radius:8px;padding:.3rem .8rem;font-size:.72rem;color:#DC2626;cursor:pointer;font-weight:600;">Cancel booking</button>
+        </div>`:''}
+      </div>`;
+    }).join('')}</div>`}
   </div>`;
 }
 
@@ -4131,6 +4139,83 @@ document.addEventListener('fullscreenchange',()=>{
   });
 });
 
+// ─── Client Booking Cancellation ─────────────────────────────────────────────
+function showClientCancelConfirm(bookingId){
+  const b=bookings.find(bk=>bk.id===bookingId||bk.id==bookingId);
+  if(!b)return;
+  const checkInDate=new Date(b.checkIn+'T00:00:00');
+  const todayDate=new Date(TODAY+'T00:00:00');
+  const daysUntil=Math.ceil((checkInDate-todayDate)/864e5);
+  // Find any paid amount on invoices linked to this client
+  const clientInvoices=invoices.filter(i=>i.clientId===state.currentClientId&&i.paid>0);
+  const totalPaid=clientInvoices.reduce((s,i)=>s+i.paid,0);
+  let feeHtml,feeLevel;
+  if(daysUntil>=7){
+    feeLevel='green';
+    feeHtml=`<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:10px;padding:.75rem 1rem;margin:.75rem 0;">
+      <div style="font-size:.85rem;font-weight:700;color:#166534;">🟢 No cancellation fee</div>
+      <div style="font-size:.75rem;color:#166534;margin-top:.25rem;">You're cancelling ${daysUntil} days in advance — well within the notice window. No deposit will be forfeited.</div>
+    </div>`;
+  } else if(daysUntil>=2){
+    feeLevel='yellow';
+    feeHtml=`<div style="background:#FFFBEB;border:1px solid #FCD34D;border-radius:10px;padding:.75rem 1rem;margin:.75rem 0;">
+      <div style="font-size:.85rem;font-weight:700;color:#92400E;">🟡 Within the standard 48-hour window</div>
+      <div style="font-size:.75rem;color:#92400E;margin-top:.25rem;">You're cancelling ${daysUntil} day${daysUntil===1?'':'s'} before check-in, which meets the standard 48-hour policy. However, if this stay falls during a <strong>holiday or peak period</strong>, a 7-day notice is required and your deposit may be forfeited. Please contact Nigel's Place if unsure.</div>
+    </div>`;
+  } else {
+    feeLevel='red';
+    const depositNote=totalPaid>0?`<div style="font-size:.75rem;color:#991B1B;margin-top:.35rem;">Based on your account, <strong>$${totalPaid.toFixed(2)}</strong> paid will be retained as the deposit.</div>`:'<div style="font-size:.75rem;color:#991B1B;margin-top:.35rem;">Any deposit paid will be retained per the cancellation policy.</div>';
+    feeHtml=`<div style="background:#FEF2F2;border:1px solid #FCA5A5;border-radius:10px;padding:.75rem 1rem;margin:.75rem 0;">
+      <div style="font-size:.85rem;font-weight:700;color:#991B1B;">🔴 Less than 48 hours notice — deposit forfeited</div>
+      ${depositNote}
+    </div>`;
+  }
+  const existing=document.getElementById('np-client-cancel-confirm');
+  if(existing)existing.remove();
+  const ov=document.createElement('div');
+  ov.id='np-client-cancel-confirm';
+  ov.className='policy-modal-overlay';
+  ov.onclick=(e)=>{if(e.target===ov)ov.remove();};
+  ov.innerHTML=`
+    <div class="policy-modal-box" style="max-width:420px;">
+      <div class="policy-modal-header">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:34px;height:34px;background:linear-gradient(135deg,#DC2626,#991B1B);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">✖️</div>
+          <div>
+            <div style="font-weight:700;font-size:1rem;color:#111827;">Cancel Booking</div>
+            <div style="font-size:0.72rem;color:#9CA3AF;">${b.dogName} · ${b.checkIn===b.checkOut?fmtDate(b.checkIn):`${fmtDateShort(b.checkIn)} – ${fmtDateShort(b.checkOut)}`}</div>
+          </div>
+        </div>
+        <button onclick="document.getElementById('np-client-cancel-confirm').remove()" style="background:none;border:none;cursor:pointer;font-size:1.3rem;color:#9CA3AF;line-height:1;padding:0;">×</button>
+      </div>
+      <div class="policy-modal-body">
+        <p style="font-size:.82rem;color:#374151;">Are you sure you want to cancel this booking?</p>
+        ${feeHtml}
+        <p style="font-size:.72rem;color:#6B7280;margin-top:.5rem;">This action cannot be undone. If you have questions about fees or exceptions, please contact Nigel's Place before cancelling.</p>
+      </div>
+      <div class="policy-modal-footer" style="display:flex;gap:.75rem;justify-content:flex-end;">
+        <button onclick="document.getElementById('np-client-cancel-confirm').remove()" style="background:none;border:1px solid #D1D5DB;border-radius:10px;padding:.5rem 1.25rem;font-size:.875rem;font-weight:600;cursor:pointer;color:#374151;">Keep booking</button>
+        <button onclick="confirmClientCancel('${bookingId}')" style="background:#DC2626;color:#fff;border:none;border-radius:10px;padding:.5rem 1.25rem;font-size:.875rem;font-weight:600;cursor:pointer;">Yes, cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+
+async function confirmClientCancel(bookingId){
+  const b=bookings.find(bk=>bk.id===bookingId||bk.id==bookingId);
+  if(!b)return;
+  b.status='cancelled';
+  const ov=document.getElementById('np-client-cancel-confirm');
+  if(ov)ov.remove();
+  render();
+  try{
+    await persistBookings();
+    showToast('Booking cancelled');
+  }catch(e){
+    showToast('Cancelled locally — sync failed','#F97316');
+  }
+}
+
 // ─── Policy Modal ────────────────────────────────
 // ─── Cancellation Policy lightbox ────────────────────────────────────────────
 function showCancellationPolicyModal(){
@@ -4162,10 +4247,10 @@ function showCancellationPolicyModal(){
         <h3>Early Pick-Up</h3>
         <p>If you pick up your dog earlier than the scheduled check-out date, the full originally-booked rate applies — no partial refunds are issued for unused nights.</p>
         <h3>Emergency Exceptions</h3>
-        <p>Nigel's Place reviews cancellation exceptions on a case-by-case basis for genuine emergencies (medical, family, etc.). Please contact Kelly directly as soon as possible if you need to cancel due to an emergency.</p>
+        <p>Nigel's Place reviews cancellation exceptions on a case-by-case basis for genuine emergencies (medical, family, etc.). Please contact Nigel's Place as soon as possible if you need to cancel due to an emergency.</p>
         <h3>Pick-Up &amp; Drop-Off Times</h3>
         <p><strong>Drop-off:</strong> 8:00 AM – 10:00 AM &nbsp;·&nbsp; <strong>Pick-up:</strong> 4:00 PM – 6:00 PM</p>
-        <p>Late pick-ups (after 6:00 PM) will incur an additional fee. If you need to arrange a different time, please contact us in advance.</p>
+        <p>Late pick-ups (after 6:00 PM) will incur an additional fee. If a different time is needed, please contact Nigel's Place in advance.</p>
       </div>
       <div class="policy-modal-footer">
         <button onclick="document.getElementById('np-cancel-modal').remove()" style="background:#7B4015;color:#fff;border:none;border-radius:10px;padding:.5rem 1.5rem;font-size:.875rem;font-weight:600;cursor:pointer;">Got it</button>
