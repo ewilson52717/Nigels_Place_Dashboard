@@ -2515,35 +2515,72 @@ function buildModal(){
 function buildAddInvoiceModal(){
   const today=new Date().toISOString().split('T')[0];
   const due=new Date(Date.now()+14*864e5).toISOString().split('T')[0];
+  const hasGemini=!!state.settings.geminiApiKey;
   return`
   <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 slide-in max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between mb-5">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 slide-in max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-bold text-gray-800">New Invoice</h2>
         <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
       </div>
+      <!-- Invoice type toggle -->
+      <div class="flex gap-1.5 mb-5 p-1 rounded-xl" style="background:#F3F4F6;">
+        <button type="button" id="inv-type-send" onclick="setInvoiceType('send')"
+          class="flex-1 py-2 rounded-lg text-sm font-semibold transition-all" style="background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.1);color:#1F2937;">
+          📤 Send for payment
+        </button>
+        <button type="button" id="inv-type-manual" onclick="setInvoiceType('manual')"
+          class="flex-1 py-2 rounded-lg text-sm font-semibold transition-all" style="color:#6B7280;">
+          💵 Record manual payment
+        </button>
+      </div>
+      <input type="hidden" id="inv-type" value="send">
       <form onsubmit="submitInvoice(event)" class="space-y-4">
+        <!-- Client -->
         <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Client *</label>
           <select id="inv-client" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="populateInvoiceItems()">
             <option value="">Select client...</option>
             ${clients.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
           </select></div>
-        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Services / Description *</label>
-          <input id="inv-items" type="text" required placeholder="e.g. 3x Full Day (Mon–Wed)" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-          <p class="text-xs text-gray-400 mt-1">Tip: select a client above to auto-fill recent bookings</p></div>
-        <div class="grid grid-cols-2 gap-3">
-          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Amount ($) *</label>
-            <input id="inv-amount" type="number" min="0" step="0.01" required placeholder="0.00" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
-          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Square Paid ($)</label>
-            <input id="inv-paid" type="number" min="0" step="0.01" placeholder="0.00" value="0" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+        <!-- Booking checklist (populated dynamically) -->
+        <div id="inv-bookings-section" style="display:none;">
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Services to Invoice</label>
+            <div class="flex gap-3">
+              <button type="button" onclick="selectAllInvoiceBookings(true)" class="text-xs font-medium" style="color:#7B4015;">All</button>
+              <button type="button" onclick="selectAllInvoiceBookings(false)" class="text-xs text-gray-400">None</button>
+            </div>
+          </div>
+          <div id="inv-bookings-list" class="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100" style="max-height:200px;overflow-y:auto;"></div>
+          <p class="text-xs text-gray-400 mt-1">Pre-checked items are likely uninvoiced. Dimmed items may already be captured.</p>
         </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">External / Cash ($)</label>
-            <input id="inv-external-paid" type="number" min="0" step="0.01" placeholder="0.00" value="0" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-            <p class="text-xs text-gray-400 mt-0.5">Cash, Zelle, other</p></div>
-          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Payment Notes</label>
-            <input id="inv-payment-note" type="text" placeholder="e.g. Cash $50 on 3/10" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+        <!-- Description + AI button -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Description *</label>
+            ${hasGemini?`<button type="button" id="inv-ai-btn" onclick="generateInvoiceDescriptionAI()" style="background:#F5F3FF;border:1px solid #DDD6FE;border-radius:8px;padding:.2rem .65rem;font-size:.72rem;font-weight:600;color:#7C3AED;cursor:pointer;">✨ AI Describe</button>`:''}
+          </div>
+          <input id="inv-items" type="text" required placeholder="e.g. 3-night boarding + grooming for Max" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
         </div>
+        <!-- Amount -->
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Total Amount ($) *</label>
+          <input id="inv-amount" type="number" min="0" step="0.01" required placeholder="0.00" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+          <p class="text-xs text-gray-400 mt-0.5" id="inv-amount-note"></p>
+        </div>
+        <!-- Manual payment fields (shown only in manual mode) -->
+        <div id="inv-manual-fields" style="display:none;" class="space-y-3 pt-1">
+          <div class="rounded-xl p-3" style="background:#F0FDF4;border:1px solid #86EFAC;">
+            <p class="text-xs font-semibold text-green-800 mb-2">💵 Payment already received</p>
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Amount Received ($)</label>
+                <input id="inv-external-paid" type="number" min="0" step="0.01" placeholder="0.00" value="0" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white"></div>
+              <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Payment Method</label>
+                <input id="inv-payment-note" type="text" placeholder="Cash, Venmo, etc." class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white"></div>
+            </div>
+          </div>
+        </div>
+        <!-- Dates -->
         <div class="grid grid-cols-2 gap-3">
           <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Issue Date</label>
             <input id="inv-issue" type="date" value="${today}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
@@ -3418,19 +3455,85 @@ function checkDogVaccWarning(){
 function populateInvoiceItems(){
   const cId=parseInt(document.getElementById('inv-client')?.value);if(!cId)return;
   const cl=clients.find(c=>c.id===cId);if(!cl)return;
-  const recent=bookings.filter(b=>b.clientId===cId&&b.status==='confirmed')
-    .sort((a,b)=>b.checkIn.localeCompare(a.checkIn)).slice(0,10);
-  if(!recent.length)return;
-  const counts={};
-  recent.forEach(b=>{
-    const key=b.addons?`${b.service}+${b.addons}`:b.service;
-    counts[key]=(counts[key]||0)+(b.nights||1);
-  });
-  const desc=Object.entries(counts).map(([svc,n])=>`${n}x ${svc}`).join(', ');
-  const total=recent.reduce((s,b)=>s+b.price,0);
-  const itemsEl=document.getElementById('inv-items'),amtEl=document.getElementById('inv-amount');
-  if(itemsEl)itemsEl.value=desc;
-  if(amtEl)amtEl.value=total;
+  const section=document.getElementById('inv-bookings-section');
+  const list=document.getElementById('inv-bookings-list');
+  if(!section||!list)return;
+  const clientBks=bookings
+    .filter(b=>b.clientId===cId&&b.status==='confirmed')
+    .sort((a,b)=>b.checkIn.localeCompare(a.checkIn));
+  if(!clientBks.length){section.style.display='none';return;}
+  // Heuristic: gather text of all paid/partial invoices for this client
+  const capturedText=invoices
+    .filter(i=>i.clientId===cId&&['paid','partial'].includes(i.status))
+    .map(i=>i.items||'').join(' ').toLowerCase();
+  list.innerHTML=clientBks.map((b,idx)=>{
+    const dateLabel=b.checkIn===b.checkOut?fmtDateShort(b.checkIn):`${fmtDateShort(b.checkIn)} – ${fmtDateShort(b.checkOut)}`;
+    const svcLabel=b.addons?`${b.service} + ${b.addons}`:b.service;
+    // Likely already invoiced if dog name + check-in date appear together in captured invoices
+    const likely=capturedText.includes(b.dogName.toLowerCase())&&capturedText.includes(b.checkIn);
+    return`<label class="flex items-center gap-3 px-3 py-2.5 cursor-pointer" style="${likely?'opacity:.45;':''}background:${likely?'#F9FAFB':'#fff'};" onmouseover="this.style.background='#FFFBEB'" onmouseout="this.style.background='${likely?'#F9FAFB':'#fff'}'">
+      <input type="checkbox" class="inv-bk-cb" style="accent-color:#7B4015;flex-shrink:0;" data-id="${b.id}" data-price="${b.price}" onchange="recalcInvoiceAmount()" ${likely?'':'checked'}>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:.82rem;font-weight:600;color:#1F2937;">${b.dogName} · ${svcLabel}</div>
+        <div style="font-size:.72rem;color:#9CA3AF;">${dateLabel}${likely?' · likely already invoiced':''}</div>
+      </div>
+      <div style="font-size:.85rem;font-weight:700;color:#374151;flex-shrink:0;">$${b.price}</div>
+    </label>`;
+  }).join('');
+  section.style.display='block';
+  recalcInvoiceAmount();
+}
+function recalcInvoiceAmount(){
+  const cbs=document.querySelectorAll('.inv-bk-cb:checked');
+  const total=Array.from(cbs).reduce((s,cb)=>s+(parseFloat(cb.dataset.price)||0),0);
+  const el=document.getElementById('inv-amount');
+  const note=document.getElementById('inv-amount-note');
+  if(el&&total>0)el.value=total.toFixed(2);
+  if(note)note.textContent=cbs.length?`${cbs.length} service${cbs.length===1?'':'s'} selected · $${total.toFixed(2)} total`:'';
+}
+function selectAllInvoiceBookings(select){
+  document.querySelectorAll('.inv-bk-cb').forEach(cb=>cb.checked=select);
+  recalcInvoiceAmount();
+}
+function setInvoiceType(type){
+  document.getElementById('inv-type').value=type;
+  const sendBtn=document.getElementById('inv-type-send');
+  const manualBtn=document.getElementById('inv-type-manual');
+  const manualFields=document.getElementById('inv-manual-fields');
+  if(type==='send'){
+    sendBtn.style.cssText='background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.1);color:#1F2937;';
+    manualBtn.style.cssText='color:#6B7280;background:none;box-shadow:none;';
+    if(manualFields)manualFields.style.display='none';
+  }else{
+    manualBtn.style.cssText='background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.1);color:#1F2937;';
+    sendBtn.style.cssText='color:#6B7280;background:none;box-shadow:none;';
+    if(manualFields)manualFields.style.display='block';
+  }
+}
+function getSelectedInvoiceBookings(){
+  const cId=parseInt(document.getElementById('inv-client')?.value);if(!cId)return[];
+  const checkedIds=Array.from(document.querySelectorAll('.inv-bk-cb:checked')).map(cb=>cb.dataset.id);
+  return bookings.filter(b=>checkedIds.includes(String(b.id)));
+}
+async function generateInvoiceDescriptionAI(){
+  const apiKey=state.settings.geminiApiKey;
+  if(!apiKey){showToast('Add Gemini API key in Settings first','#F97316');return;}
+  const sel=getSelectedInvoiceBookings();
+  if(!sel.length){showToast('Select at least one service first','#F97316');return;}
+  const serviceList=sel.map(b=>`- ${b.dogName}: ${b.service}${b.addons?` + ${b.addons}`:''}${b.checkIn===b.checkOut?` on ${fmtDateShort(b.checkIn)}`:`from ${fmtDateShort(b.checkIn)} to ${fmtDateShort(b.checkOut)}`} ($${b.price})`).join('\n');
+  const btn=document.getElementById('inv-ai-btn');
+  if(btn){btn.disabled=true;btn.textContent='✨ Writing...';}
+  try{
+    const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:`Write a concise, warm invoice description (1 sentence, max 25 words) for a dog boarding business called Nigel's Place. Mention the dog's name(s), services, and date range naturally.\n\nServices:\n${serviceList}`}]}]})
+    });
+    const data=await resp.json();
+    const text=data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()||'';
+    if(text){const el=document.getElementById('inv-items');if(el)el.value=text;showToast('AI description ready ✓');}
+    else showToast('AI returned nothing — try again','#F97316');
+  }catch(err){showToast('AI call failed: '+err.message,'#EF4444');}
+  if(btn){btn.disabled=false;btn.textContent='✨ AI Describe';}
 }
 
 // ═══════════════════════════════════════════════════
@@ -4100,14 +4203,15 @@ async function submitInvoice(e){
   if(!cId){showToast('Please select a client.','#EF4444');return;}
   const cl=clients.find(c=>c.id===cId);
   const amount=parseFloat(document.getElementById('inv-amount')?.value)||0;
-  const paid=parseFloat(document.getElementById('inv-paid')?.value)||0;
-  const externalPaid=parseFloat(document.getElementById('inv-external-paid')?.value)||0;
-  const paymentNote=document.getElementById('inv-payment-note')?.value?.trim()||'';
+  const invType=document.getElementById('inv-type')?.value||'send';
+  const paid=0; // Square paid always starts at 0 on a new invoice — use 🔄 Sync after payment arrives
+  const externalPaid=invType==='manual'?(parseFloat(document.getElementById('inv-external-paid')?.value)||0):0;
+  const paymentNote=invType==='manual'?(document.getElementById('inv-payment-note')?.value?.trim()||''):'';
   const items=document.getElementById('inv-items')?.value?.trim()||'';
   const issueDate=document.getElementById('inv-issue')?.value||'';
   const dueDate=document.getElementById('inv-due')?.value||'';
   if(!amount){showToast('Please enter an amount.','#EF4444');return;}
-  const totalReceived=paid+externalPaid;
+  const totalReceived=externalPaid; // paid (Square) starts at 0 until synced
   let status='unpaid';
   if(totalReceived>=amount)status='paid';
   else if(totalReceived>0)status='partial';
