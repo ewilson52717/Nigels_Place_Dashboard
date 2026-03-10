@@ -4221,6 +4221,15 @@ if(_kioskMode){
   if((_preTok&&_preExp>Date.now()&&_preEmail)||_preEmail){
     state.isLoading=true;
     state.loadingMsg='Signing you in...';
+    // Safety net — mobile browsers often block the silent sign-in without
+    // ever firing the onToken callback, leaving the loader stuck forever.
+    // After 8 seconds, give up and show the login screen.
+    setTimeout(()=>{
+      if(state.isLoading){
+        state.isLoading=false;
+        render();
+      }
+    },8000);
   }
   initGoogleAuth();
   render();
