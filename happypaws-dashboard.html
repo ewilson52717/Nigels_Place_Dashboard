@@ -1238,7 +1238,7 @@ function buildLogin(){
       <div class="text-center" style="margin-bottom:2rem;">
         <img src="${LOGO_URL}" style="width:110px;margin:0 auto 0.9rem;display:block;border-radius:16px;">
         <h1 style="font-size:1.45rem;font-weight:700;color:#1F1F1F;letter-spacing:-0.01em;margin:0 0 0.25rem;">Nigel's Place</h1>
-        <p style="font-size:0.82rem;color:#9CA3AF;margin:0;">Welcome back</p>
+        <p style="font-size:0.82rem;color:#9CA3AF;margin:0;">${localStorage.getItem('np_email')?'Welcome back':'Sign in to get started'}</p>
       </div>
 
       <!-- Official-style Google sign-in button -->
