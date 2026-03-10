@@ -391,6 +391,7 @@ function buildVaccineRecordsHTML(dog){
             ${needsReminder?`<button onclick="showSmsModal(${htmlJsonStr(phone)},${htmlJsonStr(smsMessage)})" title="Text reminder to ${cl?.name||'client'}" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200">💬</button>`:''}
             <button id="vtbtn-${dog.id}-${slug}" onclick="handleVaccTypeUpload(${dog.clientId},${dog.id},${htmlJsonStr(typeName)})" title="Upload updated ${typeName} record" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-gray-50 text-gray-500 hover:bg-gray-100 border border-gray-200">📄</button>
             ${prior.length>0?`<button onclick="toggleVaccGroup(${dog.id},${htmlJsonStr(typeName)})" title="${isExpanded?'Hide':'Show'} ${prior.length} prior" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-gray-50 text-gray-500 hover:bg-gray-100 border border-gray-200">${isExpanded?'▲':'▾'}<span class="ml-0.5 leading-none">${prior.length}</span></button>`:''}
+            <button onclick="deleteVaccEntry(${dog.clientId},${dog.id},${htmlJsonStr(typeName)})" title="Delete all ${typeName} records" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-red-50 text-red-400 hover:bg-red-100 border border-red-200">🗑️</button>
           </div>
         </div>
         ${isExpanded&&prior.length>0?priorRowsHTML:''}
@@ -1179,6 +1180,8 @@ function buildClientsView(){
               ${vaccWarn?`<span class="badge bg-amber-100 text-amber-700">⚠️ Vacc Expiring</span>`:''}
               ${cl.photoConsent?`<span class="badge bg-blue-100 text-blue-600">📸 Photo OK</span>`:`<span class="badge bg-gray-100 text-gray-400">No Photo Consent</span>`}
               <span class="badge bg-blue-100 text-blue-600">${total} visit${total!==1?'s':''}</span>
+              <button onclick="openEditClientModal(${cl.id})" class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100">Edit</button>
+              <button onclick="deleteClient(${cl.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100">Delete</button>
             </div>
           </div>
           <!-- Dog quick-links -->
@@ -1238,10 +1241,17 @@ function buildDogsView(){
             ${dog.birthday?`<p class="text-xs text-gray-400 mt-1">🎂 Birthday: ${dog.birthday}</p>`:''}
             <div class="mt-2">${vaccBadge(dog)}</div>
             ${dog.notes?`<p class="text-xs text-gray-500 italic mt-2 px-2">"${dog.notes}"</p>`:''}
-            <button id="dpbtn-${dog.id}" onclick="handleDogPhotoUpload(${dog.clientId},${dog.id})"
-              class="mt-3 w-full text-xs px-3 py-2 bg-amber-50 text-amber-700 rounded-xl hover:bg-amber-100 border border-amber-200">
-              📸 ${dog.photoLink?'Replace Photo':'Upload Dog Photo'}
-            </button>
+            <div class="mt-3 flex gap-2">
+              <button id="dpbtn-${dog.id}" onclick="handleDogPhotoUpload(${dog.clientId},${dog.id})"
+                class="flex-1 text-xs px-3 py-2 bg-amber-50 text-amber-700 rounded-xl hover:bg-amber-100 border border-amber-200">
+                📸 ${dog.photoLink?'Replace':'Upload Photo'}
+              </button>
+              ${dog.photoLink?`<button onclick="removeDogPhoto(${dog.clientId},${dog.id})" class="text-xs px-3 py-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 border border-red-200" title="Remove profile photo">🗑️</button>`:''}
+            </div>
+            <div class="mt-2 flex gap-2">
+              <button onclick="openEditDogModal(${dog.clientId},${dog.id})" class="flex-1 text-xs px-3 py-2 bg-gray-50 text-gray-600 rounded-xl hover:bg-gray-100 border border-gray-200">✏️ Edit Info</button>
+              <button onclick="deleteDog(${dog.clientId},${dog.id})" class="flex-1 text-xs px-3 py-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 border border-red-200">🗑️ Delete Dog</button>
+            </div>
           </div>
           <!-- Owner card -->
           <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
@@ -1286,14 +1296,19 @@ function buildDogsView(){
             </div>
             ${dog.playPhotos&&dog.playPhotos.length>0?`
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              ${dog.playPhotos.map(p=>`
-                <div class="rounded-xl overflow-hidden bg-gray-50 border border-gray-100 relative group cursor-zoom-in"
-                  onclick="(()=>{const id='${(p.link.match(/^[A-Za-z0-9_-]{25,60}$/)?p.link:(p.link.match(/\/d\/([A-Za-z0-9_-]{25,60})/)||[])[1])||''}';if(id)showPhotoLightbox(id,${htmlJsonStr(p.filename||p.date||'')});})()">
-                  ${driveImgTag(p.link,'w-full h-28 object-cover',p.filename||'')||`<div class="w-full h-28 bg-amber-50 flex items-center justify-center text-3xl">🐾</div>`}
-                  <div class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                    <span class="opacity-0 group-hover:opacity-100 text-white text-2xl transition-opacity drop-shadow-lg">🔍</span>
+              ${dog.playPhotos.map((p,pi)=>`
+                <div class="rounded-xl overflow-hidden bg-gray-50 border border-gray-100 relative group">
+                  <div class="cursor-zoom-in"
+                    onclick="(()=>{const id='${(p.link.match(/^[A-Za-z0-9_-]{25,60}$/)?p.link:(p.link.match(/\/d\/([A-Za-z0-9_-]{25,60})/)||[])[1])||''}';if(id)showPhotoLightbox(id,${htmlJsonStr(p.filename||p.date||'')});})()">
+                    ${driveImgTag(p.link,'w-full h-28 object-cover',p.filename||'')||`<div class="w-full h-28 bg-amber-50 flex items-center justify-center text-3xl">🐾</div>`}
+                    <div class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                      <span class="opacity-0 group-hover:opacity-100 text-white text-2xl transition-opacity drop-shadow-lg">🔍</span>
+                    </div>
                   </div>
-                  <div class="p-1.5 text-xs text-gray-400 truncate">${p.date||''}</div>
+                  <div class="flex items-center justify-between px-1.5 py-1">
+                    <span class="text-xs text-gray-400 truncate">${p.date||''}</span>
+                    <button onclick="deletePlayPhoto(${dog.clientId},${dog.id},${pi})" class="text-xs text-red-400 hover:text-red-600 px-1" title="Delete photo">🗑️</button>
+                  </div>
                 </div>`).join('')}
             </div>`:`<div class="text-center py-6 text-gray-300">
               <div class="text-3xl mb-2">📷</div>
@@ -1375,7 +1390,8 @@ function buildServicesView(){
             </div>
             <div class="flex items-center gap-2">
               <button onclick="openEditServiceModal(${s.id})" class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100">Edit</button>
-              <button onclick="toggleService(${s.id})" class="text-xs px-3 py-1.5 rounded-lg ${s.active?'bg-red-50 text-red-500 hover:bg-red-100':'bg-green-50 text-green-600 hover:bg-green-100'}">${s.active?'Disable':'Enable'}</button>
+              <button onclick="toggleService(${s.id})" class="text-xs px-3 py-1.5 rounded-lg ${s.active?'bg-amber-50 text-amber-600 hover:bg-amber-100':'bg-green-50 text-green-600 hover:bg-green-100'}">${s.active?'Disable':'Enable'}</button>
+              <button onclick="deleteService(${s.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100">Delete</button>
             </div>
           </div>`).join('')}
       </div>`}
@@ -1436,11 +1452,15 @@ function buildInvoicesView(){
             <td class="px-5 py-3.5"><div class="font-bold text-gray-800">$${inv.amount}</div>${inv.paid>0&&inv.paid<inv.amount?`<div class="text-xs text-gray-400">$${inv.paid} paid</div>`:''}</td>
             <td class="px-5 py-3.5 text-gray-500">${inv.dueDate}</td>
             <td class="px-5 py-3.5"><span class="badge ${sCls[inv.status]||'bg-gray-100 text-gray-600'}">${inv.status}</span></td>
-            <td class="px-5 py-3.5 flex items-center gap-2 flex-wrap">
-              ${inv.status!=='paid'?`
-                <button onclick="sendInvoiceText(${inv.id})" class="text-xs px-2 py-1 rounded-lg text-white" style="background:#7B4015" title="Send text message">📱 Text</button>
-                <button onclick="markInvoicePaid(${inv.id})" class="text-xs text-blue-600 hover:underline">Mark Paid</button>`
-              :`<span class="text-xs text-gray-300">Paid ✓</span>`}
+            <td class="px-5 py-3.5">
+              <div class="flex items-center gap-2 flex-wrap">
+                ${inv.status!=='paid'?`
+                  <button onclick="sendInvoiceText(${inv.id})" class="text-xs px-2 py-1 rounded-lg text-white" style="background:#7B4015" title="Send text message">📱 Text</button>
+                  <button onclick="markInvoicePaid(${inv.id})" class="text-xs text-blue-600 hover:underline">Mark Paid</button>`
+                :`<span class="text-xs text-gray-300">Paid ✓</span>`}
+                <button onclick="openEditInvoiceModal(${inv.id})" class="text-xs px-2 py-1 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100">Edit</button>
+                <button onclick="deleteInvoice(${inv.id})" class="text-xs px-2 py-1 rounded-lg bg-red-50 text-red-400 hover:bg-red-100">Delete</button>
+              </div>
             </td>
           </tr>`).join('')}
         </tbody>
@@ -1576,8 +1596,11 @@ function buildModal(){
   if(m.type==='booking')     return buildBookingModal(m.date);
   if(m.type==='addClient')   return buildAddClientModal();
   if(m.type==='addInvoice')  return buildAddInvoiceModal();
-  if(m.type==='addService')  return buildServiceModal(null);
-  if(m.type==='editService') return buildServiceModal(m.serviceId);
+  if(m.type==='addService')   return buildServiceModal(null);
+  if(m.type==='editService')  return buildServiceModal(m.serviceId);
+  if(m.type==='editClient')   return buildEditClientModal(m.clientId);
+  if(m.type==='editDog')      return buildEditDogModal(m.clientId,m.dogId);
+  if(m.type==='editInvoice')  return buildEditInvoiceModal(m.invoiceId);
   return'';
 }
 function buildAddInvoiceModal(){
@@ -1643,7 +1666,10 @@ function buildDayModal(ds){
             ${b.checkIn!==b.checkOut?`<div class="text-xs text-amber-700 mt-0.5">📅 ${fmtDateShort(b.checkIn)} → ${fmtDateShort(b.checkOut)} (${b.nights} days)</div>`:''}
             ${b.addons?`<div class="text-xs text-gray-400">✨ ${b.addons}</div>`:''}
           </div>
-          <span class="text-sm text-gray-600 font-medium whitespace-nowrap">$${b.price}</span>
+          <div class="flex flex-col items-end gap-1">
+            <span class="text-sm text-gray-600 font-medium whitespace-nowrap">$${b.price}</span>
+            ${state.role==='admin'?`<button onclick="cancelBooking(${b.id})" class="text-xs text-red-400 hover:text-red-600 whitespace-nowrap" title="Cancel booking">✕ Cancel</button>`:''}
+          </div>
         </div>`).join('')}</div>`:`<p class="text-gray-300 text-sm text-center py-4 mb-4">No bookings yet.</p>`}
       ${!isPast?`<div class="flex gap-2">
         ${!full
@@ -1876,6 +1902,108 @@ function buildAddClientModal(){
   </div>`;
 }
 
+// ─── EDIT CLIENT MODAL ───────────────────────────────────────────────────────
+function buildEditClientModal(clientId){
+  const cl=clients.find(c=>c.id===clientId);if(!cl)return'';
+  return`
+  <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 slide-in max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-lg font-bold text-gray-800">Edit Client — ${cl.name}</h2>
+        <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
+      </div>
+      <form onsubmit="submitEditClient(event,${clientId})" class="space-y-4">
+        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Full Name *</label>
+          <input id="ecl-name" type="text" value="${cl.name}" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Email</label>
+            <input id="ecl-email" type="email" value="${cl.email||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Phone</label>
+            <input id="ecl-phone" type="tel" value="${cl.phone||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+        </div>
+        <div class="flex gap-2 pt-1">
+          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">Save Changes</button>
+          <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>`;
+}
+// ─── EDIT DOG MODAL ──────────────────────────────────────────────────────────
+function buildEditDogModal(clientId,dogId){
+  const cl=clients.find(c=>c.id===clientId);const dog=cl?.dogs.find(d=>d.id===dogId);if(!dog)return'';
+  return`
+  <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 slide-in max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-lg font-bold text-gray-800">Edit Dog — ${dog.name}</h2>
+        <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
+      </div>
+      <form onsubmit="submitEditDog(event,${clientId},${dogId})" class="space-y-4">
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Dog Name *</label>
+            <input id="edog-name" type="text" value="${dog.name}" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Age (yrs)</label>
+            <input id="edog-age" type="number" min="0" max="25" step="0.1" value="${dog.age||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+          <div class="col-span-2"><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Breed</label>
+            ${breedSelectHtml('edog-breed','edog-breed-other',dog.breed)}</div>
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Vaccinations</label>
+            <select id="edog-vacc" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+              <option value="true" ${dog.vaccinated?'selected':''}>Up to Date</option>
+              <option value="false" ${!dog.vaccinated?'selected':''}>Not Current</option>
+            </select></div>
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Birthday</label>
+            <input id="edog-birthday" type="date" value="${dog.birthday||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+        </div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Notes</label>
+          <textarea id="edog-notes" rows="2" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none">${dog.notes||''}</textarea></div>
+        <div class="flex gap-2 pt-1">
+          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">Save Changes</button>
+          <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>`;
+}
+// ─── EDIT INVOICE MODAL ──────────────────────────────────────────────────────
+function buildEditInvoiceModal(invoiceId){
+  const inv=invoices.find(i=>i.id===invoiceId);if(!inv)return'';
+  return`
+  <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 slide-in max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-lg font-bold text-gray-800">Edit Invoice #${inv.id}</h2>
+        <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
+      </div>
+      <form onsubmit="submitEditInvoice(event,${invoiceId})" class="space-y-4">
+        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Client</label>
+          <select id="einv-client" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            ${clients.map(c=>`<option value="${c.id}" ${c.id===inv.clientId?'selected':''}>${c.name}</option>`).join('')}
+          </select></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Services / Description *</label>
+          <input id="einv-items" type="text" value="${inv.items||''}" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Amount ($)</label>
+            <input id="einv-amount" type="number" min="0" step="0.01" value="${inv.amount||0}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Amount Paid ($)</label>
+            <input id="einv-paid" type="number" min="0" step="0.01" value="${inv.paid||0}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Due Date</label>
+            <input id="einv-due" type="date" value="${inv.dueDate||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Status</label>
+            <select id="einv-status" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+              ${['unpaid','paid','partial','overdue'].map(s=>`<option value="${s}" ${s===inv.status?'selected':''}>${s}</option>`).join('')}
+            </select></div>
+        </div>
+        <div class="flex gap-2 pt-1">
+          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">Save Changes</button>
+          <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>`;
+}
 // ═══════════════════════════════════════════════════
 //  ⑪  ACTION HANDLERS
 // ═══════════════════════════════════════════════════
@@ -2628,6 +2756,118 @@ async function deleteService(id){
   render();showToast('Service deleted.');
   try{await persistServices();}catch(err){showToast('Sheet sync failed.','#F97316');}
 }
+// ─── DELETE CLIENT ────────────────────────────────────────────────────────────
+async function deleteClient(id){
+  const cl=clients.find(c=>c.id===id);if(!cl)return;
+  if(!confirm(`Delete ${cl.name} and ALL their bookings? This cannot be undone.`))return;
+  const idx=clients.findIndex(c=>c.id===id);
+  if(idx>=0)clients.splice(idx,1);
+  // Remove all bookings for this client
+  const bBefore=bookings.length;
+  bookings.splice(0,bookings.length,...bookings.filter(b=>b.clientId!==id));
+  render();showToast(`${cl.name} deleted.`);
+  try{await persistClients();await persistBookings();}catch(e){showToast('Sheet sync failed.','#F97316');}
+}
+// ─── CANCEL/DELETE BOOKING ────────────────────────────────────────────────────
+async function cancelBooking(id){
+  const b=bookings.find(bk=>bk.id===id);if(!b)return;
+  if(!confirm(`Cancel ${b.dogName}'s booking (${fmtDateShort(b.checkIn)}${b.checkIn!==b.checkOut?'–'+fmtDateShort(b.checkOut):''})?`))return;
+  const idx=bookings.findIndex(bk=>bk.id===id);
+  if(idx>=0)bookings.splice(idx,1);
+  render();showToast('Booking cancelled.');
+  try{await persistBookings();}catch(e){showToast('Sheet sync failed.','#F97316');}
+}
+// ─── DELETE INVOICE ───────────────────────────────────────────────────────────
+async function deleteInvoice(id){
+  const inv=invoices.find(i=>i.id===id);if(!inv)return;
+  if(!confirm(`Delete invoice for ${inv.clientName} ($${inv.amount})? This cannot be undone.`))return;
+  const idx=invoices.findIndex(i=>i.id===id);
+  if(idx>=0)invoices.splice(idx,1);
+  render();showToast('Invoice deleted.');
+  try{await persistInvoices();}catch(e){showToast('Sheet sync failed.','#F97316');}
+}
+// ─── DELETE DOG ────────────────────────────────────────────────────────────────
+async function deleteDog(clientId,dogId){
+  const cl=clients.find(c=>c.id===clientId);const dog=cl?.dogs.find(d=>d.id===dogId);if(!dog)return;
+  if(!confirm(`Delete ${dog.name} from ${cl.name}'s profile? This cannot be undone.`))return;
+  cl.dogs=cl.dogs.filter(d=>d.id!==dogId);
+  state.selectedDogId=null;render();showToast(`${dog.name} deleted.`);
+  try{await persistClients();}catch(e){showToast('Sheet sync failed.','#F97316');}
+}
+// ─── REMOVE DOG PROFILE PHOTO ─────────────────────────────────────────────────
+async function removeDogPhoto(clientId,dogId){
+  const cl=clients.find(c=>c.id===clientId);const dog=cl?.dogs.find(d=>d.id===dogId);if(!dog)return;
+  if(!confirm(`Remove ${dog.name}'s profile photo?`))return;
+  dog.photoLink='';render();showToast('Profile photo removed.');
+  try{await persistClients();}catch(e){showToast('Sheet sync failed.','#F97316');}
+}
+// ─── DELETE PLAY PHOTO ────────────────────────────────────────────────────────
+async function deletePlayPhoto(clientId,dogId,photoIndex){
+  const cl=clients.find(c=>c.id===clientId);const dog=cl?.dogs.find(d=>d.id===dogId);if(!dog)return;
+  if(!confirm('Delete this play photo?'))return;
+  dog.playPhotos=(dog.playPhotos||[]).filter((_,i)=>i!==photoIndex);
+  render();showToast('Play photo deleted.');
+  try{await persistClients();}catch(e){showToast('Sheet sync failed.','#F97316');}
+}
+// ─── DELETE VACCINE ENTRY ─────────────────────────────────────────────────────
+async function deleteVaccEntry(clientId,dogId,typeName){
+  const cl=clients.find(c=>c.id===clientId);const dog=cl?.dogs.find(d=>d.id===dogId);if(!dog)return;
+  if(!confirm(`Delete all "${typeName}" vaccine records for ${dog.name}?`))return;
+  dog.vaccines=(dog.vaccines||[]).filter(v=>(v.name||'').trim()!==typeName.trim());
+  render();showToast(`${typeName} records deleted.`);
+  try{await persistClients();}catch(e){showToast('Sheet sync failed.','#F97316');}
+}
+// ─── EDIT CLIENT SUBMIT ───────────────────────────────────────────────────────
+async function submitEditClient(e,clientId){
+  e.preventDefault();
+  const cl=clients.find(c=>c.id===clientId);if(!cl)return;
+  const name=document.getElementById('ecl-name')?.value?.trim();
+  if(!name){showToast('Name is required.','#EF4444');return;}
+  cl.name=name;
+  cl.email=document.getElementById('ecl-email')?.value||'';
+  cl.phone=document.getElementById('ecl-phone')?.value||'';
+  // Update cached clientName in bookings and invoices
+  bookings.forEach(b=>{if(b.clientId===clientId)b.clientName=name;});
+  invoices.forEach(i=>{if(i.clientId===clientId)i.clientName=name;});
+  state.showModal=null;render();showToast(`${name} updated.`);
+  try{await persistClients();await persistBookings();await persistInvoices();}catch(e){showToast('Sheet sync failed.','#F97316');}
+}
+// ─── EDIT DOG SUBMIT ──────────────────────────────────────────────────────────
+async function submitEditDog(e,clientId,dogId){
+  e.preventDefault();
+  const cl=clients.find(c=>c.id===clientId);const dog=cl?.dogs.find(d=>d.id===dogId);if(!dog)return;
+  const name=document.getElementById('edog-name')?.value?.trim();
+  if(!name){showToast('Dog name is required.','#EF4444');return;}
+  dog.name=name;
+  dog.age=parseFloat(document.getElementById('edog-age')?.value)||0;
+  dog.breed=getBreedValue('edog-breed','edog-breed-other');
+  dog.vaccinated=document.getElementById('edog-vacc')?.value==='true';
+  dog.birthday=document.getElementById('edog-birthday')?.value||'';
+  dog.notes=document.getElementById('edog-notes')?.value||'';
+  // Update dogName in bookings
+  bookings.forEach(b=>{if(b.dogId===dogId&&b.clientId===clientId)b.dogName=name;});
+  state.showModal=null;render();showToast(`${name} updated.`);
+  try{await persistClients();await persistBookings();}catch(e){showToast('Sheet sync failed.','#F97316');}
+}
+// ─── EDIT INVOICE SUBMIT ──────────────────────────────────────────────────────
+async function submitEditInvoice(e,invoiceId){
+  e.preventDefault();
+  const inv=invoices.find(i=>i.id===invoiceId);if(!inv)return;
+  const cId=parseInt(document.getElementById('einv-client')?.value);
+  const cl=clients.find(c=>c.id===cId);
+  inv.clientId=cId;inv.clientName=cl?.name||inv.clientName;
+  inv.items=document.getElementById('einv-items')?.value?.trim()||inv.items;
+  inv.amount=parseFloat(document.getElementById('einv-amount')?.value)||inv.amount;
+  inv.paid=parseFloat(document.getElementById('einv-paid')?.value)||0;
+  inv.dueDate=document.getElementById('einv-due')?.value||inv.dueDate;
+  inv.status=document.getElementById('einv-status')?.value||inv.status;
+  state.showModal=null;render();showToast('Invoice updated.');
+  try{await persistInvoices();}catch(e){showToast('Sheet sync failed.','#F97316');}
+}
+// ─── OPEN EDIT MODALS ─────────────────────────────────────────────────────────
+function openEditClientModal(id){state.showModal={type:'editClient',clientId:id};render();}
+function openEditDogModal(clientId,dogId){state.showModal={type:'editDog',clientId,dogId};render();}
+function openEditInvoiceModal(id){state.showModal={type:'editInvoice',invoiceId:id};render();}
 function sendInvoiceText(invId){
   const inv=invoices.find(i=>i.id===invId);if(!inv)return;
   const cl=clients.find(c=>c.id===inv.clientId);
