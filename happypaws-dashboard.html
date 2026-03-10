@@ -2200,10 +2200,6 @@ function buildBookingModal(selectedDate){
 
         <!-- ── BOARDING SECTION ──────────────────────────────── -->
         <div id="bk-boarding-section" style="display:${_bookingMain==='boarding'?'':'none'}">
-          <div class="p-3 rounded-xl border border-orange-100 bg-orange-50/60 text-xs text-amber-800 mb-3 flex items-start gap-2">
-            <span class="text-base">🏡</span>
-            <span>Boarding is charged at <strong>$${boardingRate}/night</strong>${boardingSvc?` (${boardingSvc.name})`:''}. Nights = check-out minus check-in.</span>
-          </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Check-In</label>
