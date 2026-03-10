@@ -945,7 +945,15 @@ async function onToken(resp){
 }
 function googleSignIn(){
   if(!tokenClient){showToast('Auth loading, try again','#EF4444');return;}
-  tokenClient.requestAccessToken({prompt:'select_account'});
+  const savedEmail=localStorage.getItem('np_email');
+  // Returning user: pass login_hint so Google can skip the account picker
+  // when the user already has an active session in this browser.
+  // New user: fall back to select_account so they can choose which account.
+  if(savedEmail){
+    tokenClient.requestAccessToken({prompt:'',login_hint:savedEmail});
+  }else{
+    tokenClient.requestAccessToken({prompt:'select_account'});
+  }
 }
 function enterDemo(roleChoice){
   state.mode='demo';loadMockData();
