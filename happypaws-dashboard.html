@@ -16,6 +16,7 @@
     .nav-item.active { background: rgba(255,255,255,0.22); }
     .slide-in { animation: fadeUp 0.25s ease; }
     @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes pillDrop { from { opacity:0; transform:translateX(-50%) translateY(-14px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
     .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:50; display:flex; align-items:center; justify-content:center; padding:1rem; }
     .day-cell { cursor:pointer; transition:transform 0.15s, box-shadow 0.15s; min-height:88px; }
     .day-cell:hover { transform:scale(1.03); box-shadow:0 4px 16px rgba(0,0,0,0.12); z-index:2; position:relative; }
@@ -185,6 +186,7 @@ const state={
 // ═══════════════════════════════════════════════════
 let clients=[],bookings=[],invoices=[],services=[],packages=[];
 let lastSynced=null,autoRefreshTimer=null;
+let _lastDataFingerprint='';
 
 // ═══════════════════════════════════════════════════
 //  ④  MOCK DATA (Demo Mode)
@@ -432,16 +434,104 @@ function getBaseRate(svcName){
 }
 
 // ═══════════════════════════════════════════════════
-//  ⑥  AUTO-REFRESH
+//  ⑥  AUTO-REFRESH  (smart: fingerprint + pill + fade)
 // ═══════════════════════════════════════════════════
+
+// Lightweight fingerprint — catches additions, removals, status changes,
+// and booking date changes without full JSON serialisation.
+function dataFingerprint(){
+  const bk=bookings.map(b=>b.id+':'+( b.status||'')+':'+(b.date||b.checkIn||'')).join(',');
+  const cl=clients.map(c=>c.id+':'+(c.name||'')).join(',');
+  const iv=invoices.map(i=>i.id+':'+(i.status||'')).join(',');
+  const pk=packages.map(p=>p.id+':'+(p.remaining??'')).join(',');
+  return `${clients.length}|${bookings.length}|${invoices.length}|${packages.length}||${bk}||${cl}||${iv}||${pk}`;
+}
+
 function startAutoRefresh(){
   if(autoRefreshTimer)clearInterval(autoRefreshTimer);
   autoRefreshTimer=setInterval(silentRefresh,60000);
 }
+
 async function silentRefresh(){
   if(state.mode!=='live'||state.isLoading)return;
-  try{await loadAllData();lastSynced=Date.now();render();}catch(e){/* silent */}
+  try{
+    await loadAllData();
+    lastSynced=Date.now();
+    const fp=dataFingerprint();
+    if(fp===_lastDataFingerprint)return; // nothing changed — no render, no flash
+    _lastDataFingerprint=fp;
+
+    if(state.role==='kiosk'){
+      renderWithFade();           // Layer 3: soft crossfade for kiosk live board
+    }else if(state.role==='admin'||state.role==='client'){
+      showUpdatePill();           // Layer 2: unobtrusive pill for admin/client
+    }else{
+      render();
+    }
+  }catch(e){/* silent */}
 }
+
+// Layer 3 — gentle opacity crossfade so the kiosk board doesn't hard-flash
+function renderWithFade(){
+  const app=document.getElementById('app');
+  if(!app){render();return;}
+  app.style.transition='opacity 0.18s ease';
+  app.style.opacity='0.72';
+  setTimeout(()=>{
+    render();
+    requestAnimationFrame(()=>{ app.style.opacity='1'; });
+    setTimeout(()=>{ app.style.transition=''; },220);
+  },180);
+}
+
+// Layer 2 — pill notification for admin / client views
+let _pillCountdown=null;
+function showUpdatePill(){
+  if(document.getElementById('update-pill'))return; // already visible
+  const pill=document.createElement('div');
+  pill.id='update-pill';
+  pill.style.cssText=`
+    position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9100;
+    background:#7B4015;color:#fff;padding:7px 16px 7px 14px;border-radius:999px;
+    box-shadow:0 4px 18px rgba(0,0,0,0.22);cursor:default;
+    font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;
+    animation:pillDrop 0.28s ease;white-space:nowrap;`;
+
+  let secs=30;
+  const applyAndClose=()=>{
+    clearInterval(_pillCountdown);_pillCountdown=null;
+    pill.remove();
+    render();
+  };
+
+  pill.innerHTML=`
+    <span style="font-size:15px">🔄</span>
+    <span id="pill-label">Changes detected — applying in ${secs}s</span>
+    <button id="pill-apply"
+      style="background:#fff;color:#7B4015;border:none;border-radius:999px;
+             padding:2px 11px;font-size:12px;font-weight:700;cursor:pointer;margin-left:2px;">
+      Apply now
+    </button>
+    <button id="pill-dismiss"
+      style="background:transparent;color:rgba(255,255,255,0.7);border:none;
+             font-size:16px;line-height:1;cursor:pointer;padding:0 2px;margin-left:2px;"
+      title="Dismiss">×</button>`;
+
+  document.body.appendChild(pill);
+
+  pill.querySelector('#pill-apply').addEventListener('click',applyAndClose);
+  pill.querySelector('#pill-dismiss').addEventListener('click',()=>{
+    clearInterval(_pillCountdown);_pillCountdown=null;pill.remove();
+  });
+
+  _pillCountdown=setInterval(()=>{
+    secs--;
+    const lbl=document.getElementById('pill-label');
+    if(lbl) lbl.textContent=`Changes detected — applying in ${secs}s`;
+    if(secs<=0) applyAndClose();
+  },1000);
+}
+
 document.addEventListener('visibilitychange',()=>{
   if(!document.hidden&&state.mode==='live')silentRefresh();
 });
@@ -821,6 +911,7 @@ async function onToken(resp){
       ]);
     }
     lastSynced=Date.now();
+    _lastDataFingerprint=dataFingerprint(); // baseline — first poll won't false-trigger
     startAutoRefresh();
     const email=state.userEmail.toLowerCase();
     if(CONFIG.ADMIN_EMAILS.map(e=>e.toLowerCase()).includes(email)){
