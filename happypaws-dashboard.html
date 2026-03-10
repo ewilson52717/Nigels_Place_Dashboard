@@ -876,7 +876,14 @@ function initGoogleAuth(){
 }
 async function onToken(resp){
   if(resp.error){
-    if(silentSignIn){silentSignIn=false;return;}
+    if(silentSignIn){
+      // Silent attempt failed (token expired / no Google session) —
+      // drop back to login screen so user can click the button.
+      silentSignIn=false;
+      state.isLoading=false;
+      render();
+      return;
+    }
     showToast('Sign-in failed: '+resp.error,'#EF4444');return;
   }
   silentSignIn=false;
@@ -3862,6 +3869,15 @@ if(_kioskMode){
     loadKioskData();
   }
 }else{
+  // If we have a cached token (valid) or a saved email (will try silent),
+  // show a loading screen immediately so the user never sees a login flash.
+  const _preTok=localStorage.getItem('np_access_token');
+  const _preExp=parseInt(localStorage.getItem('np_token_expiry')||'0');
+  const _preEmail=localStorage.getItem('np_email');
+  if((_preTok&&_preExp>Date.now()&&_preEmail)||_preEmail){
+    state.isLoading=true;
+    state.loadingMsg='Signing you in...';
+  }
   initGoogleAuth();
   render();
 }
