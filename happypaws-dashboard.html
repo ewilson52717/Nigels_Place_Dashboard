@@ -1050,7 +1050,7 @@ async function ensureServicesSheet(){
 async function initSheetHeaders(){
   await Promise.all([
     writeRange('Clients!A1:E1', [['id','name','email','phone','photoConsent']]),
-    writeRange('Dogs!A1:N1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset']]),
+    writeRange('Dogs!A1:O1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit']]),
     writeRange('Bookings!A1:L1',[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price']]),
     writeRange('Invoices!A1:I1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items']]),
     writeRange('Settings!A1:B10',[
@@ -1094,7 +1094,8 @@ async function loadAllData(){
     if(!vaccines.length&&vaccExpiry){vaccines=[{name:'Vaccines',expiry:vaccExpiry}];}
     let playPhotos=[];try{if(r[12])playPhotos=JSON.parse(r[12]);}catch(e){}
     let photoOffset={x:50,y:50};try{if(r[13]){const p=String(r[13]).split(',');if(p.length===2)photoOffset={x:+p[0]||50,y:+p[1]||50};}}catch(e){}
-    const dog={id:+r[0],name:String(r[2]||''),breed:String(r[3]||''),age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',notes:String(r[6]||''),birthday,vaccExpiry,vaccines,driveFileLink:String(r[10]||''),photoLink:String(r[11]||''),playPhotos,photoOffset};
+    const emergencyVetLimit=String(r[14]||'');
+    const dog={id:+r[0],name:String(r[2]||''),breed:String(r[3]||''),age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',notes:String(r[6]||''),birthday,vaccExpiry,vaccines,driveFileLink:String(r[10]||''),photoLink:String(r[11]||''),playPhotos,photoOffset,emergencyVetLimit};
     const cl=clients.find(c=>c.id===+r[1]);if(cl)cl.dogs.push(dog);
   });
   bookings.length=0;
@@ -1157,10 +1158,10 @@ async function persistBookings(){
 async function persistClients(){
   if(state.mode!=='live')return;
   const cRows=[['id','name','email','phone','photoConsent'],...clients.map(c=>[c.id,c.name,c.email,c.phone,c.photoConsent?'true':'false'])];
-  const dRows=[['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset'],
-    ...clients.flatMap(c=>c.dogs.map(d=>{const off=d.photoOffset||{x:50,y:50};return[d.id,c.id,d.name,d.breed,d.age,d.vaccinated,d.notes,d.birthday||'',d.vaccExpiry||'',JSON.stringify(d.vaccines||[]),d.driveFileLink||'',d.photoLink||'',JSON.stringify(d.playPhotos||[]),`${off.x},${off.y}`];}))];
+  const dRows=[['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit'],
+    ...clients.flatMap(c=>c.dogs.map(d=>{const off=d.photoOffset||{x:50,y:50};return[d.id,c.id,d.name,d.breed,d.age,d.vaccinated,d.notes,d.birthday||'',d.vaccExpiry||'',JSON.stringify(d.vaccines||[]),d.driveFileLink||'',d.photoLink||'',JSON.stringify(d.playPhotos||[]),`${off.x},${off.y}`,d.emergencyVetLimit||''];}))];
   await writeRange(`Clients!A1:E${cRows.length}`,cRows);
-  await writeRange(`Dogs!A1:N${dRows.length}`,dRows);
+  await writeRange(`Dogs!A1:O${dRows.length}`,dRows);
 }
 async function persistInvoices(){
   if(state.mode!=='live')return;
@@ -1428,7 +1429,7 @@ function buildOnboarding(){
           <div style="display:flex;flex-direction:column;gap:.75rem;">
             <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
               <input type="checkbox" id="ob-agree-terms" ${d.agreeTerms?'checked':''} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
-              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I agree to Nigel's Place <strong>Terms &amp; Conditions</strong> — including payment, pick-up/drop-off times (8–10 AM drop-off, 4–6 PM pick-up), and cancellation policies. <span style="color:#DC2626;">*</span></span>
+              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I agree to Nigel's Place <strong>Terms &amp; Conditions</strong> — including payment, pick-up/drop-off times (8–10 AM drop-off, 4–6 PM pick-up), and <button type="button" onclick="showCancellationPolicyModal()" style="background:none;border:none;padding:0;cursor:pointer;font-size:.75rem;color:#7B4015;text-decoration:underline;font-weight:600;font-family:inherit;">cancellation policies</button>. <span style="color:#DC2626;">*</span></span>
             </label>
             <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
               <input type="checkbox" id="ob-agree-liability" ${d.agreeLiability?'checked':''} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
@@ -1438,6 +1439,20 @@ function buildOnboarding(){
               <input type="checkbox" id="ob-agree-medical" ${d.agreeMedical?'checked':''} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
               <span style="font-size:.75rem;color:#374151;line-height:1.4;">I authorize Nigel's Place to seek <strong>emergency veterinary care</strong> for my dog if needed, and agree to cover associated costs. Nigel's Place will make every effort to contact me first. <span style="color:#DC2626;">*</span></span>
             </label>
+            <!-- Emergency vet spending limit — shown always so client doesn't sign a blank check -->
+            <div style="margin-left:1.6rem;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:10px;padding:.75rem;margin-top:-.25rem;">
+              <p style="font-size:.72rem;font-weight:700;color:#0369A1;margin:0 0 .4rem;">🏥 Set your emergency vet spending limit</p>
+              <p style="font-size:.7rem;color:#374151;margin:0 0 .5rem;line-height:1.4;">This protects you from unexpected costs. You can always update this in your profile after signing up.</p>
+              <select id="ob-vet-limit" style="width:100%;border:1px solid #BAE6FD;border-radius:8px;padding:.45rem .6rem;font-size:.75rem;background:#fff;box-sizing:border-box;">
+                <option value="" ${!d.vetLimit?'selected':''}>Contact me first — no treatment without my approval</option>
+                <option value="office-only" ${d.vetLimit==='office-only'?'selected':''}>Office visit &amp; basic diagnostics only (approx. $200–$400)</option>
+                <option value="500" ${d.vetLimit==='500'?'selected':''}>Up to $500</option>
+                <option value="1000" ${d.vetLimit==='1000'?'selected':''}>Up to $1,000</option>
+                <option value="2500" ${d.vetLimit==='2500'?'selected':''}>Up to $2,500</option>
+                <option value="5000" ${d.vetLimit==='5000'?'selected':''}>Up to $5,000</option>
+                <option value="unlimited" ${d.vetLimit==='unlimited'?'selected':''}>No limit — do whatever is needed to keep my dog safe</option>
+              </select>
+            </div>
             <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
               <input type="checkbox" id="ob-photo-consent" ${d.photoConsent===false?'':' checked'} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
               <span style="font-size:.75rem;color:#374151;line-height:1.4;">I agree that Nigel's Place may <strong>photograph &amp; video</strong> my dog for use in social media and marketing. <em style="color:#6B7280;">(Uncheck to opt out)</em></span>
@@ -1529,6 +1544,7 @@ async function submitOnboarding(){
   d.agreeTerms=document.getElementById('ob-agree-terms')?.checked||false;
   d.agreeLiability=document.getElementById('ob-agree-liability')?.checked||false;
   d.agreeMedical=document.getElementById('ob-agree-medical')?.checked||false;
+  d.vetLimit=document.getElementById('ob-vet-limit')?.value||'';
   d.photoConsent=document.getElementById('ob-photo-consent')?.checked||false;
 
   if(!d.agreeTerms||!d.agreeLiability||!d.agreeMedical){
@@ -1571,6 +1587,7 @@ async function submitOnboarding(){
         photoLink:'',
         playPhotos:[],
         photoOffset:{x:50,y:50},
+        emergencyVetLimit:d.vetLimit||'',
       }],
     };
 
@@ -1698,6 +1715,10 @@ function buildClientLayout(){
           class="px-3 py-2 text-sm rounded-xl transition-all font-medium ${state.clientView==='bookings'?'text-amber-800" style="background:#FEF3C7"':'text-gray-500 hover:bg-gray-100'}">
           📋 <span class="hidden sm:inline">My Bookings</span>
         </button>
+        <button onclick="setClientView('mydog')"
+          class="px-3 py-2 text-sm rounded-xl transition-all font-medium ${state.clientView==='mydog'?'text-amber-800" style="background:#FEF3C7"':'text-gray-500 hover:bg-gray-100'}">
+          🐾 <span class="hidden sm:inline">My Dog</span>
+        </button>
       </div>
       <div class="flex items-center gap-1.5">
         <div class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style="background:#7B4015">
@@ -1708,7 +1729,7 @@ function buildClientLayout(){
       </div>
     </header>
     <div class="max-w-5xl mx-auto p-3 sm:p-5">
-      ${state.clientView==='home'?buildClientHome():buildClientBookings()}
+      ${state.clientView==='home'?buildClientHome():state.clientView==='mydog'?buildClientDog():buildClientBookings()}
     </div>
     <div class="policy-footer">
       &copy; ${new Date().getFullYear()} ${CONFIG.APP_COMPANY} &nbsp;&middot;&nbsp;
@@ -2373,6 +2394,89 @@ function buildClientBookings(){
   </div>`;
 }
 
+function buildClientDog(){
+  const cl=clients.find(c=>c.id===state.currentClientId);
+  if(!cl)return'';
+  const VET_LABELS={
+    '':'Contact me first — no treatment without my approval',
+    'office-only':'Office visit & basic diagnostics only (~$200–$400)',
+    '500':'Up to $500','1000':'Up to $1,000','2500':'Up to $2,500',
+    '5000':'Up to $5,000','unlimited':'No limit — do whatever is needed',
+  };
+  const dogsHtml=cl.dogs.map(dog=>{
+    const vs=vaccStatus(dog);
+    const vBadge=vaccBadge(dog);
+    const vetLabel=VET_LABELS[dog.emergencyVetLimit||'']||VET_LABELS[''];
+    const vetColor=dog.emergencyVetLimit==='unlimited'?'#059669':dog.emergencyVetLimit===''?'#DC2626':'#D97706';
+    return`
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4 slide-in">
+      <!-- Dog header -->
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-14 h-14 rounded-full flex items-center justify-center text-3xl flex-shrink-0" style="background:#FEF3C7;">🐶</div>
+        <div>
+          <div class="font-bold text-gray-800 text-lg">${dog.name}</div>
+          <div class="text-sm text-gray-400">${dog.breed||'Dog'}${dog.age?' · '+dog.age+' yr':''}${dog.birthday?' · 🎂 '+fmtDateShort(dog.birthday):''}</div>
+        </div>
+      </div>
+
+      <!-- Vaccine status -->
+      <div class="mb-4">
+        <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Vaccination Status</div>
+        ${vBadge}
+        ${dog.vaccExpiry?`<div class="text-xs text-gray-400 mt-1">On file: expires ${dog.vaccExpiry}</div>`:'<div class="text-xs text-gray-400 mt-1">No records on file — contact Nigel\'s Place to upload.</div>'}
+      </div>
+
+      <!-- Notes -->
+      ${dog.notes?`<div class="mb-4">
+        <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Care Notes</div>
+        <div class="text-sm text-gray-600 bg-gray-50 rounded-xl px-3 py-2 whitespace-pre-line">${dog.notes}</div>
+      </div>`:''}
+
+      <!-- Emergency vet limit — the key section -->
+      <div class="rounded-xl border p-4" style="background:#FFFBEB;border-color:#FCD34D;">
+        <div class="flex items-start justify-between gap-2 mb-2">
+          <div>
+            <div class="font-semibold text-sm text-gray-800">🏥 Emergency Vet Authorization</div>
+            <div class="text-xs text-gray-500 mt-0.5">Nigel's Place will contact you first whenever possible.</div>
+          </div>
+          <span class="text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0" style="background:${vetColor}20;color:${vetColor};">
+            ${dog.emergencyVetLimit==='unlimited'?'No limit':dog.emergencyVetLimit===''?'Call first':dog.emergencyVetLimit==='office-only'?'Basic only':'$'+parseInt(dog.emergencyVetLimit).toLocaleString()+' limit'}
+          </span>
+        </div>
+        <div class="text-xs text-gray-600 mb-3">${vetLabel}</div>
+        <select onchange="updateClientVetLimit(${cl.id},${dog.id},this.value)"
+          class="w-full border border-yellow-300 rounded-xl px-3 py-2 text-sm bg-white">
+          <option value="" ${!dog.emergencyVetLimit?'selected':''}>Contact me first — no treatment without my approval</option>
+          <option value="office-only" ${dog.emergencyVetLimit==='office-only'?'selected':''}>Office visit &amp; basic diagnostics only (~$200–$400)</option>
+          <option value="500" ${dog.emergencyVetLimit==='500'?'selected':''}>Up to $500</option>
+          <option value="1000" ${dog.emergencyVetLimit==='1000'?'selected':''}>Up to $1,000</option>
+          <option value="2500" ${dog.emergencyVetLimit==='2500'?'selected':''}>Up to $2,500</option>
+          <option value="5000" ${dog.emergencyVetLimit==='5000'?'selected':''}>Up to $5,000</option>
+          <option value="unlimited" ${dog.emergencyVetLimit==='unlimited'?'selected':''}>No limit — do whatever is needed to keep my dog safe</option>
+        </select>
+      </div>
+    </div>`;
+  }).join('');
+
+  return`
+  <div class="slide-in">
+    <h1 class="text-2xl font-bold text-gray-800 mb-1">My Dog 🐾</h1>
+    <p class="text-gray-400 text-sm mb-5">View your dog's profile and manage emergency care preferences.</p>
+    ${dogsHtml}
+    <p class="text-xs text-center text-gray-300 mt-2">To update vaccinations, name, or breed — contact Nigel's Place directly.</p>
+  </div>`;
+}
+
+async function updateClientVetLimit(clientId,dogId,value){
+  const cl=clients.find(c=>c.id===clientId);
+  const dog=cl?.dogs.find(d=>d.id===dogId);
+  if(!dog)return;
+  dog.emergencyVetLimit=value;
+  render(); // re-render to update the badge instantly
+  try{await persistClients();showToast('Emergency care preference saved ✓');}
+  catch(e){showToast('Saved locally; sync failed.','#F97316');}
+}
+
 // ═══════════════════════════════════════════════════
 //  ⑩  MODALS
 // ═══════════════════════════════════════════════════
@@ -2890,6 +2994,18 @@ function buildEditDogModal(clientId,dogId){
         </div>
         <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Notes</label>
           <textarea id="edog-notes" rows="2" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none">${dog.notes||''}</textarea></div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">🏥 Emergency Vet Spending Limit</label>
+          <select id="edog-vet-limit" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            <option value="" ${!dog.emergencyVetLimit?'selected':''}>Contact me first — no treatment without my approval</option>
+            <option value="office-only" ${dog.emergencyVetLimit==='office-only'?'selected':''}>Office visit &amp; basic diagnostics only (~$200–$400)</option>
+            <option value="500" ${dog.emergencyVetLimit==='500'?'selected':''}>Up to $500</option>
+            <option value="1000" ${dog.emergencyVetLimit==='1000'?'selected':''}>Up to $1,000</option>
+            <option value="2500" ${dog.emergencyVetLimit==='2500'?'selected':''}>Up to $2,500</option>
+            <option value="5000" ${dog.emergencyVetLimit==='5000'?'selected':''}>Up to $5,000</option>
+            <option value="unlimited" ${dog.emergencyVetLimit==='unlimited'?'selected':''}>No limit — do whatever is needed</option>
+          </select>
+        </div>
         <div class="flex gap-2 pt-1">
           <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">Save Changes</button>
           <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
@@ -3897,6 +4013,7 @@ async function submitEditDog(e,clientId,dogId){
   dog.vaccinated=document.getElementById('edog-vacc')?.value==='true';
   dog.birthday=document.getElementById('edog-birthday')?.value||'';
   dog.notes=document.getElementById('edog-notes')?.value||'';
+  dog.emergencyVetLimit=document.getElementById('edog-vet-limit')?.value||'';
   // Update dogName in bookings
   bookings.forEach(b=>{if(b.dogId===dogId&&b.clientId===clientId)b.dogName=name;});
   state.showModal=null;render();showToast(`${name} updated.`);
@@ -4015,6 +4132,48 @@ document.addEventListener('fullscreenchange',()=>{
 });
 
 // ─── Policy Modal ────────────────────────────────
+// ─── Cancellation Policy lightbox ────────────────────────────────────────────
+function showCancellationPolicyModal(){
+  const existing=document.getElementById('np-cancel-modal');
+  if(existing)existing.remove();
+  const ov=document.createElement('div');
+  ov.id='np-cancel-modal';
+  ov.className='policy-modal-overlay';
+  ov.onclick=(e)=>{if(e.target===ov)ov.remove();};
+  ov.innerHTML=`
+    <div class="policy-modal-box">
+      <div class="policy-modal-header">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:34px;height:34px;background:linear-gradient(135deg,#7B4015,#5C3317);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">📋</div>
+          <div>
+            <div style="font-weight:700;font-size:1rem;color:#111827;">Cancellation Policy</div>
+            <div style="font-size:0.72rem;color:#9CA3AF;">Nigel's Place · Effective 2026</div>
+          </div>
+        </div>
+        <button onclick="document.getElementById('np-cancel-modal').remove()" style="background:none;border:none;cursor:pointer;font-size:1.3rem;color:#9CA3AF;line-height:1;" title="Close">×</button>
+      </div>
+      <div class="policy-modal-body">
+        <h3>Cancellation Notice</h3>
+        <p>Cancellations must be made at least <strong>48 hours</strong> before the scheduled drop-off time to receive a full refund of any pre-paid amounts. Cancellations made with less than 48 hours' notice will result in forfeiture of the deposit.</p>
+        <h3>No-Show Policy</h3>
+        <p>Clients who do not show up for a scheduled stay without prior notice will forfeit any deposit paid and may be charged a no-show fee equivalent to one night's boarding rate.</p>
+        <h3>Holiday &amp; Peak Period Cancellations</h3>
+        <p>During holiday and peak periods (major holidays, school breaks, and high-demand weekends), cancellations require <strong>7 days' notice</strong> for a full deposit refund. Cancellations within 7 days of the scheduled stay will forfeit the deposit in full.</p>
+        <h3>Early Pick-Up</h3>
+        <p>If you pick up your dog earlier than the scheduled check-out date, the full originally-booked rate applies — no partial refunds are issued for unused nights.</p>
+        <h3>Emergency Exceptions</h3>
+        <p>Nigel's Place reviews cancellation exceptions on a case-by-case basis for genuine emergencies (medical, family, etc.). Please contact Kelly directly as soon as possible if you need to cancel due to an emergency.</p>
+        <h3>Pick-Up &amp; Drop-Off Times</h3>
+        <p><strong>Drop-off:</strong> 8:00 AM – 10:00 AM &nbsp;·&nbsp; <strong>Pick-up:</strong> 4:00 PM – 6:00 PM</p>
+        <p>Late pick-ups (after 6:00 PM) will incur an additional fee. If you need to arrange a different time, please contact us in advance.</p>
+      </div>
+      <div class="policy-modal-footer">
+        <button onclick="document.getElementById('np-cancel-modal').remove()" style="background:#7B4015;color:#fff;border:none;border-radius:10px;padding:.5rem 1.5rem;font-size:.875rem;font-weight:600;cursor:pointer;">Got it</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+
 function showPolicyModal(type){
   const isPrivacy=(type==='privacy');
   const title=isPrivacy?'Privacy Policy':'Terms of Service';
