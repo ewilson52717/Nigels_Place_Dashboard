@@ -199,6 +199,7 @@ const state={
   showModal:null,currentClientId:null,selectedDogId:null,
   adminViewAsClient:false,  // admin toggling to client-perspective view
   mode:null,accessToken:null,tokenExpiry:null,userEmail:null,kioskDogs:[],kioskUpcoming:[],
+  kioskPasswordVerified:false, // set true once correct kiosk password entered this session
   isLoading:false,loadingMsg:'',
   sheetId:CONFIG.SHEET_ID||null,sheetUrl:null,
   onboardingStep:1,onboardingData:{},  // client self-registration wizard
@@ -207,7 +208,8 @@ const state={
     dailyCapacity:5,fullDayRate:45,halfDayRate:25,groomingAddOn:20,
     venmoHandle:'',squareLink:'',squareApiKey:'',squareLocationId:'',geminiApiKey:'',nigelsDriveFolderId:'',
     appsScriptUrl:'', // Google Apps Script proxy URL — lets new clients write to the sheet securely
-    capacityOverrides:{}, // { 'YYYY-MM-DD': number } — per-date overrides
+    kioskPassword:'', // if set, kiosk ?kiosk URL requires this password before showing the lobby
+    capacityOverrides:{}, // { 'YYYY-MM-DD': number } — per-date overrides (0 = closed/blocked)
   },
 };
 
@@ -295,6 +297,7 @@ const booksForDate=ds=>bookings.filter(b=>{
   return ci&&ds>=ci&&ds<=co;
 });
 function capColor(n,cap){
+  if(cap===0)return{bar:'#9CA3AF',bg:'#F3F4F6',txt:'#6B7280',label:'Closed'};
   const p=n/cap;
   if(n>=cap)return{bar:'#EF4444',bg:'#FEF2F2',txt:'#DC2626',label:'Full'};
   if(p>=0.8) return{bar:'#F97316',bg:'#FFF7ED',txt:'#EA580C',label:'Almost Full'};
@@ -1067,11 +1070,11 @@ async function initSheetHeaders(){
     writeRange('Dogs!A1:P1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit','deceased']]),
     writeRange('Bookings!A1:L1',[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price']]),
     writeRange('Invoices!A1:K1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items','externalPaid','paymentNote']]),
-    writeRange('Settings!A1:B14',[
+    writeRange('Settings!A1:B15',[
       ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
       ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
       ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',''],['squareLink',''],
-      ['squareApiKey',''],['squareLocationId',''],['geminiApiKey',''],['nigelsDriveFolderId',''],['appsScriptUrl',''],['capacityOverrides','{}'],
+      ['squareApiKey',''],['squareLocationId',''],['geminiApiKey',''],['nigelsDriveFolderId',''],['appsScriptUrl',''],['kioskPassword',''],['capacityOverrides','{}'],
     ]),
     writeRange('Services!A1:F1',[['id','name','type','price','active','frequency']]),
     writeRange('Packages!A1:K1',[['id','clientId','dogId','clientName','dogName','purchaseDate','qty','remaining','pricePerSession','totalPaid','notes']]),
@@ -1145,6 +1148,7 @@ async function loadAllData(){
     else if(k==='geminiApiKey')state.settings.geminiApiKey=v;
     else if(k==='nigelsDriveFolderId')state.settings.nigelsDriveFolderId=v;
     else if(k==='appsScriptUrl')state.settings.appsScriptUrl=v;
+    else if(k==='kioskPassword')state.settings.kioskPassword=v;
     else if(k==='capacityOverrides'){try{state.settings.capacityOverrides=JSON.parse(v)||{};}catch(e){}}
   });
   services.length=0;
@@ -1188,6 +1192,120 @@ async function persistInvoices(){
     ...invoices.map(i=>[i.id,i.clientId,i.clientName,i.amount,i.paid,i.status,i.dueDate,i.issueDate,i.items,i.externalPaid||0,i.paymentNote||''])];
   await writeRange(`Invoices!A1:K${rows.length}`,rows);
 }
+// ─── Vacation / Blocked Days ─────────────────────────────────────────────────
+function blockDateRange(){
+  const start=document.getElementById('block-start')?.value;
+  const end=document.getElementById('block-end')?.value||start;
+  if(!start){showToast('Please select a start date.','#EF4444');return;}
+  if(end<start){showToast('End date must be on or after start date.','#EF4444');return;}
+  if(!state.settings.capacityOverrides)state.settings.capacityOverrides={};
+  let d=new Date(start+'T00:00:00'),count=0;
+  const last=new Date(end+'T00:00:00');
+  while(d<=last){
+    const ds=d.toISOString().split('T')[0];
+    state.settings.capacityOverrides[ds]=0;
+    d.setDate(d.getDate()+1);count++;
+  }
+  showToast(`🔒 Blocked ${count} day${count!==1?'s':''}!`,'#7B4015');
+  render();
+  try{persistSettings();}catch(e){}
+}
+async function parseBlockDatesAI(){
+  const text=(document.getElementById('block-ai-text')?.value||'').trim();
+  if(!text){showToast('Type or speak something first.','#EF4444');return;}
+  const apiKey=state.settings.geminiApiKey;
+  if(!apiKey){showToast('Add your Gemini API key in Settings first.','#F97316');return;}
+  const statusEl=document.getElementById('block-ai-status');
+  if(statusEl)statusEl.textContent='✨ Parsing with AI…';
+  try{
+    const today=TODAY;
+    const prompt=`Today is ${today}. The user wants to block these days at a doggy daycare (no bookings allowed): "${text}"\n\nReturn ONLY a JSON array of date strings in YYYY-MM-DD format. Include every individual date in any mentioned range. Example: ["2026-03-15","2026-03-16","2026-03-17"]\n\nDo not include any other text, explanation, or markdown — just the JSON array.`;
+    const model=await getGeminiModel(apiKey);
+    const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}]}),
+    });
+    const json=await resp.json();
+    const raw=(json.candidates?.[0]?.content?.parts?.[0]?.text||'').trim().replace(/^```[a-z]*\n?/,'').replace(/\n?```$/,'');
+    const dates=JSON.parse(raw);
+    if(!Array.isArray(dates)||dates.length===0)throw new Error('No dates found.');
+    if(!state.settings.capacityOverrides)state.settings.capacityOverrides={};
+    dates.forEach(ds=>{if(/^\d{4}-\d{2}-\d{2}$/.test(ds))state.settings.capacityOverrides[ds]=0;});
+    if(statusEl)statusEl.textContent=`✅ Blocked ${dates.length} date${dates.length!==1?'s':''}!`;
+    showToast(`🔒 AI blocked ${dates.length} day${dates.length!==1?'s':''}!`,'#7B4015');
+    const inp=document.getElementById('block-ai-text');if(inp)inp.value='';
+    render();
+    try{persistSettings();}catch(e){}
+  }catch(err){
+    if(statusEl)statusEl.textContent='❌ Could not parse dates: '+err.message;
+    showToast('AI parsing failed: '+err.message,'#EF4444');
+  }
+}
+let _voiceRecognition=null;
+function toggleVoiceDateInput(){
+  const btn=document.getElementById('block-mic-btn');
+  const statusEl=document.getElementById('block-ai-status');
+  if(_voiceRecognition){
+    _voiceRecognition.stop();_voiceRecognition=null;
+    if(btn)btn.textContent='🎤';
+    return;
+  }
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){showToast('Voice input is not supported in this browser (try Chrome).','#F97316');return;}
+  _voiceRecognition=new SR();
+  _voiceRecognition.lang='en-US';
+  _voiceRecognition.interimResults=false;
+  _voiceRecognition.maxAlternatives=1;
+  if(btn)btn.textContent='🔴';
+  if(statusEl)statusEl.textContent='🎤 Listening… speak now';
+  _voiceRecognition.onresult=(e)=>{
+    const transcript=e.results[0][0].transcript;
+    const inp=document.getElementById('block-ai-text');
+    if(inp){inp.value=transcript;inp.focus();}
+    if(statusEl)statusEl.textContent=`Heard: "${transcript}" — click ✨ Parse to block those days.`;
+    if(btn)btn.textContent='🎤';
+    _voiceRecognition=null;
+  };
+  _voiceRecognition.onerror=(e)=>{
+    if(statusEl)statusEl.textContent='Mic error: '+e.error+'. Try again.';
+    if(btn)btn.textContent='🎤';
+    _voiceRecognition=null;
+  };
+  _voiceRecognition.onend=()=>{if(btn&&btn.textContent==='🔴')btn.textContent='🎤';_voiceRecognition=null;};
+  _voiceRecognition.start();
+}
+
+// ─── Kiosk Password ───────────────────────────────────────────────────────────
+function buildKioskPasswordPrompt(){
+  const biz=state.settings.businessName||"Nigel's Place";
+  return`
+  <div id="kiosk-root" style="position:fixed;inset:0;background:linear-gradient(135deg,#3d1a08,#5C3317,#3d1a08);display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;">
+    <div style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:20px;padding:2.5rem 2rem;width:100%;max-width:340px;text-align:center;backdrop-filter:blur(12px);">
+      <img src="${LOGO_URL}" style="width:64px;height:64px;object-fit:contain;border-radius:50%;background:rgba(255,255,255,0.1);padding:6px;margin:0 auto 1rem;">
+      <div style="color:white;font-size:1.4rem;font-weight:800;margin-bottom:.25rem;">${biz}</div>
+      <div style="color:rgba(255,200,100,0.7);font-size:.85rem;margin-bottom:1.75rem;">Enter kiosk password to continue</div>
+      <input id="kiosk-pw-input" type="password" placeholder="Password"
+        onkeydown="if(event.key==='Enter')verifyKioskPassword()"
+        style="width:100%;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:.7rem 1rem;color:white;font-size:1rem;text-align:center;outline:none;letter-spacing:2px;margin-bottom:.75rem;">
+      <button onclick="verifyKioskPassword()" style="width:100%;background:#7B4015;border:none;border-radius:12px;padding:.75rem;color:white;font-size:.95rem;font-weight:700;cursor:pointer;">Enter →</button>
+      <div id="kiosk-pw-error" style="color:#FCA5A5;font-size:.8rem;margin-top:.6rem;min-height:1.2rem;"></div>
+    </div>
+  </div>`;
+}
+function verifyKioskPassword(){
+  const entered=(document.getElementById('kiosk-pw-input')?.value||'').trim();
+  const correct=(state.settings.kioskPassword||'').trim();
+  if(entered===correct){
+    state.kioskPasswordVerified=true;
+    render();
+  }else{
+    const err=document.getElementById('kiosk-pw-error');
+    if(err){err.textContent='Incorrect password — try again.';setTimeout(()=>{err.textContent='';},3000);}
+    const inp=document.getElementById('kiosk-pw-input');
+    if(inp){inp.value='';inp.focus();}
+  }
+}
+
 // ─── Apps Script proxy ───────────────────────────────────────────────────────
 // Used when a client/onboarding user needs to write to the sheet.
 // Their own OAuth token has no write access, so we POST to an Apps Script Web App
@@ -1210,7 +1328,7 @@ async function proxyClientWrite(action, payload){
 async function persistSettings(){
   if(state.mode!=='live')return;
   const overridesJson=JSON.stringify(state.settings.capacityOverrides||{});
-  await writeRange('Settings!A1:B14',[
+  await writeRange('Settings!A1:B15',[
     ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
     ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
     ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',state.settings.venmoHandle||''],
@@ -1219,6 +1337,7 @@ async function persistSettings(){
     ['geminiApiKey',state.settings.geminiApiKey||''],
     ['nigelsDriveFolderId',state.settings.nigelsDriveFolderId||''],
     ['appsScriptUrl',state.settings.appsScriptUrl||''],
+    ['kioskPassword',state.settings.kioskPassword||''],
     ['capacityOverrides',overridesJson],
   ]);
 }
@@ -1944,14 +2063,16 @@ function buildCalendarView(role){
           const c=capColor(n,cap),full=n>=cap,isToday=ds===TODAY;
           const isPast=ds<TODAY,dow=new Date(yr,mo,day).getDay(),wknd=dow===0||dow===6;
           return`
-          <div class="day-cell border-b border-r border-gray-100 p-2 relative ${wknd?'weekend-day':''} ${isPast&&!isToday?'past-day':''}"
-               style="border-top:3px solid ${n>0?c.bar:'transparent'}"
+          <div class="day-cell border-b border-r border-gray-100 p-2 relative ${wknd?'weekend-day':''} ${isPast&&!isToday?'past-day':''} ${cap===0?'opacity-60':''}"
+               style="border-top:3px solid ${cap===0?'#9CA3AF':n>0?c.bar:'transparent'}${cap===0?';background:#F9FAFB':''}"
                onclick="${isPast&&!isToday?'':'openDayModal(\''+ds+'\')'}">
             <div class="flex items-start justify-between mb-1">
               <span class="${isToday?'text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style="background:#7B4015"':'text-sm font-medium text-gray-600'}">${day}</span>
-              ${n>0?`<span class="text-xs font-bold" style="color:${c.txt}">${n}/${cap}</span>`:''}
+              ${cap===0?`<span class="text-xs font-bold text-gray-400">🔒</span>`:n>0?`<span class="text-xs font-bold" style="color:${c.txt}">${n}/${cap}</span>`:''}
             </div>
-            ${n>0?`<div class="cap-bar mt-1"><div class="cap-fill" style="width:${Math.min(100,n/cap*100)}%;background:${c.bar}"></div></div>
+            ${cap===0
+              ?`<div class="text-xs text-gray-400 mt-1">Closed</div>`
+              :n>0?`<div class="cap-bar mt-1"><div class="cap-fill" style="width:${Math.min(100,n/cap*100)}%;background:${c.bar}"></div></div>
               <div class="text-xs mt-1" style="color:${c.txt}">${full?'🚫 Full':`${cap-n} left`}</div>`
             :`<div class="text-xs text-gray-200 mt-1">${isPast&&!isToday?'—':'Open'}</div>`}
           </div>`;
@@ -2407,23 +2528,75 @@ function buildSettingsView(){
         </div>
       </div>
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h2 class="font-semibold text-gray-800 mb-1">Daily Dog Capacity</h2>
-        <p class="text-xs text-gray-400 mb-3">Default max dogs per day. You can override specific dates below (e.g. for holidays or when you have extra staff).</p>
+        <h2 class="font-semibold text-gray-800 mb-1">📅 Daily Dog Capacity</h2>
+        <p class="text-xs text-gray-400 mb-3">Default max dogs per day. Override specific dates below — or block entire date ranges for vacations.</p>
         <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Default Max Per Day</label>
-        <input id="set-cap" type="number" value="${state.settings.dailyCapacity}" min="1" max="100" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mb-4">
-        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Date-Specific Overrides</label>
+        <input id="set-cap" type="number" value="${state.settings.dailyCapacity}" min="1" max="100" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mb-5">
+
+        <!-- ── Vacation / Block Days ──────────────────────────────── -->
+        <div class="border border-gray-100 rounded-xl p-4 mb-4 bg-gray-50">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-base">🔒</span>
+            <span class="text-sm font-semibold text-gray-700">Block Days (Vacation / Closed)</span>
+          </div>
+          <p class="text-xs text-gray-400 mb-3">Block a single day or an entire range — no bookings will be accepted on blocked days.</p>
+
+          <!-- Date range -->
+          <div class="flex gap-2 mb-3 flex-wrap">
+            <div class="flex-1 min-w-[120px]">
+              <label class="text-xs text-gray-400 block mb-1">From</label>
+              <input type="date" id="block-start" min="${TODAY}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white">
+            </div>
+            <div class="flex-1 min-w-[120px]">
+              <label class="text-xs text-gray-400 block mb-1">To</label>
+              <input type="date" id="block-end" min="${TODAY}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white">
+            </div>
+            <div class="flex items-end">
+              <button type="button" onclick="blockDateRange()" class="px-4 py-2 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">🔒 Block</button>
+            </div>
+          </div>
+
+          <!-- AI voice / text input -->
+          <div class="border-t border-gray-200 pt-3">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">✨ Or describe it to AI</span>
+              ${state.settings.geminiApiKey?'':`<span class="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">(add Gemini key above first)</span>`}
+            </div>
+            <p class="text-xs text-gray-400 mb-2">Say or type something like <em>"I'm off March 15–20"</em> or <em>"block the week of the 4th of July"</em></p>
+            <div class="flex gap-2">
+              <input id="block-ai-text" type="text" placeholder="Type dates to block…"
+                class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();parseBlockDatesAI();}">
+              <button type="button" id="block-mic-btn" onclick="toggleVoiceDateInput()"
+                title="Speak dates to block"
+                class="px-3 py-2 rounded-xl border border-gray-200 text-lg bg-white hover:bg-gray-50" style="line-height:1">🎤</button>
+              <button type="button" onclick="parseBlockDatesAI()"
+                class="px-3 py-2 text-white rounded-xl text-sm font-semibold" style="background:#7B4015"
+                ${state.settings.geminiApiKey?'':'disabled title="Add Gemini API key first"'}>✨ Parse</button>
+            </div>
+            <div id="block-ai-status" class="text-xs text-gray-400 mt-1 min-h-[16px]"></div>
+          </div>
+        </div>
+
+        <!-- ── Date-Specific Capacity Overrides ───────────────────── -->
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Custom Capacity (add extra spots for specific dates)</label>
         <div class="flex gap-2 mb-3">
           <input type="date" id="cap-override-date" min="${TODAY}" class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm">
           <input type="number" id="cap-override-val" placeholder="Max" min="1" max="100" class="w-20 border border-gray-200 rounded-xl px-3 py-2 text-sm">
-          <button type="button" onclick="addCapOverride()" class="px-3 py-2 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">+ Add</button>
+          <button type="button" onclick="addCapOverride()" class="px-3 py-2 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">+ Set</button>
         </div>
+
+        <!-- Combined list: blocked days + capacity overrides -->
         ${Object.keys(state.settings.capacityOverrides||{}).length===0
-          ?'<p class="text-xs text-gray-300">No date overrides set yet.</p>'
-          :`<div class="space-y-1 max-h-36 overflow-y-auto">${Object.entries(state.settings.capacityOverrides||{}).sort().map(([d,v])=>`
-            <div class="flex items-center justify-between px-3 py-1.5 bg-amber-50 rounded-lg border border-amber-100">
-              <span class="text-xs font-medium text-amber-900">${fmtDate(d)}</span>
+          ?'<p class="text-xs text-gray-300">No date overrides or blocked days yet.</p>'
+          :`<div class="space-y-1 max-h-48 overflow-y-auto">${Object.entries(state.settings.capacityOverrides||{}).sort().map(([d,v])=>`
+            <div class="flex items-center justify-between px-3 py-1.5 rounded-lg border ${+v===0?'bg-gray-100 border-gray-200':'bg-amber-50 border-amber-100'}">
               <div class="flex items-center gap-2">
-                <span class="text-xs font-bold text-amber-700">${v} dogs max</span>
+                <span class="text-sm">${+v===0?'🔒':'📊'}</span>
+                <span class="text-xs font-medium ${+v===0?'text-gray-600':'text-amber-900'}">${fmtDate(d)}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold ${+v===0?'text-gray-500':'text-amber-700'}">${+v===0?'Closed':''+v+' dogs max'}</span>
                 <button onclick="removeCapOverride('${d}')" class="text-gray-300 hover:text-red-400 text-sm leading-none">×</button>
               </div>
             </div>`).join('')}</div>`}
@@ -2444,6 +2617,14 @@ function buildSettingsView(){
           <button onclick="setView('kiosk')" class="flex-1 py-2 rounded-xl text-sm font-medium border border-amber-200 text-amber-800 hover:bg-amber-50">👁 Preview Kiosk</button>
           <button onclick="window.open(window.location.href.split('?')[0]+'?kiosk','_blank')" class="flex-1 py-2 rounded-xl text-sm font-medium text-white" style="background:#7B4015">🖥️ Open Kiosk</button>
         </div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <h2 class="font-semibold text-gray-800 mb-1">🔐 Kiosk Password</h2>
+        <p class="text-xs text-gray-400 mb-3">If set, anyone opening the kiosk URL must enter this password before the lobby screen appears. Leave blank for no password. Admins (Kelly &amp; Elyse) always bypass it.</p>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Kiosk Password</label>
+        <input id="set-kiosk-password" type="text" placeholder="Leave blank for no password" value="${state.settings.kioskPassword||''}"
+          class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
+        <p class="text-xs text-gray-400 mt-1">Keep it simple — this is just to stop random people from pulling up the lobby on their own device, not Fort Knox. 🐾</p>
       </div>
       <button onclick="saveSettings()" class="w-full py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">Save Settings</button>
     </div>
@@ -2716,7 +2897,8 @@ function buildAddInvoiceModal(){
 }
 function buildDayModal(ds){
   const bks=booksForDate(ds),cap=getEffectiveCap(ds),c=capColor(bks.length,cap);
-  const full=bks.length>=cap,isPast=ds<TODAY,isAdm=state.role==='admin';
+  const isClosed=cap===0;
+  const full=isClosed||bks.length>=cap,isPast=ds<TODAY,isAdm=state.role==='admin';
   return`
   <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 slide-in">
@@ -2725,9 +2907,11 @@ function buildDayModal(ds){
         <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
       </div>
       <div class="flex items-center gap-3 p-3 rounded-xl mb-4" style="background:${c.bg}">
-        <div class="text-2xl">${full?'🚫':'🐾'}</div>
-        <div><div class="font-semibold text-sm" style="color:${c.txt}">${bks.length}/${cap} dogs · ${c.label}</div>
-          <div class="cap-bar mt-1 w-48"><div class="cap-fill" style="width:${Math.min(100,bks.length/cap*100)}%;background:${c.bar}"></div></div></div>
+        <div class="text-2xl">${isClosed?'🔒':full?'🚫':'🐾'}</div>
+        <div>
+          <div class="font-semibold text-sm" style="color:${c.txt}">${isClosed?'Closed — no bookings this day':bks.length+'/'+cap+' dogs · '+c.label}</div>
+          ${isClosed?`<div class="text-xs mt-1 text-gray-400">Set in Settings → Vacation &amp; Blocked Days</div>`:`<div class="cap-bar mt-1 w-48"><div class="cap-fill" style="width:${Math.min(100,bks.length/cap*100)}%;background:${c.bar}"></div></div>`}
+        </div>
       </div>
       ${bks.length>0?`<div class="space-y-1.5 mb-4 max-h-52 overflow-y-auto">
         ${bks.map(b=>`<div class="flex items-start gap-2.5 p-2.5 bg-gray-50 rounded-xl">
@@ -2744,9 +2928,12 @@ function buildDayModal(ds){
           </div>
         </div>`).join('')}</div>`:`<p class="text-gray-300 text-sm text-center py-4 mb-4">No bookings yet.</p>`}
       ${!isPast?`<div class="flex gap-2">
-        ${!full
-          ?`<button onclick="openBookingModal('${ds}')" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">${isAdm?'+ Add Booking':'📅 Book This Day'}</button>`
-          :`<div class="flex-1 py-2.5 bg-red-50 text-red-400 rounded-xl text-sm text-center font-medium">Day Fully Booked</div>`}
+        ${isClosed
+          ?`<div class="flex-1 py-2.5 bg-gray-100 text-gray-400 rounded-xl text-sm text-center font-medium">🔒 Day Closed${isAdm?` — <button onclick="removeCapOverride('${ds}');closeModal()" class="underline text-gray-500 hover:text-gray-700">Unblock</button>`:''}
+          </div>`
+          :!full
+            ?`<button onclick="openBookingModal('${ds}')" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">${isAdm?'+ Add Booking':'📅 Book This Day'}</button>`
+            :`<div class="flex-1 py-2.5 bg-red-50 text-red-400 rounded-xl text-sm text-center font-medium">Day Fully Booked</div>`}
         <button onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Close</button>
       </div>`:`<button onclick="closeModal()" class="w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Close</button>`}
     </div>
@@ -4428,6 +4615,7 @@ async function saveSettings(){
   const sqLoc=v('set-square-location')?.trim();if(sqLoc!==undefined)state.settings.squareLocationId=sqLoc;
   const gk=v('set-gemini')?.trim();if(gk!==undefined)state.settings.geminiApiKey=gk;
   const asUrl=v('set-apps-script-url')?.trim();if(asUrl!==undefined)state.settings.appsScriptUrl=asUrl;
+  const kpw=v('set-kiosk-password');if(kpw!==undefined)state.settings.kioskPassword=kpw.trim();
   const dfid=v('set-drive-folder')?.trim();
   if(dfid!==undefined){
     const changed=dfid!==state.settings.nigelsDriveFolderId;
@@ -4772,6 +4960,10 @@ function startKioskTimers(){
 }
 // adminPreview=true means it's embedded in the admin panel (slightly different styling)
 function buildKioskView(adminPreview=false){
+  // Password gate — skip for admin preview or if already verified or no password set
+  if(!adminPreview&&state.settings.kioskPassword&&!state.kioskPasswordVerified){
+    return buildKioskPasswordPrompt();
+  }
   const today=new Date().toISOString().split('T')[0];
   const dogs=adminPreview
     ?bookings.filter(b=>b.checkIn<=today&&today<=b.checkOut&&b.status!=='cancelled')
