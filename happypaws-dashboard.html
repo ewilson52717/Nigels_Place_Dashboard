@@ -31,6 +31,11 @@
     /* ── Fullscreen mode: hide sidebar, expand main ── */
     :fullscreen aside, :-webkit-full-screen aside { display:none !important; }
     :fullscreen main,  :-webkit-full-screen main  { width:100vw !important; flex:1 !important; }
+    /* ── Kiosk fullscreen: when the kiosk root IS the fullscreen element ── */
+    #kiosk-root:fullscreen, #kiosk-root:-webkit-full-screen {
+      width: 100vw !important; height: 100vh !important;
+      position: fixed !important; inset: 0 !important; overflow: hidden !important;
+    }
     /* Fullscreen toggle button */
     .fs-btn { display:inline-flex; align-items:center; justify-content:center; padding:6px; border-radius:8px; border:1px solid #E5E7EB; color:#9CA3AF; background:white; cursor:pointer; transition:all 0.15s; }
     .fs-btn:hover { background:#F9FAFB; color:#374151; border-color:#D1D5DB; }
@@ -193,7 +198,7 @@ const state={
   calendarDate:new Date(),
   showModal:null,currentClientId:null,selectedDogId:null,
   adminViewAsClient:false,  // admin toggling to client-perspective view
-  mode:null,accessToken:null,tokenExpiry:null,userEmail:null,kioskDogs:[],
+  mode:null,accessToken:null,tokenExpiry:null,userEmail:null,kioskDogs:[],kioskUpcoming:[],
   isLoading:false,loadingMsg:'',
   sheetId:CONFIG.SHEET_ID||null,sheetUrl:null,
   onboardingStep:1,onboardingData:{},  // client self-registration wizard
@@ -4275,6 +4280,15 @@ function toggleFullscreen(){
     document.documentElement.requestFullscreen().catch(()=>showToast('Fullscreen not available — try pressing F11.','#F97316'));
   }else{document.exitFullscreen();}
 }
+// Kiosk-specific fullscreen — targets the kiosk root div, not the whole document.
+// This prevents the body's white background from showing in the gap.
+function toggleKioskFullscreen(){
+  const el=document.getElementById('kiosk-root');
+  if(!el){toggleFullscreen();return;}
+  if(!document.fullscreenElement){
+    el.requestFullscreen().catch(()=>showToast('Fullscreen not available','#F97316'));
+  }else{document.exitFullscreen();}
+}
 // Keep every fullscreen button icon in sync whenever fullscreen state changes
 document.addEventListener('fullscreenchange',()=>{
   const inFs=!!document.fullscreenElement;
@@ -4551,8 +4565,20 @@ async function loadKioskData(){
       breed:dogMap[+r[2]]?.breed||'',clientName:r[4]||(clientMap[+r[1]])||'',
       checkIn:r[5],checkOut:r[6],
     }));
-    // De-duplicate (same dog may have multiple bookings)
+    // De-duplicate today's dogs (same dog may have multiple bookings)
     const seen=new Set();state.kioskDogs=state.kioskDogs.filter(d=>{if(seen.has(d.dogId))return false;seen.add(d.dogId);return true;});
+    // Also capture upcoming 7 days (arrivals and departures)
+    const next7=new Date();next7.setDate(next7.getDate()+7);
+    const sevenStr=next7.toISOString().split('T')[0];
+    state.kioskUpcoming=(bR||[]).filter(r=>{
+      if(!r[0])return false;
+      const ci=r[5]||'',co=r[6]||ci,status=(r[8]||'').toLowerCase();
+      return status!=='cancelled'&&ci&&((ci>today&&ci<=sevenStr)||(co>today&&co<=sevenStr));
+    }).map(r=>({
+      dogId:+r[2],dogName:r[3]||(dogMap[+r[2]]?.name)||'Unknown',
+      breed:dogMap[+r[2]]?.breed||'',clientName:r[4]||(clientMap[+r[1]])||'',
+      checkIn:r[5],checkOut:r[6]||r[5],
+    }));
     lastSynced=Date.now();
     render();
     const el=document.getElementById('kiosk-sync');if(el)el.textContent='✓ Updated '+new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
@@ -4571,58 +4597,102 @@ function startKioskTimers(){
 }
 // adminPreview=true means it's embedded in the admin panel (slightly different styling)
 function buildKioskView(adminPreview=false){
+  const today=new Date().toISOString().split('T')[0];
   const dogs=adminPreview
-    ?bookings.filter(b=>{const t=new Date().toISOString().split('T')[0];return b.checkIn<=t&&t<=b.checkOut&&b.status!=='cancelled';})
-      .map(b=>{const cl=clients.find(c=>c.id===b.clientId);const dog=cl?.dogs.find(d=>d.id===b.dogId);return{dogId:b.dogId,dogName:b.dogName||dog?.name||'?',breed:dog?.breed||'',clientName:b.clientName||cl?.name||'',checkIn:b.checkIn,checkOut:b.checkOut,photoLink:dog?.photoLink||''};})
-      .filter((d,i,a)=>a.findIndex(x=>x.dogId===d.dogId)===i) // de-dup
+    ?bookings.filter(b=>b.checkIn<=today&&today<=b.checkOut&&b.status!=='cancelled')
+      .map(b=>{const cl=clients.find(c=>c.id===b.clientId);const dog=cl?.dogs.find(d=>d.id===b.dogId);return{dogId:b.dogId,dogName:b.dogName||dog?.name||'?',breed:dog?.breed||'',clientName:b.clientName||cl?.name||'',checkIn:b.checkIn,checkOut:b.checkOut};})
+      .filter((d,i,a)=>a.findIndex(x=>x.dogId===d.dogId)===i)
     :state.kioskDogs||[];
+  // Upcoming — next 7 days' arrivals/departures
+  const next7=new Date();next7.setDate(next7.getDate()+7);
+  const sevenStr=next7.toISOString().split('T')[0];
+  const upcomingRaw=adminPreview
+    ?bookings.filter(b=>b.status!=='cancelled'&&b.checkIn&&((b.checkIn>today&&b.checkIn<=sevenStr)||(b.checkOut>today&&b.checkOut<=sevenStr)))
+      .map(b=>({dogId:b.dogId,dogName:b.dogName||'?',breed:'',clientName:b.clientName||'',checkIn:b.checkIn,checkOut:b.checkOut||b.checkIn}))
+    :state.kioskUpcoming||[];
+  // Build day-by-day upcoming schedule for next 7 days
+  const upcomingDays=[];
+  for(let i=1;i<=7;i++){
+    const d=new Date();d.setDate(d.getDate()+i);
+    const ds=d.toISOString().split('T')[0];
+    const label=i===1?'Tomorrow':d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    const arrivals=upcomingRaw.filter(b=>b.checkIn===ds);
+    const departures=upcomingRaw.filter(b=>b.checkOut===ds&&b.checkIn!==ds);
+    if(arrivals.length||departures.length)upcomingDays.push({ds,label,arrivals,departures});
+  }
   const dateStr=new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const timeStr=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
-  const bgStyle=adminPreview?'background:linear-gradient(135deg,#3d1a08,#7B4015);border-radius:1rem;overflow:hidden;':
-    'position:fixed;inset:0;background:linear-gradient(135deg,#3d1a08,#5C3317,#3d1a08);overflow:auto;';
-  const wrapStyle=adminPreview?'min-height:500px;':'min-height:100vh;';
+  const outerStyle=adminPreview
+    ?'background:linear-gradient(135deg,#3d1a08,#7B4015);border-radius:1rem;overflow:hidden;min-height:520px;'
+    :'position:fixed;inset:0;background:linear-gradient(135deg,#3d1a08,#5C3317,#3d1a08);overflow:auto;';
   return`
-  <div style="${bgStyle}${wrapStyle}font-family:system-ui,sans-serif;display:flex;flex-direction:column;">
+  <div id="kiosk-root" style="${outerStyle}font-family:system-ui,sans-serif;display:flex;flex-direction:column;min-height:${adminPreview?'520px':'100vh'};">
     <!-- Header -->
-    <div style="padding:1.8rem 2.5rem;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.1);">
+    <div style="padding:${adminPreview?'1.2rem 1.8rem':'1.8rem 2.5rem'};display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.1);flex-shrink:0;">
       <div style="display:flex;align-items:center;gap:1rem;">
-        <img src="${LOGO_URL}" style="width:48px;height:48px;object-fit:contain;border-radius:50%;background:rgba(255,255,255,0.1);padding:4px;">
+        <img src="${LOGO_URL}" style="width:${adminPreview?'38px':'48px'};height:${adminPreview?'38px':'48px'};object-fit:contain;border-radius:50%;background:rgba(255,255,255,0.1);padding:4px;">
         <div>
-          <div style="color:white;font-size:1.6rem;font-weight:800;letter-spacing:-0.5px;">${state.settings.businessName||"Nigel's Place"}</div>
-          <div style="color:rgba(255,200,100,0.7);font-size:0.85rem;margin-top:2px;">${dateStr}</div>
+          <div style="color:white;font-size:${adminPreview?'1.25rem':'1.6rem'};font-weight:800;letter-spacing:-0.5px;">${state.settings.businessName||"Nigel's Place"}</div>
+          <div style="color:rgba(255,200,100,0.7);font-size:0.8rem;margin-top:2px;">${dateStr}</div>
         </div>
       </div>
       <div style="text-align:right;">
-        <div id="kiosk-clock" style="color:white;font-size:${adminPreview?'2rem':'3rem'};font-weight:200;letter-spacing:3px;font-variant-numeric:tabular-nums;">${timeStr}</div>
+        <div id="kiosk-clock" style="color:white;font-size:${adminPreview?'1.8rem':'3rem'};font-weight:200;letter-spacing:3px;font-variant-numeric:tabular-nums;">${timeStr}</div>
       </div>
     </div>
-    <!-- Dog grid -->
-    <div style="flex:1;padding:2rem 2.5rem;">
-      <div style="color:rgba(255,200,100,0.85);font-size:0.85rem;font-weight:700;text-transform:uppercase;letter-spacing:2.5px;margin-bottom:1.5rem;">
-        🐕 Today's Guests &nbsp;·&nbsp; ${dogs.length} dog${dogs.length!==1?'s':''}
+    <!-- Two-column body: today's guests + upcoming week -->
+    <div style="flex:1;display:flex;overflow:hidden;">
+      <!-- LEFT: Today's guests -->
+      <div style="flex:1;padding:${adminPreview?'1.2rem 1.5rem':'1.8rem 2rem'};overflow-y:auto;border-right:1px solid rgba(255,255,255,0.07);">
+        <div style="color:rgba(255,200,100,0.85);font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:2.5px;margin-bottom:1.25rem;">
+          🐕 Today's Guests &nbsp;·&nbsp; ${dogs.length} dog${dogs.length!==1?'s':''}
+        </div>
+        ${dogs.length===0?`
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3rem 1rem;color:rgba(255,255,255,0.22);">
+            <div style="font-size:3.5rem;margin-bottom:0.75rem;">🐾</div>
+            <div style="font-size:1.1rem;font-weight:600;">No guests today</div>
+            <div style="font-size:0.8rem;margin-top:0.35rem;">Check back soon!</div>
+          </div>`:`
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(${adminPreview?'150px':'180px'},1fr));gap:1rem;">
+            ${dogs.map(d=>`
+            <div style="background:rgba(255,255,255,0.09);border:1px solid rgba(255,255,255,0.14);border-radius:1.15rem;padding:1.25rem 0.9rem;text-align:center;backdrop-filter:blur(8px);transition:transform .2s;" onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform=''">
+              <div style="width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,0.08);border:2px solid rgba(255,200,100,0.35);display:flex;align-items:center;justify-content:center;font-size:2rem;margin:0 auto 0.75rem;">🐶</div>
+              <div style="color:white;font-size:1rem;font-weight:700;line-height:1.2;">${d.dogName}</div>
+              ${d.breed?`<div style="color:rgba(255,200,100,0.7);font-size:0.72rem;margin-top:3px;">${d.breed}</div>`:''}
+              <div style="color:rgba(255,255,255,0.35);font-size:0.7rem;margin-top:5px;">${d.clientName}</div>
+            </div>`).join('')}
+          </div>`}
       </div>
-      ${dogs.length===0?`
-        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4rem 2rem;color:rgba(255,255,255,0.25);">
-          <div style="font-size:4rem;margin-bottom:1rem;">🐾</div>
-          <div style="font-size:1.3rem;font-weight:600;">No guests today</div>
-          <div style="font-size:0.85rem;margin-top:0.4rem;">Check back soon!</div>
-        </div>`:`
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:1.25rem;">
-          ${dogs.map(d=>`
-          <div style="background:rgba(255,255,255,0.09);border:1px solid rgba(255,255,255,0.14);border-radius:1.25rem;padding:1.5rem 1rem;text-align:center;backdrop-filter:blur(8px);transition:transform .2s;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform=''">
-            <div style="width:70px;height:70px;border-radius:50%;background:rgba(255,255,255,0.08);border:2.5px solid rgba(255,200,100,0.35);display:flex;align-items:center;justify-content:center;font-size:2.2rem;margin:0 auto 0.9rem;">🐶</div>
-            <div style="color:white;font-size:1.1rem;font-weight:700;line-height:1.2;">${d.dogName}</div>
-            ${d.breed?`<div style="color:rgba(255,200,100,0.7);font-size:0.78rem;margin-top:3px;">${d.breed}</div>`:''}
-            <div style="color:rgba(255,255,255,0.4);font-size:0.75rem;margin-top:6px;">${d.clientName}</div>
+      <!-- RIGHT: Upcoming week -->
+      <div style="width:${adminPreview?'220px':'280px'};flex-shrink:0;padding:${adminPreview?'1.2rem 1.2rem':'1.8rem 1.6rem'};overflow-y:auto;background:rgba(0,0,0,0.15);">
+        <div style="color:rgba(255,200,100,0.85);font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:2.5px;margin-bottom:1.25rem;">📅 Coming Up</div>
+        ${upcomingDays.length===0?`
+          <div style="color:rgba(255,255,255,0.2);font-size:0.82rem;text-align:center;padding:2rem 0;">
+            <div style="font-size:2rem;margin-bottom:0.5rem;">🌙</div>
+            <div>All clear this week</div>
+          </div>`
+          :upcomingDays.map(day=>`
+          <div style="margin-bottom:1.1rem;">
+            <div style="color:rgba(255,200,100,0.6);font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:0.45rem;">${day.label}</div>
+            ${day.arrivals.map(b=>`
+              <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem;">
+                <span style="color:#4ADE80;font-size:0.72rem;flex-shrink:0;">→ in</span>
+                <span style="color:rgba(255,255,255,0.85);font-size:0.78rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b.dogName}</span>
+              </div>`).join('')}
+            ${day.departures.map(b=>`
+              <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem;">
+                <span style="color:#FCA5A5;font-size:0.72rem;flex-shrink:0;">← out</span>
+                <span style="color:rgba(255,255,255,0.75);font-size:0.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b.dogName}</span>
+              </div>`).join('')}
           </div>`).join('')}
-        </div>`}
+      </div>
     </div>
     <!-- Footer -->
-    <div style="padding:0.9rem 2.5rem;border-top:1px solid rgba(255,255,255,0.08);display:flex;justify-content:space-between;align-items:center;">
-      <div id="kiosk-sync" style="color:rgba(255,255,255,0.25);font-size:0.75rem;">Auto-refreshes every 5 minutes</div>
+    <div style="padding:0.75rem ${adminPreview?'1.5rem':'2.5rem'};border-top:1px solid rgba(255,255,255,0.08);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+      <div id="kiosk-sync" style="color:rgba(255,255,255,0.22);font-size:0.72rem;">Auto-refreshes every 5 minutes</div>
       <div style="display:flex;gap:8px;align-items:center;">
-        ${!adminPreview?`<button onclick="loadKioskData()" style="color:rgba(255,200,100,0.6);background:rgba(255,255,255,0.06);border:1px solid rgba(255,200,100,0.2);border-radius:8px;padding:0.3rem 0.9rem;font-size:0.75rem;cursor:pointer;">↻ Refresh</button>`:`<span style="color:rgba(255,255,255,0.2);font-size:0.7rem;">Preview — uses live bookings data</span>`}
-        <button class="fs-btn-dark" data-fs-btn data-fs-btn-label="1" onclick="toggleFullscreen()" title="Go fullscreen">${_FS_ENTER} Fullscreen</button>
+        ${!adminPreview?`<button onclick="loadKioskData()" style="color:rgba(255,200,100,0.6);background:rgba(255,255,255,0.06);border:1px solid rgba(255,200,100,0.2);border-radius:8px;padding:0.3rem 0.9rem;font-size:0.72rem;cursor:pointer;">↻ Refresh</button>`:`<span style="color:rgba(255,255,255,0.18);font-size:0.68rem;">Preview · live data</span>`}
+        <button class="fs-btn-dark" data-fs-btn data-fs-btn-label="1" onclick="toggleKioskFullscreen()" title="Go fullscreen">${_FS_ENTER} Fullscreen</button>
       </div>
     </div>
   </div>`;
