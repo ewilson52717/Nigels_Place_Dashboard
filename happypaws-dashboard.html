@@ -216,6 +216,7 @@ const state={
 let clients=[],bookings=[],invoices=[],services=[],packages=[];
 let lastSynced=null,autoRefreshTimer=null;
 let _lastDataFingerprint='';
+let _safetyNetTimer=null; // cancelled once onToken fires so it never interrupts a live load
 
 // ═══════════════════════════════════════════════════
 //  ④  MOCK DATA (Demo Mode)
@@ -905,6 +906,9 @@ function initGoogleAuth(){
   if(savedEmail){silentSignIn=true;tokenClient.requestAccessToken({prompt:'none',login_hint:savedEmail});}
 }
 async function onToken(resp){
+  // Cancel the mobile safety-net timer — we're inside the callback so sign-in
+  // succeeded; let loadAllData() run to its own 25-second timeout instead.
+  if(_safetyNetTimer){clearTimeout(_safetyNetTimer);_safetyNetTimer=null;}
   if(resp.error){
     if(silentSignIn){
       // Silent attempt failed (token expired / no Google session) —
@@ -944,7 +948,7 @@ async function onToken(resp){
       state.sheetUrl=`https://docs.google.com/spreadsheets/d/${state.sheetId}`;
       await Promise.race([
         loadAllData(),
-        new Promise((_,rej)=>setTimeout(()=>rej(new Error('Loading timed out — please refresh the page.')),20000))
+        new Promise((_,rej)=>setTimeout(()=>rej(new Error('Loading timed out — please refresh the page.')),25000))
       ]);
     }
     lastSynced=Date.now();
@@ -1057,11 +1061,12 @@ async function initSheetHeaders(){
     writeRange('Clients!A1:E1', [['id','name','email','phone','photoConsent']]),
     writeRange('Dogs!A1:O1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit']]),
     writeRange('Bookings!A1:L1',[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price']]),
-    writeRange('Invoices!A1:I1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items']]),
-    writeRange('Settings!A1:B10',[
+    writeRange('Invoices!A1:K1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items','externalPaid','paymentNote']]),
+    writeRange('Settings!A1:B13',[
       ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
       ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
-      ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',''],['squareLink',''],['geminiApiKey',''],['nigelsDriveFolderId',''],
+      ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',''],['squareLink',''],
+      ['squareApiKey',''],['squareLocationId',''],['geminiApiKey',''],['nigelsDriveFolderId',''],['capacityOverrides','{}'],
     ]),
     writeRange('Services!A1:F1',[['id','name','type','price','active','frequency']]),
     writeRange('Packages!A1:K1',[['id','clientId','dogId','clientName','dogName','purchaseDate','qty','remaining','pricePerSession','totalPaid','notes']]),
@@ -1079,8 +1084,8 @@ async function ensurePackagesSheet(){
 }
 async function loadAllData(){
   const[cR,dR,bR,iR,sR]=await Promise.all([
-    readRangeSafe('Clients!A2:E'),readRangeSafe('Dogs!A2:N'),readRangeSafe('Bookings!A2:L'),
-    readRangeSafe('Invoices!A2:I'),readRangeSafe('Settings!A2:B'),
+    readRangeSafe('Clients!A2:E'),readRangeSafe('Dogs!A2:O'),readRangeSafe('Bookings!A2:L'),
+    readRangeSafe('Invoices!A2:K'),readRangeSafe('Settings!A2:B'),
   ]);
   const svR=await readRangeSafe('Services!A2:F');
   const pkR=await readRangeSafe('Packages!A2:K');
@@ -4725,15 +4730,17 @@ if(_kioskMode){
   if((_preTok&&_preExp>Date.now()&&_preEmail)||_preEmail){
     state.isLoading=true;
     state.loadingMsg='Signing you in...';
-    // Safety net — mobile browsers often block the silent sign-in without
+    // Safety net — mobile browsers sometimes block the silent sign-in without
     // ever firing the onToken callback, leaving the loader stuck forever.
-    // After 8 seconds, give up and show the login screen.
-    setTimeout(()=>{
+    // Cancelled immediately inside onToken() if the callback fires normally.
+    // Only triggers (10 s) when the browser truly swallows the auth callback.
+    _safetyNetTimer=setTimeout(()=>{
+      _safetyNetTimer=null;
       if(state.isLoading){
         state.isLoading=false;
         render();
       }
-    },8000);
+    },10000);
   }
   initGoogleAuth();
   render();
