@@ -465,7 +465,7 @@ try{_folderIdCache=JSON.parse(localStorage.getItem('np_folder_cache')||'{}');}ca
 const _driveImgCache={};
 // Build an <img> tag for a Drive-stored image. Accepts raw file IDs or webViewLinks.
 // Renders immediately if already cached; otherwise shows placeholder and loads async via hydrateImages().
-function driveImgTag(link,cssClass,alt=''){
+function driveImgTag(link,cssClass,alt='',extraStyle=''){
   if(!link)return'';
   // Extract Drive file ID from various link formats, or use raw ID directly
   let fileId=null;
@@ -473,10 +473,13 @@ function driveImgTag(link,cssClass,alt=''){
   else{const m=link.match(/\/d\/([A-Za-z0-9_-]{25,60})/);if(m)fileId=m[1];}  // webViewLink
   if(fileId){
     const src=_driveImgCache[fileId]||'';
-    return`<img data-driveid="${fileId}" src="${src}" alt="${alt||''}" class="${cssClass}"${src?'':' style="display:none"'} onerror="this.style.display='none'">`;
+    // Merge extraStyle with the display:none for uncached images
+    const styleAttr=src?(extraStyle?` style="${extraStyle}"`:''): ` style="display:none${extraStyle?';'+extraStyle:''}"`;
+    return`<img data-driveid="${fileId}" src="${src}" alt="${alt||''}" class="${cssClass}"${styleAttr} onerror="this.style.display='none'">`;
   }
   // Non-Drive URL (legacy or external) — render directly
-  return`<img src="${link}" alt="${alt||''}" class="${cssClass}" onerror="this.style.display='none'">`;
+  const styleAttr=extraStyle?` style="${extraStyle}"`:''
+  return`<img src="${link}" alt="${alt||''}" class="${cssClass}"${styleAttr} onerror="this.style.display='none'">`;
 }
 // Fetch Drive image content using the current access token and cache as blob URLs.
 // Called after every render() so new images appear without a full page reload.
@@ -549,6 +552,206 @@ async function showPhotoLightbox(fileId, label=''){
     btn.style.cssText='color:rgba(255,255,255,0.55);background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:.4rem 1.1rem;font-size:.82rem;cursor:pointer;';
     ov.appendChild(btn);
   }catch(e){if(spin.parentNode)spin.textContent='Failed to load image';}
+}
+// ─── Profile Photo Lightbox ───────────────────────────────────────────────────
+// LinkedIn-style full-size profile photo view with drag-to-reposition for admins.
+async function openProfilePhotoLightbox(fileId, clientId, dogId){
+  document.getElementById('profile-lb')?.remove();
+  const isAdmin=state.role==='admin';
+  const cl=clients.find(c=>c.id===clientId);
+  const dog=dogId?cl?.dogs.find(d=>d.id===dogId):null;
+  const name=dog?dog.name:(cl?.name||'');
+
+  // ── Overlay ──────────────────────────────────────────────────────────────
+  const ov=document.createElement('div');
+  ov.id='profile-lb';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9998;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:1.5rem;box-sizing:border-box;';
+  ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+  document.body.appendChild(ov);
+
+  // ── Spinner ───────────────────────────────────────────────────────────────
+  const spin=document.createElement('div');
+  spin.style.cssText='color:rgba(255,255,255,0.5);font-size:1.1rem;';spin.textContent='Loading…';
+  ov.appendChild(spin);
+
+  // ── Fetch image ───────────────────────────────────────────────────────────
+  let src=fileId?(_driveImgCache[fileId]||null):null;
+  if(fileId&&!src&&state.accessToken){
+    try{
+      const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,{headers:{Authorization:`Bearer ${state.accessToken}`}});
+      if(r.ok){const bl=await r.blob();if(bl.type.startsWith('image/')){src=URL.createObjectURL(bl);_driveImgCache[fileId]=src;}}
+    }catch(e){}
+  }
+  spin.remove();
+
+  // ── Content wrapper ───────────────────────────────────────────────────────
+  const wrap=document.createElement('div');
+  wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:14px;max-width:340px;width:100%;';
+  wrap.addEventListener('click',e=>e.stopPropagation());
+
+  // ── Profile circle ────────────────────────────────────────────────────────
+  const CIRCLE=240; // display diameter in px
+  const circleWrap=document.createElement('div');
+  circleWrap.style.cssText=`position:relative;width:${CIRCLE}px;height:${CIRCLE}px;border-radius:50%;overflow:hidden;border:4px solid rgba(255,255,255,0.18);box-shadow:0 20px 60px rgba(0,0,0,.8);flex-shrink:0;`;
+
+  let cur=dog?.photoOffset?{...dog.photoOffset}:{x:50,y:50};
+
+  if(src){
+    const img=document.createElement('img');
+    img.src=src;
+    img.style.cssText=`width:100%;height:100%;object-fit:cover;object-position:${cur.x}% ${cur.y}%;display:block;user-select:none;-webkit-user-drag:none;`;
+    circleWrap.appendChild(img);
+
+    // ── Name label ────────────────────────────────────────────────────────
+    const nameLbl=document.createElement('div');
+    nameLbl.style.cssText='color:#fff;font-size:1.4rem;font-weight:700;text-align:center;text-shadow:0 2px 8px rgba(0,0,0,0.5);';
+    nameLbl.textContent=name;
+
+    // ── Hint (hidden until reposition mode) ──────────────────────────────
+    const hint=document.createElement('div');
+    hint.style.cssText='display:none;color:rgba(255,255,255,0.5);font-size:0.75rem;text-align:center;max-width:240px;';
+    hint.textContent='Drag the photo to move the focal point, then hit Save.';
+
+    // ── Button row ────────────────────────────────────────────────────────
+    const btnRow=document.createElement('div');
+    btnRow.style.cssText='display:flex;gap:10px;flex-wrap:wrap;justify-content:center;';
+
+    if(isAdmin&&dog){
+      // ── Replace button ─────────────────────────────────────────────────
+      const replaceBtn=mkLbBtn('📸 Replace Photo','rgba(255,255,255,0.12)','rgba(255,255,255,0.25)');
+      replaceBtn.onclick=()=>{ov.remove();handleDogPhotoUpload(clientId,dogId);};
+
+      // ── Reposition button ──────────────────────────────────────────────
+      const reposBtn=mkLbBtn('↔ Reposition','rgba(255,255,255,0.12)','rgba(255,255,255,0.25)');
+      const saveBtn=mkLbBtn('✓ Save Position','#7B4015','#6A3511');
+      saveBtn.style.display='none';
+
+      let reposMode=false;
+      let dragging=false;
+      let dragStart={x:0,y:0,ox:50,oy:50};
+
+      const startDrag=e=>{
+        if(!reposMode)return;
+        e.preventDefault();
+        dragging=true;
+        const pt=e.touches?e.touches[0]:e;
+        dragStart={x:pt.clientX,y:pt.clientY,ox:cur.x,oy:cur.y};
+        img.style.cursor='grabbing';
+      };
+      const moveDrag=e=>{
+        if(!dragging)return;
+        e.preventDefault();
+        const pt=e.touches?e.touches[0]:e;
+        // Dragging the photo: move in drag direction → focal point follows cursor
+        const dx=(pt.clientX-dragStart.x)/CIRCLE*80;
+        const dy=(pt.clientY-dragStart.y)/CIRCLE*80;
+        cur.x=Math.max(0,Math.min(100,dragStart.ox-dx));
+        cur.y=Math.max(0,Math.min(100,dragStart.oy-dy));
+        img.style.objectPosition=`${cur.x}% ${cur.y}%`;
+      };
+      const endDrag=()=>{dragging=false;if(reposMode)img.style.cursor='grab';};
+
+      img.addEventListener('mousedown',startDrag);
+      img.addEventListener('touchstart',startDrag,{passive:false});
+      document.addEventListener('mousemove',moveDrag);
+      document.addEventListener('touchmove',moveDrag,{passive:false});
+      document.addEventListener('mouseup',endDrag);
+      document.addEventListener('touchend',endDrag);
+
+      reposBtn.onclick=()=>{
+        reposMode=!reposMode;
+        if(reposMode){
+          reposBtn.textContent='✕ Cancel Reposition';
+          reposBtn.style.background='rgba(195,148,42,0.35)';
+          reposBtn.style.borderColor='#C4952A';
+          img.style.cursor='grab';
+          hint.style.display='block';
+          saveBtn.style.display='inline-block';
+        }else{
+          reposBtn.textContent='↔ Reposition';
+          reposBtn.style.background='rgba(255,255,255,0.12)';
+          reposBtn.style.borderColor='rgba(255,255,255,0.25)';
+          img.style.cursor='default';
+          hint.style.display='none';
+          saveBtn.style.display='none';
+          // Revert to saved offset
+          cur={...( dog.photoOffset||{x:50,y:50})};
+          img.style.objectPosition=`${cur.x}% ${cur.y}%`;
+        }
+      };
+
+      saveBtn.onclick=async()=>{
+        dog.photoOffset={...cur};
+        // Clean up listeners before closing
+        document.removeEventListener('mousemove',moveDrag);
+        document.removeEventListener('touchmove',moveDrag);
+        document.removeEventListener('mouseup',endDrag);
+        document.removeEventListener('touchend',endDrag);
+        ov.remove();
+        render();
+        try{await persistClients();showToast(`📸 ${dog.name}'s photo repositioned!`);}
+        catch(e){showToast('Saved locally; sheet sync failed.','#F97316');}
+      };
+
+      // Clean up listeners when overlay closes any other way
+      ov.addEventListener('click',()=>{
+        document.removeEventListener('mousemove',moveDrag);
+        document.removeEventListener('touchmove',moveDrag);
+        document.removeEventListener('mouseup',endDrag);
+        document.removeEventListener('touchend',endDrag);
+      });
+
+      btnRow.appendChild(replaceBtn);
+      btnRow.appendChild(reposBtn);
+      btnRow.appendChild(saveBtn);
+      wrap.appendChild(circleWrap);
+      wrap.appendChild(nameLbl);
+      wrap.appendChild(hint);
+      wrap.appendChild(btnRow);
+    }else{
+      // Client / no-photo fallback — view only
+      wrap.appendChild(circleWrap);
+      if(name){wrap.appendChild(nameLbl);}
+    }
+  }else{
+    // No photo — admin sees upload prompt
+    const fallback=document.createElement('div');
+    fallback.style.cssText=`width:${CIRCLE}px;height:${CIRCLE}px;border-radius:50%;background:rgba(255,255,255,0.06);border:4px solid rgba(255,255,255,0.12);display:flex;align-items:center;justify-content:center;font-size:4rem;`;
+    fallback.textContent='🐾';
+    circleWrap.appendChild(fallback);
+    wrap.appendChild(circleWrap);
+    if(name){
+      const nameLbl=document.createElement('div');
+      nameLbl.style.cssText='color:#fff;font-size:1.4rem;font-weight:700;text-align:center;';
+      nameLbl.textContent=name;
+      wrap.appendChild(nameLbl);
+    }
+    if(isAdmin&&dog){
+      const uploadBtn=mkLbBtn('📸 Upload Photo','rgba(255,255,255,0.12)','rgba(255,255,255,0.25)');
+      uploadBtn.onclick=()=>{ov.remove();handleDogPhotoUpload(clientId,dogId);};
+      const uploadRow=document.createElement('div');uploadRow.appendChild(uploadBtn);
+      wrap.appendChild(uploadRow);
+    }
+  }
+
+  // ── Close button ──────────────────────────────────────────────────────────
+  const closeBtn=mkLbBtn('✕  Close','rgba(255,255,255,0.08)','rgba(255,255,255,0.15)');
+  closeBtn.onclick=()=>{
+    document.removeEventListener('mousemove',()=>{});
+    ov.remove();
+  };
+  closeBtn.style.marginTop='0';
+
+  ov.appendChild(wrap);
+  ov.appendChild(closeBtn);
+}
+function mkLbBtn(label,bg,border){
+  const btn=document.createElement('button');
+  btn.type='button';btn.textContent=label;
+  btn.style.cssText=`background:${bg};border:1px solid ${border};color:#fff;border-radius:10px;padding:8px 18px;font-size:0.82rem;cursor:pointer;font-weight:600;transition:background 0.15s;white-space:nowrap;`;
+  btn.onmouseover=()=>btn.style.background=bg.replace('0.12','0.22').replace('0.08','0.16');
+  btn.onmouseout=()=>btn.style.background=bg;
+  return btn;
 }
 // Tracks which vaccine type groups are expanded in the dog detail view — persists across renders.
 let _expandedVaccGroups=new Set();
@@ -705,7 +908,7 @@ async function ensureServicesSheet(){
 async function initSheetHeaders(){
   await Promise.all([
     writeRange('Clients!A1:E1', [['id','name','email','phone','photoConsent']]),
-    writeRange('Dogs!A1:M1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos']]),
+    writeRange('Dogs!A1:N1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset']]),
     writeRange('Bookings!A1:L1',[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price']]),
     writeRange('Invoices!A1:I1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items']]),
     writeRange('Settings!A1:B10',[
@@ -729,7 +932,7 @@ async function ensurePackagesSheet(){
 }
 async function loadAllData(){
   const[cR,dR,bR,iR,sR]=await Promise.all([
-    readRangeSafe('Clients!A2:E'),readRangeSafe('Dogs!A2:M'),readRangeSafe('Bookings!A2:L'),
+    readRangeSafe('Clients!A2:E'),readRangeSafe('Dogs!A2:N'),readRangeSafe('Bookings!A2:L'),
     readRangeSafe('Invoices!A2:I'),readRangeSafe('Settings!A2:B'),
   ]);
   const svR=await readRangeSafe('Services!A2:F');
@@ -748,7 +951,8 @@ async function loadAllData(){
     // Back-compat: if no vaccines array yet, seed from old vaccExpiry field
     if(!vaccines.length&&vaccExpiry){vaccines=[{name:'Vaccines',expiry:vaccExpiry}];}
     let playPhotos=[];try{if(r[12])playPhotos=JSON.parse(r[12]);}catch(e){}
-    const dog={id:+r[0],name:String(r[2]||''),breed:String(r[3]||''),age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',notes:String(r[6]||''),birthday,vaccExpiry,vaccines,driveFileLink:String(r[10]||''),photoLink:String(r[11]||''),playPhotos};
+    let photoOffset={x:50,y:50};try{if(r[13]){const p=String(r[13]).split(',');if(p.length===2)photoOffset={x:+p[0]||50,y:+p[1]||50};}}catch(e){}
+    const dog={id:+r[0],name:String(r[2]||''),breed:String(r[3]||''),age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',notes:String(r[6]||''),birthday,vaccExpiry,vaccines,driveFileLink:String(r[10]||''),photoLink:String(r[11]||''),playPhotos,photoOffset};
     const cl=clients.find(c=>c.id===+r[1]);if(cl)cl.dogs.push(dog);
   });
   bookings.length=0;
@@ -811,10 +1015,10 @@ async function persistBookings(){
 async function persistClients(){
   if(state.mode!=='live')return;
   const cRows=[['id','name','email','phone','photoConsent'],...clients.map(c=>[c.id,c.name,c.email,c.phone,c.photoConsent?'true':'false'])];
-  const dRows=[['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos'],
-    ...clients.flatMap(c=>c.dogs.map(d=>[d.id,c.id,d.name,d.breed,d.age,d.vaccinated,d.notes,d.birthday||'',d.vaccExpiry||'',JSON.stringify(d.vaccines||[]),d.driveFileLink||'',d.photoLink||'',JSON.stringify(d.playPhotos||[])]))];
+  const dRows=[['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset'],
+    ...clients.flatMap(c=>c.dogs.map(d=>{const off=d.photoOffset||{x:50,y:50};return[d.id,c.id,d.name,d.breed,d.age,d.vaccinated,d.notes,d.birthday||'',d.vaccExpiry||'',JSON.stringify(d.vaccines||[]),d.driveFileLink||'',d.photoLink||'',JSON.stringify(d.playPhotos||[]),`${off.x},${off.y}`];}))];
   await writeRange(`Clients!A1:E${cRows.length}`,cRows);
-  await writeRange(`Dogs!A1:M${dRows.length}`,dRows);
+  await writeRange(`Dogs!A1:N${dRows.length}`,dRows);
 }
 async function persistInvoices(){
   if(state.mode!=='live')return;
@@ -1269,9 +1473,16 @@ function buildClientsView(){
                 const needsRequest=vs==='expired'||vs==='expiring';
                 return`
                 <div class="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2 border ${vs==='expired'?'border-red-200':vs==='expiring'?'border-amber-200':'border-gray-100'}">
-                  ${d.photoLink
-                    ?driveImgTag(d.photoLink,'w-7 h-7 rounded-full object-cover',d.name)||`<span class="text-base">🐶</span>`
-                    :`<span class="text-base">🐶</span>`}
+                  ${(()=>{
+                    const off=d.photoOffset||{x:50,y:50};
+                    const fid=d.photoLink?(d.photoLink.match(/^[A-Za-z0-9_-]{25,60}$/)?d.photoLink:(d.photoLink.match(/\/d\/([A-Za-z0-9_-]{25,60})/)||[])[1])||'':'';
+                    return d.photoLink&&fid
+                      ?`<div class="relative cursor-pointer group/tp" onclick="event.stopPropagation();openProfilePhotoLightbox('${fid}',${cl.id},${d.id})" title="View photo">
+                          ${driveImgTag(d.photoLink,'w-7 h-7 rounded-full object-cover',d.name,`object-position:${off.x}% ${off.y}%`)||`<span class="text-base">🐶</span>`}
+                          <div class="absolute inset-0 rounded-full bg-black/0 group-hover/tp:bg-black/30 transition-all flex items-center justify-center"><span class="opacity-0 group-hover/tp:opacity-100 text-white text-xs">🔍</span></div>
+                        </div>`
+                      :`<span class="text-base">🐶</span>`;
+                  })()}
                   <div>
                     <button onclick="setView('dogs');setDogDetail(${d.id})" class="text-sm font-semibold text-amber-800 hover:underline">${d.name}</button>
                     <div class="text-xs text-gray-400">${d.breed}</div>
@@ -1308,9 +1519,20 @@ function buildDogsView(){
         <!-- Left: Dog profile card -->
         <div class="md:col-span-1 space-y-4">
           <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
-            ${dog.photoLink
-              ?(driveImgTag(dog.photoLink,'w-32 h-32 rounded-full object-cover mx-auto mb-3 border-4 border-amber-100',dog.name)||`<div class="w-32 h-32 rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-3 border-4 border-amber-100 text-5xl">🐶</div>`)
-              :`<div class="w-32 h-32 rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-3 border-4 border-amber-100 text-5xl">🐶</div>`}
+            ${(()=>{
+              const off=dog.photoOffset||{x:50,y:50};
+              const posStyle=`object-position:${off.x}% ${off.y}%`;
+              const fileId=dog.photoLink?(dog.photoLink.match(/^[A-Za-z0-9_-]{25,60}$/) ? dog.photoLink : (dog.photoLink.match(/\/d\/([A-Za-z0-9_-]{25,60})/)||[])[1])||'' : '';
+              const clickAttr=fileId?`onclick="openProfilePhotoLightbox('${fileId}',${dog.clientId},${dog.id})" style="cursor:pointer" title="Click to view or reposition photo"`:' ';
+              return dog.photoLink
+                ?(`<div class="relative inline-block mb-3 group">
+                  ${driveImgTag(dog.photoLink,'w-32 h-32 rounded-full object-cover border-4 border-amber-100',dog.name,posStyle)||`<div class="w-32 h-32 rounded-full bg-amber-50 flex items-center justify-center border-4 border-amber-100 text-5xl">🐶</div>`}
+                  <div ${clickAttr} class="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/25 transition-all flex items-center justify-center">
+                    <span class="opacity-0 group-hover:opacity-100 text-white text-2xl drop-shadow-lg transition-opacity">🔍</span>
+                  </div>
+                </div>`)
+                :`<div onclick="openProfilePhotoLightbox(null,${dog.clientId},${dog.id})" class="w-32 h-32 rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-3 border-4 border-amber-100 text-5xl cursor-pointer hover:bg-amber-100 transition-colors" title="Upload a photo">🐶</div>`;
+            })()}
             <h2 class="text-xl font-bold text-gray-800">${dog.name}</h2>
             <p class="text-gray-400 text-sm">${dog.breed} · ${dog.age}yr old</p>
             ${dog.birthday?`<p class="text-xs text-gray-400 mt-1">🎂 Birthday: ${dog.birthday}</p>`:''}
