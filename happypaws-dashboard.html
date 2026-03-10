@@ -196,6 +196,7 @@ const state={
   mode:null,accessToken:null,tokenExpiry:null,userEmail:null,kioskDogs:[],
   isLoading:false,loadingMsg:'',
   sheetId:CONFIG.SHEET_ID||null,sheetUrl:null,
+  onboardingStep:1,onboardingData:{},  // client self-registration wizard
   settings:{
     businessName:"Nigel's Place",ownerName:'Kelly Hendrickson',
     dailyCapacity:5,fullDayRate:45,halfDayRate:25,groomingAddOn:20,
@@ -958,9 +959,11 @@ async function onToken(resp){
       const cl=clients.find(c=>c.email.toLowerCase()===email);
       if(cl){state.role='client';state.currentClientId=cl.id;}
       else{
-        // Unknown email — not an admin, not a registered client. Block access.
-        state.role='login';
-        showToast('Your email is not yet on the approved list. Please contact Nigel\'s Place to be added.','#EF4444');
+        // Unknown email — not yet a registered client.
+        // Show self-onboarding wizard so they can create their own profile.
+        state.role='onboarding';
+        state.onboardingStep=1;
+        state.onboardingData={};
       }
     }
     // Restore last-viewed section so refreshing the page lands back where you were
@@ -1215,6 +1218,7 @@ function buildApp(){
   if(state.isLoading)return buildLoader();
   if(state.role==='kiosk')return buildKioskView();
   if(state.role==='login')return buildLogin();
+  if(state.role==='onboarding')return buildOnboarding();
   if(state.role==='admin'&&state.adminViewAsClient)return buildAdminAsClientLayout();
   if(state.role==='admin')return buildAdminLayout();
   if(state.role==='client')return buildClientLayout();
@@ -1311,6 +1315,258 @@ function buildLogin(){
     </div>
   </div>`;
 }
+// ═══════════════════════════════════════════════════
+//  CLIENT SELF-ONBOARDING WIZARD
+//  Shown when a Google user logs in but has no client record yet.
+//  3 steps: Owner Info → Dog Info → Emergency & Agreements
+// ═══════════════════════════════════════════════════
+function buildOnboarding(){
+  const step=state.onboardingStep||1;
+  const d=state.onboardingData||{};
+  const email=state.userEmail||'';
+
+  // ── Step indicator pills ──────────────────────────────────────────────────
+  const stepLabels=['Your Info','Your Dog','Agreements'];
+  const stepsHtml=stepLabels.map((s,i)=>{
+    const n=i+1,active=n===step,done=n<step;
+    const bg=done?'#7B4015':active?'#C4952A':'#E5E7EB';
+    const fg=done||active?'#fff':'#9CA3AF';
+    const lc=active?'#7B4015':'#9CA3AF';
+    const lw=active?'700':'400';
+    return`<div style="display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;">
+      <div style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;background:${bg};color:${fg};">${done?'✓':n}</div>
+      <span style="font-size:10px;font-weight:${lw};color:${lc};white-space:nowrap;">${s}</span>
+    </div>`;
+  });
+  const stepDivider=`<div style="height:2px;background:#E5E7EB;flex:1;margin-bottom:14px;"></div>`;
+  const stepRow=`<div style="display:flex;align-items:flex-start;gap:4px;margin-bottom:1.75rem;">${stepsHtml.join(stepDivider)}</div>`;
+
+  // ── Step content ─────────────────────────────────────────────────────────
+  let formContent='';
+
+  if(step===1){
+    formContent=`
+      <div style="display:flex;flex-direction:column;gap:1rem;">
+        <div>
+          <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:.35rem;">Your Name *</label>
+          <input id="ob-name" type="text" placeholder="First and last name" value="${(d.ownerName||'').replace(/"/g,'&quot;')}"
+            style="width:100%;border:1px solid #E5E7EB;border-radius:12px;padding:.6rem .75rem;font-size:.875rem;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:.35rem;">Email</label>
+          <input type="email" value="${email}" disabled
+            style="width:100%;border:1px solid #E5E7EB;border-radius:12px;padding:.6rem .75rem;font-size:.875rem;background:#F9FAFB;color:#6B7280;box-sizing:border-box;">
+          <p style="font-size:.68rem;color:#9CA3AF;margin:.3rem 0 0;">Linked to your Google account</p>
+        </div>
+        <div>
+          <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:.35rem;">Phone Number *</label>
+          <input id="ob-phone" type="tel" placeholder="(555) 123-4567" value="${(d.phone||'').replace(/"/g,'&quot;')}"
+            style="width:100%;border:1px solid #E5E7EB;border-radius:12px;padding:.6rem .75rem;font-size:.875rem;box-sizing:border-box;">
+        </div>
+        <button onclick="onboardingNext(1)"
+          style="width:100%;background:#7B4015;color:#fff;border:none;border-radius:14px;padding:.75rem;font-size:.9rem;font-weight:600;cursor:pointer;margin-top:.25rem;">
+          Continue &rarr; Add Your Dog
+        </button>
+      </div>`;
+
+  }else if(step===2){
+    formContent=`
+      <div style="display:flex;flex-direction:column;gap:1rem;">
+        <div>
+          <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:.35rem;">Dog's Name *</label>
+          <input id="ob-dogname" type="text" placeholder="What's your pup's name?" value="${(d.dogName||'').replace(/"/g,'&quot;')}"
+            style="width:100%;border:1px solid #E5E7EB;border-radius:12px;padding:.6rem .75rem;font-size:.875rem;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:.35rem;">Breed</label>
+          ${breedSelectHtml('ob-breed','ob-breed-other',d.dogBreed||'')}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
+          <div>
+            <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:.35rem;">Age (years)</label>
+            <input id="ob-age" type="number" min="0" max="25" placeholder="e.g. 3" value="${d.dogAge||''}"
+              style="width:100%;border:1px solid #E5E7EB;border-radius:12px;padding:.6rem .75rem;font-size:.875rem;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:.35rem;">Gender</label>
+            <select id="ob-gender" style="width:100%;border:1px solid #E5E7EB;border-radius:12px;padding:.6rem .75rem;font-size:.875rem;box-sizing:border-box;">
+              <option value="">Select…</option>
+              <option value="Male"${d.dogGender==='Male'?' selected':''}>Male</option>
+              <option value="Female"${d.dogGender==='Female'?' selected':''}>Female</option>
+              <option value="Unknown"${d.dogGender==='Unknown'?' selected':''}>Not specified</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:.35rem;">Special Needs / Medications</label>
+          <textarea id="ob-notes" placeholder="Allergies, medications, behavioral notes, or anything we should know…" rows="3"
+            style="width:100%;border:1px solid #E5E7EB;border-radius:12px;padding:.6rem .75rem;font-size:.875rem;resize:none;box-sizing:border-box;">${d.dogNotes||''}</textarea>
+        </div>
+        <div style="display:flex;gap:.6rem;margin-top:.1rem;">
+          <button onclick="state.onboardingStep=1;render()"
+            style="flex:1;background:#F9FAFB;color:#6B7280;border:1px solid #E5E7EB;border-radius:14px;padding:.7rem;font-size:.875rem;font-weight:600;cursor:pointer;">&larr; Back</button>
+          <button onclick="onboardingNext(2)"
+            style="flex:2;background:#7B4015;color:#fff;border:none;border-radius:14px;padding:.7rem;font-size:.875rem;font-weight:600;cursor:pointer;">Continue &rarr; Agreements</button>
+        </div>
+      </div>`;
+
+  }else{
+    // Step 3 — Emergency contact + agreements
+    formContent=`
+      <div style="display:flex;flex-direction:column;gap:1rem;">
+        <div>
+          <p style="font-size:.8rem;font-weight:700;color:#374151;margin:0 0 .5rem;">Emergency Contact</p>
+          <div style="display:flex;flex-direction:column;gap:.5rem;">
+            <input id="ob-ec-name" type="text" placeholder="Emergency contact name" value="${(d.ecName||'').replace(/"/g,'&quot;')}"
+              style="width:100%;border:1px solid #E5E7EB;border-radius:12px;padding:.6rem .75rem;font-size:.875rem;box-sizing:border-box;">
+            <input id="ob-ec-phone" type="tel" placeholder="Emergency contact phone" value="${(d.ecPhone||'').replace(/"/g,'&quot;')}"
+              style="width:100%;border:1px solid #E5E7EB;border-radius:12px;padding:.6rem .75rem;font-size:.875rem;box-sizing:border-box;">
+          </div>
+        </div>
+        <div style="background:#FEF9EE;border:1px solid #FCD34D;border-radius:14px;padding:1rem;">
+          <p style="font-size:.8rem;font-weight:700;color:#92400E;margin:0 0 .75rem;">📋 Please review and accept</p>
+          <div style="display:flex;flex-direction:column;gap:.75rem;">
+            <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
+              <input type="checkbox" id="ob-agree-terms" ${d.agreeTerms?'checked':''} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
+              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I agree to Nigel's Place <strong>Terms &amp; Conditions</strong> — including payment, pick-up/drop-off times (8–10 AM drop-off, 4–6 PM pick-up), and cancellation policies. <span style="color:#DC2626;">*</span></span>
+            </label>
+            <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
+              <input type="checkbox" id="ob-agree-liability" ${d.agreeLiability?'checked':''} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
+              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I acknowledge the <strong>Liability Waiver</strong> and understand that Nigel's Place is not liable for injuries or illness while boarding, provided reasonable care is taken. I assume responsibility for any harm my dog causes. <span style="color:#DC2626;">*</span></span>
+            </label>
+            <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
+              <input type="checkbox" id="ob-agree-medical" ${d.agreeMedical?'checked':''} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
+              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I authorize Nigel's Place to seek <strong>emergency veterinary care</strong> for my dog if needed, and agree to cover associated costs. Nigel's Place will make every effort to contact me first. <span style="color:#DC2626;">*</span></span>
+            </label>
+            <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
+              <input type="checkbox" id="ob-photo-consent" ${d.photoConsent?'checked':''} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
+              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I grant Nigel's Place permission to <strong>photograph &amp; video</strong> my dog for social media and marketing use. <em style="color:#6B7280;">(Optional)</em></span>
+            </label>
+          </div>
+        </div>
+        <div style="display:flex;gap:.6rem;">
+          <button onclick="state.onboardingStep=2;render()"
+            style="flex:1;background:#F9FAFB;color:#6B7280;border:1px solid #E5E7EB;border-radius:14px;padding:.7rem;font-size:.875rem;font-weight:600;cursor:pointer;">&larr; Back</button>
+          <button onclick="submitOnboarding()" id="ob-submit-btn"
+            style="flex:2;background:#7B4015;color:#fff;border:none;border-radius:14px;padding:.7rem;font-size:.875rem;font-weight:600;cursor:pointer;">🐾 Create My Profile</button>
+        </div>
+        <p style="font-size:.68rem;color:#9CA3AF;text-align:center;margin:0;"><span style="color:#DC2626;">*</span> Required to complete registration</p>
+      </div>`;
+  }
+
+  return`
+  <div class="min-h-screen flex items-center justify-center p-4" style="background:linear-gradient(135deg,#7C4A1E,#5C3317,#3B1F0E);">
+    <div class="bg-white rounded-3xl shadow-2xl slide-in" style="width:100%;max-width:440px;padding:2rem 1.75rem;">
+
+      <!-- Logo + welcome heading -->
+      <div style="text-align:center;margin-bottom:1.5rem;">
+        <img src="${LOGO_URL}" style="width:70px;margin:0 auto .7rem;display:block;border-radius:12px;">
+        <h1 style="font-size:1.2rem;font-weight:700;color:#1F1F1F;margin:0 0 .25rem;letter-spacing:-.01em;">Welcome to Nigel's Place! 🐾</h1>
+        <p style="font-size:.8rem;color:#6B7280;margin:0;">Let's get your profile set up — just a few quick steps.</p>
+      </div>
+
+      <!-- Step indicator -->
+      ${stepRow}
+
+      <!-- Step form -->
+      ${formContent}
+
+    </div>
+  </div>`;
+}
+
+function onboardingNext(fromStep){
+  const d=state.onboardingData;
+  if(fromStep===1){
+    const name=(document.getElementById('ob-name')?.value||'').trim();
+    const phone=(document.getElementById('ob-phone')?.value||'').trim();
+    if(!name){showToast('Please enter your name.','#EF4444');return;}
+    if(!phone){showToast('Please enter your phone number.','#EF4444');return;}
+    d.ownerName=name;d.phone=phone;
+    state.onboardingStep=2;
+  }else if(fromStep===2){
+    const dogName=(document.getElementById('ob-dogname')?.value||'').trim();
+    if(!dogName){showToast("Please enter your dog's name.",'#EF4444');return;}
+    d.dogName=dogName;
+    d.dogBreed=getBreedValue('ob-breed','ob-breed-other');
+    d.dogAge=parseFloat(document.getElementById('ob-age')?.value)||0;
+    d.dogGender=document.getElementById('ob-gender')?.value||'';
+    d.dogNotes=(document.getElementById('ob-notes')?.value||'').trim();
+    state.onboardingStep=3;
+  }
+  render();
+}
+
+async function submitOnboarding(){
+  const d=state.onboardingData;
+  // Collect step-3 fields
+  d.ecName=(document.getElementById('ob-ec-name')?.value||'').trim();
+  d.ecPhone=(document.getElementById('ob-ec-phone')?.value||'').trim();
+  d.agreeTerms=document.getElementById('ob-agree-terms')?.checked||false;
+  d.agreeLiability=document.getElementById('ob-agree-liability')?.checked||false;
+  d.agreeMedical=document.getElementById('ob-agree-medical')?.checked||false;
+  d.photoConsent=document.getElementById('ob-photo-consent')?.checked||false;
+
+  if(!d.agreeTerms||!d.agreeLiability||!d.agreeMedical){
+    showToast('Please accept all required agreements to continue.','#EF4444');
+    return;
+  }
+
+  // Disable submit button while working
+  const btn=document.getElementById('ob-submit-btn');
+  if(btn){btn.disabled=true;btn.textContent='Creating your profile…';}
+
+  try{
+    const newClientId=nextId(clients);
+    const allDogs=clients.flatMap(c=>c.dogs);
+    const newDogId=nextId(allDogs.length>0?allDogs:[{id:0}]);
+
+    // Build dog notes — combine user-entered notes with emergency contact and gender
+    let dogNotes=d.dogNotes||'';
+    if(d.dogGender)dogNotes=(dogNotes?dogNotes+'\n':'')+'Gender: '+d.dogGender;
+    if(d.ecName||d.ecPhone)dogNotes=(dogNotes?dogNotes+'\n':'')+'Emergency Contact: '+(d.ecName||'')+(d.ecPhone?' — '+d.ecPhone:'');
+
+    const newClient={
+      id:newClientId,
+      name:d.ownerName,
+      email:state.userEmail,
+      phone:d.phone,
+      photoConsent:d.photoConsent,
+      dogs:[{
+        id:newDogId,
+        clientId:newClientId,
+        name:d.dogName,
+        breed:d.dogBreed||'Mixed Breed',
+        age:d.dogAge||0,
+        vaccinated:false,
+        notes:dogNotes,
+        birthday:'',
+        vaccExpiry:'',
+        vaccines:[],
+        driveFileLink:'',
+        photoLink:'',
+        playPhotos:[],
+        photoOffset:{x:50,y:50},
+      }],
+    };
+
+    clients.push(newClient);
+    await persistClients();
+
+    // Log them in as a new client
+    state.role='client';
+    state.currentClientId=newClientId;
+    state.clientView='home';
+    state.onboardingStep=1;
+    state.onboardingData={};
+    showToast(`Welcome, ${d.ownerName}! Your profile is all set. 🐾`);
+    render();
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='🐾 Create My Profile';}
+    showToast('Error creating profile: '+e.message,'#EF4444');
+  }
+}
+
 function buildAdminLayout(){
   const nav=[
     {id:'dashboard',icon:'📊',label:'Dashboard'},{id:'calendar',icon:'📅',label:'Calendar'},
