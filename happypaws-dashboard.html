@@ -200,6 +200,7 @@ const state={
   adminViewAsClient:false,  // admin toggling to client-perspective view
   mode:null,accessToken:null,tokenExpiry:null,userEmail:null,kioskDogs:[],kioskUpcoming:[],
   kioskPasswordVerified:false, // set true once correct kiosk password entered this session
+  selectedOverrideDates:new Set(), // tracks multi-select for batch delete in Settings
   isLoading:false,loadingMsg:'',
   sheetId:CONFIG.SHEET_ID||null,sheetUrl:null,
   onboardingStep:1,onboardingData:{},  // client self-registration wizard
@@ -2587,19 +2588,41 @@ function buildSettingsView(){
         </div>
 
         <!-- Combined list: blocked days + capacity overrides -->
-        ${Object.keys(state.settings.capacityOverrides||{}).length===0
-          ?'<p class="text-xs text-gray-300">No date overrides or blocked days yet.</p>'
-          :`<div class="space-y-1 max-h-48 overflow-y-auto">${Object.entries(state.settings.capacityOverrides||{}).sort().map(([d,v])=>`
-            <div class="flex items-center justify-between px-3 py-1.5 rounded-lg border ${+v===0?'bg-gray-100 border-gray-200':'bg-amber-50 border-amber-100'}">
-              <div class="flex items-center gap-2">
-                <span class="text-sm">${+v===0?'🔒':'📊'}</span>
-                <span class="text-xs font-medium ${+v===0?'text-gray-600':'text-amber-900'}">${fmtDate(d)}</span>
+        ${(()=>{
+          const entries=Object.entries(state.settings.capacityOverrides||{}).sort();
+          if(entries.length===0)return '<p class="text-xs text-gray-300">No date overrides or blocked days yet.</p>';
+          const sel=state.selectedOverrideDates||new Set();
+          const allSelected=entries.length>0&&entries.every(([d])=>sel.has(d));
+          const anySelected=sel.size>0;
+          return `
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="flex items-center gap-2 text-xs text-gray-500 cursor-pointer select-none">
+                <input type="checkbox" id="override-select-all" ${allSelected?'checked':''} onchange="toggleAllOverrides(this.checked)"
+                  class="w-3.5 h-3.5 rounded accent-amber-700">
+                Select all
+              </label>
+              <div id="override-bulk-toolbar" style="display:${anySelected?'flex':'none'}" class="items-center gap-2">
+                <span id="override-sel-count" class="text-xs text-gray-400">${sel.size} selected</span>
+                <button onclick="deleteSelectedOverrides()" class="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-white bg-red-400 hover:bg-red-500 transition-colors">
+                  🗑 Delete selected
+                </button>
               </div>
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-bold ${+v===0?'text-gray-500':'text-amber-700'}">${+v===0?'Closed':''+v+' dogs max'}</span>
-                <button onclick="removeCapOverride('${d}')" class="text-gray-300 hover:text-red-400 text-sm leading-none">×</button>
-              </div>
-            </div>`).join('')}</div>`}
+            </div>
+            <div class="space-y-1 max-h-48 overflow-y-auto">${entries.map(([d,v])=>`
+              <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg border ${+v===0?'bg-gray-100 border-gray-200':'bg-amber-50 border-amber-100'}">
+                <input type="checkbox" id="ocb-${d}" ${sel.has(d)?'checked':''} onchange="toggleOverrideSelection('${d}')"
+                  class="w-3.5 h-3.5 rounded flex-shrink-0 accent-amber-700">
+                <div class="flex items-center gap-2 flex-1 min-w-0">
+                  <span class="text-sm">${+v===0?'🔒':'📊'}</span>
+                  <span class="text-xs font-medium ${+v===0?'text-gray-600':'text-amber-900'}">${fmtDate(d)}</span>
+                </div>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                  <span class="text-xs font-bold ${+v===0?'text-gray-500':'text-amber-700'}">${+v===0?'Closed':''+v+' dogs max'}</span>
+                  <button onclick="removeCapOverride('${d}')" class="text-gray-300 hover:text-red-400 text-sm leading-none">×</button>
+                </div>
+              </div>`).join('')}
+            </div>`;
+        })()}
       </div>
       <div class="bg-amber-50 rounded-xl p-4 border border-amber-100 text-sm text-amber-800">
         🛎️ Service rates are managed in the <button onclick="setView('services')" class="underline font-semibold">Services</button> section.
@@ -4601,6 +4624,52 @@ function addCapOverride(){
 }
 function removeCapOverride(d){
   if(state.settings.capacityOverrides)delete state.settings.capacityOverrides[d];
+  if(state.selectedOverrideDates)state.selectedOverrideDates.delete(d);
+  render();
+  try{persistSettings();}catch(e){}
+}
+function toggleOverrideSelection(d){
+  if(!state.selectedOverrideDates)state.selectedOverrideDates=new Set();
+  if(state.selectedOverrideDates.has(d))state.selectedOverrideDates.delete(d);
+  else state.selectedOverrideDates.add(d);
+  // Re-render just the list area without full re-render for snappiness
+  const all=Object.keys(state.settings.capacityOverrides||{});
+  const sel=state.selectedOverrideDates;
+  // Update checkbox states directly
+  all.forEach(date=>{
+    const cb=document.getElementById('ocb-'+date);
+    if(cb)cb.checked=sel.has(date);
+  });
+  const allCb=document.getElementById('override-select-all');
+  if(allCb)allCb.checked=all.length>0&&all.every(date=>sel.has(date));
+  const toolbar=document.getElementById('override-bulk-toolbar');
+  if(toolbar)toolbar.style.display=sel.size>0?'flex':'none';
+  const countEl=document.getElementById('override-sel-count');
+  if(countEl)countEl.textContent=sel.size+' selected';
+}
+function toggleAllOverrides(checked){
+  if(!state.selectedOverrideDates)state.selectedOverrideDates=new Set();
+  const all=Object.keys(state.settings.capacityOverrides||{});
+  if(checked)all.forEach(d=>state.selectedOverrideDates.add(d));
+  else state.selectedOverrideDates.clear();
+  // Update all checkboxes directly
+  all.forEach(date=>{
+    const cb=document.getElementById('ocb-'+date);
+    if(cb)cb.checked=checked;
+  });
+  const toolbar=document.getElementById('override-bulk-toolbar');
+  if(toolbar)toolbar.style.display=state.selectedOverrideDates.size>0?'flex':'none';
+  const countEl=document.getElementById('override-sel-count');
+  if(countEl)countEl.textContent=state.selectedOverrideDates.size+' selected';
+}
+function deleteSelectedOverrides(){
+  if(!state.selectedOverrideDates||state.selectedOverrideDates.size===0)return;
+  const count=state.selectedOverrideDates.size;
+  state.selectedOverrideDates.forEach(d=>{
+    if(state.settings.capacityOverrides)delete state.settings.capacityOverrides[d];
+  });
+  state.selectedOverrideDates.clear();
+  showToast(`Removed ${count} date${count===1?'':'s'}.`);
   render();
   try{persistSettings();}catch(e){}
 }
