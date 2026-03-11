@@ -2623,11 +2623,14 @@ function buildClientLayout(){
       </div>
       <div class="flex items-center gap-1.5">
         <button onclick="setClientView('account')" title="My Account"
-          class="flex items-center gap-1.5 px-2 py-1.5 rounded-xl transition-all hover:bg-gray-100 ${state.clientView==='account'?'bg-amber-50':''}">
-          <div class="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style="background:#7B4015">
-            ${cl?cl.name[0]:'?'}
+          class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl transition-all hover:bg-gray-100 ${state.clientView==='account'?'bg-amber-50 ring-1 ring-amber-200':''}">
+          <div class="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0" style="background:#7B4015">
+            ${cl?cl.name[0].toUpperCase():'?'}
           </div>
-          <span class="text-sm text-gray-600 font-medium hidden sm:inline max-w-[80px] truncate">${cl?.name||'Guest'}</span>
+          <div class="hidden sm:flex flex-col items-start leading-none">
+            <span class="text-sm text-gray-700 font-semibold max-w-[90px] truncate">${cl?.name||'Guest'}</span>
+            <span class="text-xs mt-0.5" style="color:#7B4015;font-weight:500;">My Account ›</span>
+          </div>
         </button>
         <button onclick="signOut()" class="text-xs text-gray-400 hover:text-red-500 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors hidden sm:inline-block" title="Sign out">Sign out</button>
       </div>
