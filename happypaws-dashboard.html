@@ -757,10 +757,10 @@ function showVaccOverlay(msg){
     ov=document.createElement('div');
     ov.id='vacc-processing-overlay';
     ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.52);z-index:9998;display:flex;align-items:center;justify-content:center;';
-    ov.innerHTML=`<div style="background:white;border-radius:20px;padding:2rem 2.25rem;max-width:320px;width:90%;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,0.28);">
+    ov.innerHTML=`<div style="background:white;border-radius:20px;padding:2rem 2.25rem;max-width:340px;width:90%;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,0.28);">
       <div style="font-size:2.5rem;margin-bottom:.85rem;animation:spin 1.5s linear infinite;display:inline-block;">⏳</div>
-      <div id="vacc-ov-msg" style="font-size:.9rem;font-weight:600;color:#374151;line-height:1.5;white-space:pre-line;"></div>
-      <div style="margin-top:.6rem;font-size:.72rem;color:#9CA3AF;">This may take a few seconds…</div>
+      <div id="vacc-ov-msg" style="font-size:.9rem;font-weight:600;color:#374151;line-height:1.6;white-space:pre-line;"></div>
+      <div style="margin-top:.75rem;font-size:.72rem;color:#9CA3AF;line-height:1.5;">This can take up to a minute.<br>Please keep this page open.</div>
     </div>`;
     document.body.appendChild(ov);
   }
@@ -2546,10 +2546,11 @@ async function submitOnboarding(){
 
 function buildAdminLayout(){
   const nav=[
-    {id:'dashboard',icon:'📊',label:'Dashboard'},{id:'calendar',icon:'📅',label:'Calendar'},
-    {id:'clients',  icon:'👥',label:'Clients'},  {id:'dogs',    icon:'🐾',label:'Dogs'},
-    {id:'services', icon:'🛎️',label:'Services'}, {id:'invoices', icon:'💰',label:'Invoices'},
-    {id:'settings', icon:'⚙️',label:'Settings'}, {id:'kiosk',    icon:'🖥️',label:'Kiosk Preview'},
+    {id:'dashboard', icon:'📊',label:'Dashboard'}, {id:'calendar',  icon:'📅',label:'Calendar'},
+    {id:'clients',   icon:'👥',label:'Clients'},   {id:'dogs',      icon:'🐾',label:'Dogs'},
+    {id:'vetclinics',icon:'🏥',label:'Vet Clinics'},{id:'services',  icon:'🛎️',label:'Services'},
+    {id:'invoices',  icon:'💰',label:'Invoices'},  {id:'settings',  icon:'⚙️',label:'Settings'},
+    {id:'kiosk',     icon:'🖥️',label:'Kiosk Preview'},
   ];
   const dbNavItem=state.mode==='live'&&state.sheetUrl?`
     <button onclick="window.open('${state.sheetUrl}','_blank')"
@@ -2559,6 +2560,7 @@ function buildAdminLayout(){
   const views={
     dashboard:buildDashboard(),calendar:buildCalendarView('admin'),
     clients:buildClientsView(),dogs:buildDogsView(),
+    vetclinics:buildVetClinicsView(),
     services:buildServicesView(),
     invoices:buildInvoicesView(),settings:buildSettingsView(),
     kiosk:buildKioskView(true),
@@ -3299,6 +3301,93 @@ function buildDogsList(){
     </div>
   </div>`;
 }
+// ─── VET CLINICS ADMIN VIEW ────────────────────────────────────────────────────
+function buildVetClinicsView(){
+  // Aggregate unique vet clinics from all active dogs
+  const clinicMap=new Map(); // key = normalised clinic name
+  clients.forEach(cl=>{
+    (cl.dogs||[]).filter(d=>!d.deceased&&d.vetName&&d.vetName.trim()).forEach(dog=>{
+      const key=(dog.vetName||'').trim().toLowerCase();
+      if(!clinicMap.has(key)){
+        clinicMap.set(key,{
+          name:dog.vetName.trim(),
+          phone:dog.vetPhone||'',
+          website:dog.vetWebsite||'',
+          clients:[],
+        });
+      }
+      const entry=clinicMap.get(key);
+      // Merge phone/website if this dog has one and the stored one is blank
+      if(!entry.phone&&dog.vetPhone)entry.phone=dog.vetPhone;
+      if(!entry.website&&dog.vetWebsite)entry.website=dog.vetWebsite;
+      // Record which clients use this clinic (avoid duplicates)
+      if(!entry.clients.find(c=>c.id===cl.id)){
+        entry.clients.push({id:cl.id,name:cl.name,dogName:dog.name});
+      }
+    });
+  });
+
+  const clinics=[...clinicMap.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  const total=clinics.length;
+  const totalDogs=clinics.reduce((s,c)=>s+c.clients.length,0);
+
+  const rows=clinics.length===0
+    ?`<div class="text-center py-16 text-gray-400">
+        <div class="text-4xl mb-3">🏥</div>
+        <div class="font-semibold text-lg mb-1">No vet clinics on file yet</div>
+        <div class="text-sm">Clinics appear here once clients add their veterinarian in My Dog → Edit.</div>
+      </div>`
+    :clinics.map(c=>`
+      <div class="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="font-bold text-gray-800 text-base truncate">${c.name}</div>
+            ${c.phone?`<div class="text-sm text-gray-500 mt-0.5">📞 ${fmtPhone(c.phone)}</div>`:''}
+            ${c.website?`<div class="mt-0.5"><a href="${c.website}" target="_blank" rel="noopener" class="text-xs text-blue-500 hover:underline">🔗 ${c.website.replace(/^https?:\/\//,'').split('/')[0]}</a></div>`:'<div class="text-xs text-gray-300 mt-0.5 italic">No website on file</div>'}
+          </div>
+          <div class="flex-shrink-0 text-right">
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold" style="background:#EFF6FF;color:#1D4ED8;">
+              ${c.clients.length} client${c.clients.length===1?'':'s'}
+            </span>
+          </div>
+        </div>
+        <div class="mt-3 pt-3 border-t border-gray-50">
+          <div class="text-xs text-gray-400 mb-1.5 font-semibold uppercase tracking-wide">Clients using this clinic</div>
+          <div class="flex flex-wrap gap-1.5">
+            ${c.clients.map(cl=>`
+              <button onclick="viewClientProfile(${cl.id})"
+                class="text-xs px-2.5 py-1 rounded-full border hover:bg-amber-50 transition-colors"
+                style="border-color:#D4A96B;color:#7B4015;background:white;">
+                🐶 ${cl.name} · ${cl.dogName}
+              </button>`).join('')}
+          </div>
+        </div>
+      </div>`).join('');
+
+  return`
+  <div class="p-4 sm:p-6 max-w-4xl mx-auto">
+    <div class="flex items-center justify-between mb-5">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-800">🏥 Vet Clinics</h1>
+        <p class="text-sm text-gray-400 mt-0.5">${total} clinic${total===1?'':'s'} on file across ${totalDogs} dog${totalDogs===1?'':'s'}</p>
+      </div>
+    </div>
+
+    <div class="mb-5 rounded-2xl p-4 border" style="background:#F0F9FF;border-color:#BAE6FD;">
+      <div class="flex items-start gap-2.5">
+        <span class="text-lg flex-shrink-0">ℹ️</span>
+        <div class="text-sm text-blue-800">
+          <strong>About this list:</strong> Clinics are aggregated automatically from your clients' dog profiles. To add or update a clinic, ask the client to edit their dog profile in the portal, or edit the dog directly from the Dogs view. Website and phone auto-fill via AI Lookup.
+        </div>
+      </div>
+    </div>
+
+    <div class="grid gap-3 sm:grid-cols-2">
+      ${rows}
+    </div>
+  </div>`;
+}
+
 function buildServicesView(){
   const base=services.filter(s=>s.type==='base');
   const addons=services.filter(s=>s.type==='addon');
@@ -4202,11 +4291,18 @@ function buildClientDog(){
         <div class="rounded-2xl border border-gray-100 p-3 flex flex-col gap-2 bg-white">
           <div class="flex items-center justify-between">
             <span class="text-xs font-bold text-gray-500 uppercase tracking-wide">💉 Vaccines</span>
-            <button id="cvbtn-${dog.id}" onclick="handleClientVaccUpload(${cl.id},${dog.id})"
-              class="text-xs px-2 py-1 rounded-lg border text-amber-700 hover:bg-amber-50 flex-shrink-0"
-              style="border-color:#D4A96B;font-size:10px;">
-              📄 Upload
-            </button>
+            <div class="flex items-center gap-1.5">
+              <button onclick="openVaccinesLightbox(${cl.id},${dog.id})"
+                class="text-xs px-2 py-1 rounded-lg border flex-shrink-0"
+                style="border-color:#BAE6FD;color:#0369A1;background:#EFF6FF;font-size:10px;" title="Manage vaccines">
+                ⤢ Manage
+              </button>
+              <button id="cvbtn-${dog.id}" onclick="handleClientVaccUpload(${cl.id},${dog.id})"
+                class="text-xs px-2 py-1 rounded-lg border text-amber-700 hover:bg-amber-50 flex-shrink-0"
+                style="border-color:#D4A96B;font-size:10px;">
+                📄 Upload
+              </button>
+            </div>
           </div>
           <div>${vBadge}</div>
           ${(dog.vaccines||[]).length>0
@@ -4282,9 +4378,10 @@ function buildModal(){
   if(m.type==='editClient')   return buildEditClientModal(m.clientId);
   if(m.type==='editDog')      return buildEditDogModal(m.clientId,m.dogId);
   if(m.type==='editInvoice')  return buildEditInvoiceModal(m.invoiceId);
-  if(m.type==='addDog')       return buildAddDogModal();
-  if(m.type==='editMyDog')    return buildEditMyDogModal();
-  if(m.type==='whatsNew')     return buildWhatsNewModal();
+  if(m.type==='addDog')           return buildAddDogModal();
+  if(m.type==='editMyDog')        return buildEditMyDogModal();
+  if(m.type==='whatsNew')         return buildWhatsNewModal();
+  if(m.type==='vaccinesLightbox') return buildVaccinesLightbox();
   return'';
 }
 function buildAddInvoiceModal(){
@@ -5009,6 +5106,81 @@ function toggleRequiredVaccine(index,checked){
 // Calls the same handleVaccUpload function used by admins. For clients, the Gemini
 // parse works fine; the Drive upload works if they have a token; sheet persistence
 // will be attempted and gracefully fails for client tokens (403), showing a toast.
+// ── Vaccines lightbox — full-screen modal for managing one dog's vaccines ──────
+function openVaccinesLightbox(clientId, dogId){
+  state.showModal={type:'vaccinesLightbox',clientId,dogId};render();
+}
+function buildVaccinesLightbox(){
+  const m=state.showModal;if(!m)return'';
+  const cl=clients.find(c=>c.id===m.clientId);if(!cl)return'';
+  const dog=cl.dogs.find(d=>d.id===m.dogId);if(!dog)return'';
+  const vBadge=vaccBadge(dog);
+  const reqVacc=state.settings.requiredVaccines||['Rabies','DHPP','Bordetella'];
+  const vaccNames=(dog.vaccines||[]).map(v=>(v.name||'').toLowerCase());
+  const missingReq=reqVacc.filter(r=>!vaccNames.some(n=>n.includes(r.toLowerCase())||r.toLowerCase().includes(n)));
+  return`<div class="modal-overlay" onclick="if(event.target===this){state.showModal=null;render();}">
+  <div class="modal-box" style="max-width:520px;">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h2 class="text-lg font-bold text-gray-800">💉 ${dog.name}'s Vaccines</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Upload records or manage individual vaccines below</p>
+      </div>
+      <button onclick="state.showModal=null;render()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none ml-4">×</button>
+    </div>
+
+    <!-- Status badge -->
+    <div class="mb-4">${vBadge}</div>
+
+    ${missingReq.length>0?`
+    <div class="mb-4 rounded-xl px-3 py-2.5 text-sm font-medium flex items-start gap-2" style="background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;">
+      <span>⚠️</span>
+      <div>
+        <div class="font-semibold mb-0.5">Missing required vaccines</div>
+        <div class="text-xs font-normal">${missingReq.join(', ')} — required before booking can be unlocked.</div>
+      </div>
+    </div>`:''}
+
+    <!-- Upload full record button -->
+    <div class="mb-4 rounded-2xl border border-amber-200 p-4" style="background:linear-gradient(135deg,#FFFBF0,#FEF3C7);">
+      <div class="text-sm font-semibold text-amber-800 mb-1">📄 Upload Vaccine Record</div>
+      <p class="text-xs text-amber-700 mb-3">Take a photo of your vet record or upload a PDF — AI reads all vaccines and dates automatically.</p>
+      <button id="cvbtn-lb-${dog.id}" onclick="handleClientVaccUpload(${cl.id},${dog.id})"
+        class="w-full py-2.5 rounded-xl text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+        style="background:#C4952A;">
+        📷 Upload Record (AI Reads All Dates)
+      </button>
+    </div>
+
+    <!-- Existing vaccine records -->
+    ${(dog.vaccines||[]).length>0?`
+    <div class="mb-3">
+      <div class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Current Records</div>
+      <div class="space-y-1 text-sm">${buildVaccineRecordsHTML(dog)}</div>
+    </div>`:`
+    <div class="rounded-xl bg-gray-50 border border-gray-100 px-4 py-5 text-center mb-3">
+      <div class="text-2xl mb-2">💉</div>
+      <div class="text-sm text-gray-500 font-medium">No records yet</div>
+      <div class="text-xs text-gray-400 mt-1">Upload a vet record above and AI will automatically extract all vaccine names and expiry dates.</div>
+    </div>`}
+
+    ${dog.driveFileLink?`
+    <div class="mt-2">
+      <a href="${dog.driveFileLink}" target="_blank" rel="noopener"
+        class="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:underline">
+        📂 View uploaded record in Google Drive →
+      </a>
+    </div>`:''}
+
+    <div class="mt-4 pt-3 border-t border-gray-100 flex justify-end">
+      <button onclick="state.showModal=null;render()"
+        class="px-5 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50">
+        Done
+      </button>
+    </div>
+  </div>
+</div>`;
+}
+
 async function handleClientVaccUpload(clientId, dogId){
   // Pass the client-view button ID so handleVaccUpload updates the correct button
   await handleVaccUpload(clientId, dogId, 'cvbtn-'+dogId);
@@ -5927,7 +6099,8 @@ async function handleVaccUpload(clientId, dogId, altBtnId){
             if(btn)btn.textContent='📂';
             const df=await uploadVaccRecord(file,clientName);
             savedDriveLink=df.webViewLink||'';
-            showToast('✅ Saved to Google Drive → Nigel\'s Place / Client Vaccine Records / '+clientName);
+            // Clients just see a clean "saved" — no internal folder paths shown
+            if(state.role!=='client')showToast('✅ Saved to Google Drive → Nigel\'s Place / Client Vaccine Records / '+clientName);
           }catch(e){
             showToast('⚠️ Drive save failed: '+e.message+' — continuing with AI scan.','#F97316');
             console.warn('Drive upload error:',e);
@@ -5966,8 +6139,21 @@ async function handleVaccUpload(clientId, dogId, altBtnId){
           freshDog.vaccinated=true;
           hideVaccOverlay();
           render();
-          showToast(`🐾 Found ${result.vaccines.length} vaccine record${result.vaccines.length>1?'s':''} for ${freshDog.name}!`);
-          try{await persistClients();}catch(e){showToast('Parsed OK — sheet sync failed.','#F97316');}
+          showToast(`✅ ${result.vaccines.length} vaccine record${result.vaccines.length>1?'s':''} saved for ${freshDog.name}!`);
+          // Clients write back via proxy (no direct sheet access); admins use persistClients
+          if(state.role==='client'){
+            try{
+              await proxyClientWrite('updateDogVaccines',{
+                dogId:freshDog.id,
+                vaccines:freshDog.vaccines,
+                vaccExpiry:freshDog.vaccExpiry||'',
+                vaccinated:true,
+                driveFileLink:freshDog.driveFileLink||''
+              });
+            }catch(e){console.warn('Vaccine proxy sync warning:',e.message);}
+          }else{
+            try{await persistClients();}catch(e){showToast('Parsed OK — sheet sync failed.','#F97316');}
+          }
         }else{
           hideVaccOverlay();
           showToast('No vaccines found in that file. Try a clearer photo or PDF.','#F97316');
@@ -6827,28 +7013,81 @@ async function saveSettings(){
 // SVG icons for enter / exit fullscreen (inline so they render instantly)
 const _FS_ENTER=`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 6V2h4M14.5 6V2h-4M1.5 10v4h4M14.5 10v4h-4"/></svg>`;
 const _FS_EXIT =`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 1.5v4h-4M10.5 1.5v4h4M5.5 14.5v-4h-4M10.5 14.5v-4h4"/></svg>`;
-function toggleFullscreen(){
-  if(!document.fullscreenElement){
-    document.documentElement.requestFullscreen().catch(()=>showToast('Fullscreen not available — try pressing F11.','#F97316'));
-  }else{document.exitFullscreen();}
+// ─── iOS CSS-based pseudo-fullscreen ─────────────────────────────────────────
+// iOS Safari does not support the Fullscreen API. Instead we inject a class
+// that pins the element to cover the full viewport with position:fixed.
+let _iosFsEl=null;
+function _iosEnterFs(el){
+  _iosFsEl=el;
+  el.dataset._origStyle=el.style.cssText;
+  el.style.cssText+=';position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:99999!important;overflow:hidden!important;';
+  document.body.style.overflow='hidden';
+  _syncFsBtns(true);
 }
-// Kiosk-specific fullscreen — targets the kiosk root div, not the whole document.
-// This prevents the body's white background from showing in the gap.
-function toggleKioskFullscreen(){
-  const el=document.getElementById('kiosk-root');
-  if(!el){toggleFullscreen();return;}
-  if(!document.fullscreenElement){
-    el.requestFullscreen().catch(()=>showToast('Fullscreen not available','#F97316'));
-  }else{document.exitFullscreen();}
+function _iosExitFs(){
+  if(_iosFsEl){
+    _iosFsEl.style.cssText=_iosFsEl.dataset._origStyle||'';
+    _iosFsEl=null;
+    document.body.style.overflow='';
+  }
+  _syncFsBtns(false);
 }
-// Keep every fullscreen button icon in sync whenever fullscreen state changes
-document.addEventListener('fullscreenchange',()=>{
-  const inFs=!!document.fullscreenElement;
+function _syncFsBtns(inFs){
   document.querySelectorAll('[data-fs-btn]').forEach(btn=>{
     btn.innerHTML=(inFs?_FS_EXIT:_FS_ENTER)+(btn.dataset.fsBtnLabel?' '+(inFs?'Exit fullscreen':'Fullscreen'):'');
     btn.title=inFs?'Exit fullscreen  (Esc)':'Go fullscreen';
   });
-});
+}
+function _fsApiAvailable(){
+  return !!(document.fullscreenEnabled||document.webkitFullscreenEnabled||document.mozFullScreenEnabled||document.msFullscreenEnabled);
+}
+function _requestFs(el){
+  if(el.requestFullscreen)return el.requestFullscreen();
+  if(el.webkitRequestFullscreen)return el.webkitRequestFullscreen();
+  if(el.mozRequestFullScreen)return el.mozRequestFullScreen();
+  if(el.msRequestFullscreen)return el.msRequestFullscreen();
+  return Promise.reject(new Error('no_api'));
+}
+function _exitFs(){
+  if(document.exitFullscreen)return document.exitFullscreen();
+  if(document.webkitExitFullscreen)return document.webkitExitFullscreen();
+  if(document.mozCancelFullScreen)return document.mozCancelFullScreen();
+  if(document.msExitFullscreen)return document.msExitFullscreen();
+  return Promise.resolve();
+}
+function _inNativeFs(){
+  return !!(document.fullscreenElement||document.webkitFullscreenElement||document.mozFullScreenElement||document.msFullscreenElement);
+}
+function toggleFullscreen(){
+  if(_iosFsEl){_iosExitFs();return;} // iOS CSS-fs active — close it
+  if(_inNativeFs()){_exitFs();return;}
+  const el=document.documentElement;
+  if(_fsApiAvailable()){
+    _requestFs(el).catch(()=>{
+      // API exists but blocked (e.g. iframe) — fall back to CSS
+      _iosEnterFs(el);
+    });
+  }else{
+    // iOS Safari / no Fullscreen API — CSS fallback
+    _iosEnterFs(el);
+  }
+}
+// Kiosk-specific fullscreen — targets the kiosk root div, not the whole document.
+function toggleKioskFullscreen(){
+  if(_iosFsEl){_iosExitFs();return;}
+  if(_inNativeFs()){_exitFs();return;}
+  const el=document.getElementById('kiosk-root')||document.documentElement;
+  if(_fsApiAvailable()){
+    _requestFs(el).catch(()=>_iosEnterFs(el));
+  }else{
+    _iosEnterFs(el);
+  }
+}
+// Keep every fullscreen button icon in sync whenever native fullscreen state changes
+document.addEventListener('fullscreenchange',()=>_syncFsBtns(_inNativeFs()));
+document.addEventListener('webkitfullscreenchange',()=>_syncFsBtns(_inNativeFs()));
+// Esc key exits iOS CSS-fs too
+document.addEventListener('keydown',(e)=>{if(e.key==='Escape'&&_iosFsEl)_iosExitFs();});
 
 // ─── Square Payment Sync ──────────────────────────────────────────────────────
 async function syncSquarePayments(invoiceId){

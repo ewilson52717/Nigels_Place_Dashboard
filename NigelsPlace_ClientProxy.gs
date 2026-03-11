@@ -91,8 +91,9 @@ function doPost(e) {
     if (action === 'addDog')         return addDog(ss, req, email);
     if (action === 'updateVetLimit') return updateVetLimit(ss, req, email);
     if (action === 'cancelBooking')  return cancelBooking(ss, req, email);
-    if (action === 'updateProfile')  return updateProfile(ss, req, email);
-    if (action === 'updateDog')      return updateDog(ss, req, email);
+    if (action === 'updateProfile')     return updateProfile(ss, req, email);
+    if (action === 'updateDog')         return updateDog(ss, req, email);
+    if (action === 'updateDogVaccines') return updateDogVaccines(ss, req, email);
 
     return respond({ ok: false, error: `Unknown action: ${action}` });
 
@@ -435,6 +436,45 @@ function updateDog(ss, req, callerEmail) {
       dogsSheet.getRange(row, 19).setValue(String(vetPhone || ''));
       dogsSheet.getRange(row, 20).setValue(String(vetWebsite || ''));
       return respond({ ok: true, message: 'Dog updated.' });
+    }
+  }
+  return respond({ ok: false, error: 'Dog not found or does not belong to your account.' });
+}
+
+// ─── ACTION: updateDogVaccines ────────────────────────────────────────────────
+// Saves AI-parsed vaccine records for a dog after client portal upload.
+// Updates: vaccinated(col6), notes-unchanged, vaccExpiry(col9), vaccines(col10),
+//          driveFileLink(col11).
+function updateDogVaccines(ss, req, callerEmail) {
+  const { dogId, vaccines, vaccExpiry, vaccinated, driveFileLink } = req;
+  if (!dogId) return respond({ ok: false, error: 'dogId is required.' });
+
+  const clientsSheet = ss.getSheetByName('Clients');
+  const dogsSheet    = ss.getSheetByName('Dogs');
+  if (!clientsSheet) return respond({ ok: false, error: 'Clients sheet not found' });
+  if (!dogsSheet)    return respond({ ok: false, error: 'Dogs sheet not found' });
+
+  // Verify caller owns this dog
+  const clientData = clientsSheet.getDataRange().getValues();
+  let callerClientId = null;
+  for (let i = 1; i < clientData.length; i++) {
+    if (String(clientData[i][2]).toLowerCase() === callerEmail.toLowerCase()) {
+      callerClientId = clientData[i][0];
+      break;
+    }
+  }
+  if (callerClientId === null) return respond({ ok: false, error: 'Client record not found.' });
+
+  const dogData = dogsSheet.getDataRange().getValues();
+  for (let i = 1; i < dogData.length; i++) {
+    if (String(dogData[i][0]) === String(dogId) && String(dogData[i][1]) === String(callerClientId)) {
+      const row = i + 1;
+      // col6=vaccinated, col9=vaccExpiry, col10=vaccines(JSON), col11=driveFileLink
+      dogsSheet.getRange(row, 6).setValue(vaccinated ? 'true' : 'false');
+      dogsSheet.getRange(row, 9).setValue(String(vaccExpiry || ''));
+      dogsSheet.getRange(row, 10).setValue(JSON.stringify(vaccines || []));
+      if (driveFileLink) dogsSheet.getRange(row, 11).setValue(String(driveFileLink));
+      return respond({ ok: true, message: 'Vaccines updated.' });
     }
   }
   return respond({ ok: false, error: 'Dog not found or does not belong to your account.' });
