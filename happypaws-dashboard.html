@@ -1042,12 +1042,30 @@ async function onToken(resp){
       // Try loading via the proxy instead — this fetches their data, dogs, bookings
       // and safe settings. If that also fails they'll see onboarding.
       state.loadingMsg='Loading your profile…';render();
-      await loadClientDataViaProxy();
+      const proxyStatus=await loadClientDataViaProxy();
       const cl=clients.find(c=>c.email.toLowerCase()===email);
-      if(cl){state.role='client';state.currentClientId=cl.id;}
+      if(cl){
+        state.role='client';state.currentClientId=cl.id;
+        // Seed browser history so back-button stays within the portal, not the login page
+        try{history.replaceState({role:'client',clientView:'home'},'',' ');}catch(e){}
+      }
+      else if(proxyStatus==='error'){
+        // Proxy unreachable — could be a returning client whose data we can't reach right now.
+        // Check if we've seen this email before; if so, show a reconnect screen rather than onboarding.
+        const cachedEmail=(()=>{try{return localStorage.getItem('np_client_email')||'';}catch(e){return '';}})();
+        if(cachedEmail===email){
+          // Returning client — don't wipe their account with onboarding!
+          showToast('Having trouble reaching your profile. Check your connection and try again.','#F59E0B');
+          state.role='client_error'; // render() will show a retry screen
+        }else{
+          // First time seeing this email AND proxy is broken — could be new or returning.
+          // Show a helpful error rather than an onboarding form that could duplicate accounts.
+          showToast('Could not connect to the portal. Please check your connection.','#EF4444');
+          state.role='client_error';
+        }
+      }
       else{
-        // Unknown email — not yet a registered client.
-        // Show self-onboarding wizard so they can create their own profile.
+        // Proxy responded successfully but this email has no record — genuinely new client.
         state.role='onboarding';
         state.onboardingStep=1;
         state.onboardingData={};
@@ -1493,10 +1511,17 @@ async function proxyClientWrite(action, payload){
 // Called after a client signs in and on every silent refresh (instead of
 // loadAllData, which fails 403 because clients can't read the private sheet).
 // Fetches this client's own record, dogs, bookings + safe settings via the proxy.
+// Returns: 'found' | 'not_registered' | 'error'
+// 'error'          → proxy is unreachable or URL not set — do NOT drop into onboarding
+// 'not_registered' → proxy responded but no record for this email — safe to onboard
+// 'found'          → data loaded successfully
 async function loadClientDataViaProxy(){
   try{
     const result=await proxyClientWrite('getClientData',{});
-    if(!result.ok)return; // not yet registered — let onboarding handle it
+    if(!result.ok){
+      // Proxy responded but says this email isn't in the system — genuinely new client
+      return 'not_registered';
+    }
 
     const cr=result.client; // array: [id, name, email, phone, photoConsent]
     const actualCid=+cr[0];
@@ -1560,7 +1585,16 @@ async function loadClientDataViaProxy(){
     if(s.capacityOverrides){try{state.settings.capacityOverrides=JSON.parse(s.capacityOverrides)||{};}catch(e){}}
     if(s.requiredVaccines){try{const rv=JSON.parse(s.requiredVaccines);if(Array.isArray(rv))state.settings.requiredVaccines=rv;}catch(e){}}
 
-  }catch(e){/* silent — proxy may be unavailable or client not yet registered */}
+    // Cache client email so we recognise this user on next sign-in even if proxy is slow
+    try{if(cr[2])localStorage.setItem('np_client_email',String(cr[2]).toLowerCase());}catch(e){}
+    return 'found';
+
+  }catch(e){
+    // Proxy unreachable, URL not configured, or network error.
+    // Do NOT treat this as "not registered" — returning user would lose their account.
+    console.warn('loadClientDataViaProxy error:',e.message);
+    return 'error';
+  }
 }
 
 async function persistSettings(){
@@ -1620,10 +1654,26 @@ function buildApp(){
   if(state.role==='kiosk')return buildKioskView();
   if(state.role==='login')return buildLogin();
   if(state.role==='onboarding')return buildOnboarding();
+  if(state.role==='client_error')return buildClientError();
   if(state.role==='admin'&&state.adminViewAsClient)return buildAdminAsClientLayout();
   if(state.role==='admin')return buildAdminLayout();
   if(state.role==='client')return buildClientLayout();
   return'';
+}
+function buildClientError(){
+  return`<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#3d1a08,#5C3317);font-family:system-ui,sans-serif;padding:2rem;text-align:center;">
+    <img src="${LOGO_URL}" style="width:72px;border-radius:50%;margin-bottom:1.2rem;background:rgba(255,255,255,0.1);padding:8px;">
+    <div style="color:#fff;font-size:1.25rem;font-weight:700;margin-bottom:.5rem;">Connection Problem</div>
+    <div style="color:rgba(255,200,120,0.85);font-size:.9rem;max-width:300px;margin-bottom:1.8rem;line-height:1.5;">
+      We couldn't reach your profile right now. This is usually a temporary issue — please try again.
+    </div>
+    <button onclick="location.reload()" style="background:#C4952A;color:#fff;border:none;border-radius:12px;padding:.75rem 2rem;font-size:.95rem;font-weight:600;cursor:pointer;margin-bottom:.75rem;">
+      🔄 Try Again
+    </button>
+    <button onclick="signOut()" style="background:none;color:rgba(255,255,255,0.45);border:none;font-size:.8rem;cursor:pointer;margin-top:.25rem;">
+      Sign out
+    </button>
+  </div>`;
 }
 function toggleAdminClientView(){
   if(!state.adminViewAsClient){
@@ -2027,6 +2077,10 @@ async function submitOnboarding(){
     state.clientView='home';
     state.onboardingStep=1;
     state.onboardingData={};
+    // Cache this email so future sign-ins recognise them as a returning client
+    try{localStorage.setItem('np_client_email',newClient.email.toLowerCase());}catch(e){}
+    // Seed history so back-button stays in portal
+    try{history.replaceState({role:'client',clientView:'home'},'',' ');}catch(e){}
     // Immediately sync full data from the proxy (gets dogs, bookings, settings)
     await loadClientDataViaProxy();
     showToast(`Welcome, ${d.ownerName}! Your profile is all set. 🐾`);
@@ -2067,10 +2121,10 @@ function buildAdminLayout(){
         <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
       </svg>
     </button>
-    <div class="flex items-center gap-2">
+    <button onclick="${state.adminViewAsClient?'setClientView(\'home\')':'setView(\'dashboard\')'}" style="background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:0;">
       <img src="${LOGO_URL}" style="width:30px;height:30px;object-fit:contain;border-radius:6px;">
       <span style="color:#fff;font-weight:700;font-size:0.95rem;">Nigel's Place</span>
-    </div>
+    </button>
     <button onclick="openBookingModal(null)"
       style="background:#C4952A;border:none;border-radius:10px;padding:7px 12px;color:#fff;font-size:0.78rem;font-weight:600;cursor:pointer;">
       + Book
@@ -2081,8 +2135,10 @@ function buildAdminLayout(){
   <div class="flex h-screen overflow-hidden bg-gray-50">
     <aside id="admin-sidebar" class="w-56 flex flex-col flex-shrink-0" style="background:linear-gradient(to bottom,#5C3317,#2A1408)">
       <div class="p-5 border-b border-white/10">
-        <img src="${LOGO_URL}" style="width:60px;margin:0 auto 0.2rem;display:block">
-        <div class="text-white font-bold text-sm leading-tight text-center">Nigel's Place</div>
+        <button onclick="${state.adminViewAsClient?'setClientView(\'home\')':'setView(\'dashboard\')'}" style="background:none;border:none;cursor:pointer;display:block;width:100%;padding:0;" title="Go to home">
+          <img src="${LOGO_URL}" style="width:60px;margin:0 auto 0.2rem;display:block;opacity:0.95;transition:opacity .15s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.95'">
+          <div class="text-white font-bold text-sm leading-tight text-center">Nigel's Place</div>
+        </button>
         <div style="text-align:center;margin-top:2px;margin-bottom:1px;">
           <span style="font-size:0.6rem;color:rgba(255,255,255,0.22);letter-spacing:0.06em;text-transform:uppercase;">powered by ${CONFIG.APP_NAME}</span>
         </div>
@@ -2130,8 +2186,10 @@ function buildClientLayout(){
   <div class="min-h-screen bg-gray-50">
     <header class="bg-white border-b border-gray-100 px-4 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-10 shadow-sm">
       <div class="flex items-center gap-2">
-        <img src="${LOGO_URL}" style="width:32px;height:32px;object-fit:contain;border-radius:6px;">
-        <span class="font-bold text-gray-800 text-sm hidden sm:inline">Nigel's Place</span>
+        <button onclick="setClientView('home')" style="background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:0;" title="Go to home">
+          <img src="${LOGO_URL}" style="width:32px;height:32px;object-fit:contain;border-radius:6px;">
+          <span class="font-bold text-gray-800 text-sm hidden sm:inline">Nigel's Place</span>
+        </button>
         ${state.mode==='demo'?'<span class="badge bg-amber-100 text-amber-600">Demo</span>':''}
       </div>
       <!-- Nav tabs centred on mobile -->
@@ -2217,7 +2275,6 @@ function buildDashboard(){
         <div class="text-2xl mb-1">🐾</div>
         <div class="text-2xl font-bold text-gray-800">${activeDogs}</div>
         <div class="text-xs text-gray-400">Active Dogs</div>
-        ${rbDogs>0?`<div class="text-xs mt-1" style="color:#9CA3AF;">🌈 ${rbDogs} Rainbow Bridge</div>`:'<div class="text-xs mt-1 text-gray-200">—</div>'}
       </div>
       <div class="stat-card"><div class="text-2xl mb-1">💵</div><div class="text-2xl font-bold text-gray-800">$${weekRev}</div><div class="text-xs text-gray-400">This Week Revenue</div></div>
       <div class="stat-card"><div class="text-2xl mb-1">📅</div><div class="text-2xl font-bold text-gray-800">${monthBks}</div><div class="text-xs text-gray-400">${now.toLocaleString('default',{month:'long'})} Bookings</div></div>
@@ -3996,7 +4053,25 @@ async function handleClientVaccUpload(clientId, dogId){
     if(freshBtn){freshBtn.disabled=false;freshBtn.innerHTML='📄 Upload Records';}
   }
 }
-function setClientView(v) {state.clientView=v;state.showModal=null;render();}
+function setClientView(v,skipHistory=false){
+  state.clientView=v;state.showModal=null;
+  if(!skipHistory){
+    // Push a history entry so the browser back button works within the client portal
+    try{history.pushState({role:'client',clientView:v},'',' ');}catch(e){}
+  }
+  render();
+}
+// Restore client view on browser back/forward
+window.addEventListener('popstate',function(e){
+  if(state.role==='client'||state.role==='onboarding'){
+    const cv=(e.state&&e.state.clientView)||'home';
+    state.clientView=cv;state.showModal=null;render();
+  }else if(state.role==='admin'&&state.adminViewAsClient){
+    // Admin previewing client view — back goes to the home tab
+    const cv=(e.state&&e.state.clientView)||'home';
+    state.clientView=cv;state.showModal=null;render();
+  }
+});
 function prevMonth()      {state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()-1,1);render();}
 function nextMonth()      {state.calendarDate=new Date(state.calendarDate.getFullYear(),state.calendarDate.getMonth()+1,1);render();}
 function closeModal()     {state.showModal=null;render();}
