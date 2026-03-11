@@ -278,6 +278,7 @@ const state={
     kioskPassword:'', // if set, kiosk ?kiosk URL requires this password before showing the lobby
     capacityOverrides:{}, // { 'YYYY-MM-DD': number } — per-date overrides (0 = closed/blocked)
     requiredVaccines:['Rabies','DHPP','Bordetella'], // Required vaccines — all dogs must have these current
+    manualVetClinics:[], // [{id,name,phone,website,notes}] — manually added partner clinics
   },
 };
 
@@ -1479,11 +1480,12 @@ async function initSheetHeaders(){
     writeRange('Dogs!A1:T1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit','deceased','vaccOverride','vetName','vetPhone','vetWebsite']]),
     writeRange('Bookings!A1:L1',[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price']]),
     writeRange('Invoices!A1:K1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items','externalPaid','paymentNote']]),
-    writeRange('Settings!A1:B15',[
+    writeRange('Settings!A1:B17',[
       ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
       ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
       ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',''],['squareLink',''],
       ['squareApiKey',''],['squareLocationId',''],['geminiApiKey',''],['googleMapsApiKey',''],['nigelsDriveFolderId',''],['appsScriptUrl',''],['kioskPassword',''],['capacityOverrides','{}'],['requiredVaccines','["Rabies","DHPP","Bordetella"]'],
+      ['manualVetClinics','[]'],
     ]),
     writeRange('Services!A1:F1',[['id','name','type','price','active','frequency']]),
     writeRange('Packages!A1:K1',[['id','clientId','dogId','clientName','dogName','purchaseDate','qty','remaining','pricePerSession','totalPaid','notes']]),
@@ -1587,6 +1589,7 @@ async function loadAllData(){
     else if(k==='kioskPassword')state.settings.kioskPassword=v;
     else if(k==='capacityOverrides'){try{state.settings.capacityOverrides=JSON.parse(v)||{};}catch(e){}}
     else if(k==='requiredVaccines'){try{const rv=JSON.parse(v);if(Array.isArray(rv))state.settings.requiredVaccines=rv;}catch(e){}}
+    else if(k==='manualVetClinics'){try{const mv=JSON.parse(v);if(Array.isArray(mv))state.settings.manualVetClinics=mv;}catch(e){}}
   });
   services.length=0;
   if(svR&&svR.length>0){
@@ -2015,7 +2018,8 @@ async function persistSettings(){
   if(state.mode!=='live')return;
   const overridesJson=JSON.stringify(state.settings.capacityOverrides||{});
   const vaccinesJson=JSON.stringify(state.settings.requiredVaccines||[]);
-  await writeRange('Settings!A1:B16',[
+  const manualClinicsJson=JSON.stringify(state.settings.manualVetClinics||[]);
+  await writeRange('Settings!A1:B17',[
     ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
     ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
     ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',state.settings.venmoHandle||''],
@@ -2027,6 +2031,7 @@ async function persistSettings(){
     ['kioskPassword',state.settings.kioskPassword||''],
     ['capacityOverrides',overridesJson],
     ['requiredVaccines',vaccinesJson],
+    ['manualVetClinics',manualClinicsJson],
   ]);
 }
 async function persistServices(){
@@ -2108,10 +2113,12 @@ function buildClientError(){
 }
 function toggleAdminClientView(){
   if(!state.adminViewAsClient){
-    // Switching TO client view — try to find admin's own client record
+    // Switching TO client view — try to find admin's own client record first,
+    // but always allow selector so admin can preview any client
     const email=state.userEmail?.toLowerCase()||'';
     const matched=clients.find(c=>c.email.toLowerCase()===email);
-    state.currentClientId=matched?.id||null;
+    // Default to matched client if found, otherwise first client, otherwise null
+    state.currentClientId=matched?.id||(clients[0]?.id||null);
     state.clientView='home';
     // Persist so a page refresh lands back in client view
     try{localStorage.setItem('np_admin_as_client','1');
@@ -2125,19 +2132,27 @@ function toggleAdminClientView(){
   state.showModal=null;
   render();
 }
+function adminSwitchViewAsClient(id){
+  state.currentClientId=+id||null;
+  state.clientView='home';
+  try{localStorage.setItem('np_admin_client_id',String(state.currentClientId||''));}catch(e){}
+  render();
+}
 function buildAdminAsClientLayout(){
   // Renders the full client layout with an escape banner pinned at top
   const clientLayout=buildClientLayout();
-  const banner=`<div style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#7B4015;color:#fff;font-size:0.75rem;padding:6px 16px;display:flex;align-items:center;justify-between;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,0.25)">
-    <div style="display:flex;align-items:center;gap:8px;">
+  const curClient=clients.find(c=>c.id===state.currentClientId);
+  const banner=`<div style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#7B4015;color:#fff;font-size:0.75rem;padding:6px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,0.25)">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <span style="font-size:1rem;">🔁</span>
-      <span>You're viewing the <strong>Client Experience</strong>${state.currentClientId?` as ${clients.find(c=>c.id===state.currentClientId)?.name||'a client'}`:' (no client profile matched — select one below)'}</span>
-      ${!state.currentClientId&&clients.length>0?`<select onchange="state.currentClientId=+this.value;render()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:6px;padding:2px 6px;font-size:0.75rem;cursor:pointer">
-        <option value="">— View as client —</option>
-        ${clients.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
-      </select>`:''}
+      <span style="white-space:nowrap"><strong>Client Preview</strong></span>
+      ${clients.length>0?`<select onchange="adminSwitchViewAsClient(this.value)" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.35);color:#fff;border-radius:6px;padding:3px 8px;font-size:0.75rem;cursor:pointer;max-width:180px;">
+        <option value="">— View as… —</option>
+        ${clients.map(c=>`<option value="${c.id}" ${state.currentClientId===c.id?'selected':''}>${c.name}</option>`).join('')}
+      </select>`:'<span style="opacity:0.7;font-size:0.7rem;">No clients yet</span>'}
+      ${curClient?`<span style="opacity:0.75;font-size:0.7rem;white-space:nowrap;">Viewing as ${curClient.name}</span>`:''}
     </div>
-    <button onclick="toggleAdminClientView()" style="background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.35);color:#fff;border-radius:8px;padding:4px 14px;font-size:0.75rem;font-weight:600;cursor:pointer;white-space:nowrap">← Back to Admin Dashboard</button>
+    <button onclick="toggleAdminClientView()" style="background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.35);color:#fff;border-radius:8px;padding:4px 14px;font-size:0.75rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">← Back to Admin</button>
   </div>
   <div style="height:34px"></div>`;
   // Inject banner before the client layout div
@@ -3308,65 +3323,74 @@ function buildDogsList(){
 }
 // ─── VET CLINICS ADMIN VIEW ────────────────────────────────────────────────────
 function buildVetClinicsView(){
-  // Aggregate unique vet clinics from all active dogs
+  // ── 1. Aggregate clinics from client pet profiles ──────────────────────────
   const clinicMap=new Map(); // key = normalised clinic name
   clients.forEach(cl=>{
     (cl.dogs||[]).filter(d=>!d.deceased&&d.vetName&&d.vetName.trim()).forEach(dog=>{
       const key=(dog.vetName||'').trim().toLowerCase();
       if(!clinicMap.has(key)){
-        clinicMap.set(key,{
-          name:dog.vetName.trim(),
-          phone:dog.vetPhone||'',
-          website:dog.vetWebsite||'',
-          clients:[],
-        });
+        clinicMap.set(key,{name:dog.vetName.trim(),phone:dog.vetPhone||'',website:dog.vetWebsite||'',clients:[],manual:false});
       }
       const entry=clinicMap.get(key);
-      // Merge phone/website if this dog has one and the stored one is blank
       if(!entry.phone&&dog.vetPhone)entry.phone=dog.vetPhone;
       if(!entry.website&&dog.vetWebsite)entry.website=dog.vetWebsite;
-      // Record which clients use this clinic (avoid duplicates)
-      if(!entry.clients.find(c=>c.id===cl.id)){
+      if(!entry.clients.find(c=>c.id===cl.id))
         entry.clients.push({id:cl.id,name:cl.name,dogName:dog.name});
-      }
     });
+  });
+
+  // ── 2. Merge manually-added partner clinics ────────────────────────────────
+  const manuals=state.settings.manualVetClinics||[];
+  manuals.forEach(m=>{
+    const key=(m.name||'').trim().toLowerCase();
+    if(!key)return;
+    if(clinicMap.has(key)){
+      // Enrich aggregated entry with any manual data
+      const entry=clinicMap.get(key);
+      if(!entry.phone&&m.phone)entry.phone=m.phone;
+      if(!entry.website&&m.website)entry.website=m.website;
+      entry.manualId=m.id; // track so we can delete it
+      entry.notes=m.notes||'';
+      entry.manual=true;
+    }else{
+      clinicMap.set(key,{id:m.id,name:m.name.trim(),phone:m.phone||'',website:m.website||'',notes:m.notes||'',clients:[],manual:true,manualId:m.id});
+    }
   });
 
   const clinics=[...clinicMap.values()].sort((a,b)=>a.name.localeCompare(b.name));
   const total=clinics.length;
-  const totalDogs=clinics.reduce((s,c)=>s+c.clients.length,0);
+  const totalPets=clinics.reduce((s,c)=>s+c.clients.length,0);
 
-  const rows=clinics.length===0
-    ?`<div class="text-center py-16 text-gray-400">
+  const clinicCards=clinics.length===0
+    ?`<div class="col-span-2 text-center py-16 text-gray-400">
         <div class="text-4xl mb-3">🏥</div>
         <div class="font-semibold text-lg mb-1">No vet clinics on file yet</div>
-        <div class="text-sm">Clinics appear here once clients add their veterinarian in My Pet → Edit.</div>
+        <div class="text-sm">Clinics appear here once clients add their vet in My Pet → Edit, or you add one manually above.</div>
       </div>`
     :clinics.map(c=>`
-      <div class="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm hover:shadow-md transition-shadow">
+      <div class="bg-white rounded-2xl border p-4 shadow-sm hover:shadow-md transition-shadow ${c.manual?'border-amber-200':'border-gray-100'}">
         <div class="flex items-start justify-between gap-3">
           <div class="flex-1 min-w-0">
-            <div class="font-bold text-gray-800 text-base truncate">${c.name}</div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <div class="font-bold text-gray-800 text-base truncate">${c.name}</div>
+              ${c.manual?`<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#FEF3C7;color:#92400E;">🤝 Partner</span>`:''}
+            </div>
             ${c.phone?`<div class="text-sm text-gray-500 mt-0.5">📞 ${fmtPhone(c.phone)}</div>`:''}
-            ${c.website?`<div class="mt-0.5"><a href="${c.website}" target="_blank" rel="noopener" class="text-xs text-blue-500 hover:underline">🔗 ${c.website.replace(/^https?:\/\//,'').split('/')[0]}</a></div>`:'<div class="text-xs text-gray-300 mt-0.5 italic">No website on file</div>'}
+            ${c.website?`<div class="mt-0.5"><a href="${c.website.startsWith('http')?c.website:'https://'+c.website}" target="_blank" rel="noopener" class="text-xs text-blue-500 hover:underline">🔗 ${c.website.replace(/^https?:\/\//,'').split('/')[0]}</a></div>`:'<div class="text-xs text-gray-300 mt-0.5 italic">No website on file</div>'}
+            ${c.notes?`<div class="text-xs text-gray-400 mt-1 italic">${c.notes}</div>`:''}
           </div>
-          <div class="flex-shrink-0 text-right">
-            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold" style="background:#EFF6FF;color:#1D4ED8;">
-              ${c.clients.length} client${c.clients.length===1?'':'s'}
-            </span>
+          <div class="flex flex-col items-end gap-1.5 flex-shrink-0">
+            ${c.clients.length>0?`<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold" style="background:#EFF6FF;color:#1D4ED8;">${c.clients.length} client${c.clients.length===1?'':'s'}</span>`:''}
+            ${c.manualId!==undefined?`<button onclick="deleteManualVetClinic(${c.manualId})" title="Remove partner clinic" class="inline-flex items-center px-2 py-0.5 rounded-lg text-xs text-red-400 hover:bg-red-50 border border-red-200">🗑️ Remove</button>`:''}
           </div>
         </div>
+        ${c.clients.length>0?`
         <div class="mt-3 pt-3 border-t border-gray-50">
           <div class="text-xs text-gray-400 mb-1.5 font-semibold uppercase tracking-wide">Clients using this clinic</div>
           <div class="flex flex-wrap gap-1.5">
-            ${c.clients.map(cl=>`
-              <button onclick="viewClientProfile(${cl.id})"
-                class="text-xs px-2.5 py-1 rounded-full border hover:bg-amber-50 transition-colors"
-                style="border-color:#D4A96B;color:#7B4015;background:white;">
-                🐶 ${cl.name} · ${cl.dogName}
-              </button>`).join('')}
+            ${c.clients.map(cl=>`<button onclick="viewClientProfile(${cl.id})" class="text-xs px-2.5 py-1 rounded-full border hover:bg-amber-50 transition-colors" style="border-color:#D4A96B;color:#7B4015;background:white;">🐾 ${cl.name} · ${cl.dogName}</button>`).join('')}
           </div>
-        </div>
+        </div>`:''}
       </div>`).join('');
 
   return`
@@ -3374,23 +3398,103 @@ function buildVetClinicsView(){
     <div class="flex items-center justify-between mb-5">
       <div>
         <h1 class="text-2xl font-bold text-gray-800">🏥 Vet Clinics</h1>
-        <p class="text-sm text-gray-400 mt-0.5">${total} clinic${total===1?'':'s'} on file across ${totalDogs} pet${totalDogs===1?'':'s'}</p>
+        <p class="text-sm text-gray-400 mt-0.5">${total} clinic${total===1?'':'s'} on file · ${manuals.length} partner${manuals.length===1?'':'s'} · ${totalPets} pet${totalPets===1?'':'s'}</p>
       </div>
+      <button onclick="state.showModal={type:'addVetClinic'};render()"
+        class="px-4 py-2 rounded-xl text-white text-sm font-semibold shadow-sm hover:opacity-90 transition-opacity"
+        style="background:#7B4015;">+ Add Partner Clinic</button>
     </div>
 
     <div class="mb-5 rounded-2xl p-4 border" style="background:#F0F9FF;border-color:#BAE6FD;">
       <div class="flex items-start gap-2.5">
         <span class="text-lg flex-shrink-0">ℹ️</span>
         <div class="text-sm text-blue-800">
-          <strong>About this list:</strong> Clinics are aggregated automatically from your clients' pet profiles. To add or update a clinic, ask the client to edit their pet profile in the portal, or edit the pet directly from the Pets view. Website and phone auto-fill via AI Lookup.
+          Clinics are auto-aggregated from client pet profiles <em>and</em> any partner clinics you add manually. Partner clinics show a 🤝 badge and can be removed here at any time.
         </div>
       </div>
     </div>
 
     <div class="grid gap-3 sm:grid-cols-2">
-      ${rows}
+      ${clinicCards}
     </div>
   </div>`;
+}
+
+// ─── ADD / DELETE MANUAL VET CLINIC ────────────────────────────────────────────
+function buildAddVetClinicModal(){
+  return`<div class="modal-overlay" onclick="if(event.target===this){state.showModal=null;render();}">
+  <div class="modal-box" style="max-width:460px;">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h2 class="text-lg font-bold text-gray-800">🏥 Add Partner Clinic</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Manually add a vet clinic to your directory</p>
+      </div>
+      <button onclick="state.showModal=null;render()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none ml-4">×</button>
+    </div>
+
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Clinic Name *</label>
+        <div class="flex gap-2">
+          <input id="avc-name" type="text" placeholder="e.g. Salish Veterinary Hospital"
+            class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-amber-400">
+          <button id="avc-lookup-btn" onclick="lookupVetFromModal('avc-name','avc-phone','avc-lookup-btn','avc-website')"
+            class="px-3 py-2 rounded-xl border border-gray-200 text-xs text-gray-500 hover:bg-gray-50 whitespace-nowrap">🔍 Auto-Fill</button>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Phone</label>
+          <input id="avc-phone" type="tel" placeholder="e.g. 425-322-4217"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-amber-400">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Website</label>
+          <input id="avc-website" type="url" placeholder="e.g. https://salishvet.com"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-amber-400">
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Notes <span class="font-normal text-gray-400">(optional)</span></label>
+        <textarea id="avc-notes" rows="2" placeholder="e.g. Preferred partner — 10% discount for our clients"
+          class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-amber-400 resize-none"></textarea>
+      </div>
+    </div>
+
+    <div class="mt-5 flex gap-3">
+      <button onclick="state.showModal=null;render()"
+        class="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50">Cancel</button>
+      <button onclick="submitAddVetClinic()"
+        class="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold hover:opacity-90"
+        style="background:#7B4015;">Save Clinic</button>
+    </div>
+  </div>
+</div>`;
+}
+async function submitAddVetClinic(){
+  const name=(document.getElementById('avc-name')?.value||'').trim();
+  if(!name){showToast('Clinic name is required.','#EF4444');return;}
+  const phone=(document.getElementById('avc-phone')?.value||'').trim();
+  const website=(document.getElementById('avc-website')?.value||'').trim();
+  const notes=(document.getElementById('avc-notes')?.value||'').trim();
+  const existing=state.settings.manualVetClinics||[];
+  // Prevent exact-name duplicates
+  if(existing.some(c=>c.name.toLowerCase()===name.toLowerCase())){
+    showToast('A clinic with that name already exists.','#F97316');return;
+  }
+  const newId=Date.now();
+  existing.push({id:newId,name,phone,website,notes});
+  state.settings.manualVetClinics=existing;
+  state.showModal=null;
+  render();
+  try{await persistSettings();showToast(`✅ ${name} added to your clinic directory!`);}
+  catch(e){showToast('Saved locally — sheet sync failed.','#F97316');}
+}
+async function deleteManualVetClinic(id){
+  if(!confirm('Remove this partner clinic from your directory?'))return;
+  state.settings.manualVetClinics=(state.settings.manualVetClinics||[]).filter(c=>c.id!==id);
+  render();
+  try{await persistSettings();}catch(e){showToast('Removed locally — sheet sync failed.','#F97316');}
 }
 
 function buildServicesView(){
@@ -4315,7 +4419,7 @@ function buildClientDog(){
             :`<div class="text-xs text-amber-700 bg-amber-50 rounded-xl px-2.5 py-2 border border-amber-100">
                 No records yet. Upload a PDF or photo — AI reads all dates automatically.
               </div>`}
-          ${dog.driveFileLink?`<a href="${dog.driveFileLink}" target="_blank" class="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-auto">📂 Drive →</a>`:''}
+          ${(state.role!=='client'&&!state.adminViewAsClient)&&dog.driveFileLink?`<a href="${dog.driveFileLink}" target="_blank" class="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-auto">📂 Drive →</a>`:''}
         </div>
       </div>
 
@@ -4387,6 +4491,7 @@ function buildModal(){
   if(m.type==='editMyDog')        return buildEditMyDogModal();
   if(m.type==='whatsNew')         return buildWhatsNewModal();
   if(m.type==='vaccinesLightbox') return buildVaccinesLightbox();
+  if(m.type==='addVetClinic')     return buildAddVetClinicModal();
   return'';
 }
 function buildAddInvoiceModal(){
