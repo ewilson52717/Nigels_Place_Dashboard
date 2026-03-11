@@ -5480,7 +5480,7 @@ async function submitAddDog(e){
   e.preventDefault();
   const name=(document.getElementById('add-dog-name')?.value||'').trim();
   if(!name){showToast('Dog name is required.','#EF4444');return;}
-  const breed=(document.getElementById('add-dog-breed')?.value||'').trim()||'Mixed Breed';
+  const breed=getBreedValue('add-dog-breed','add-dog-breed-other')||'Mixed Breed';
   const age=parseInt(document.getElementById('add-dog-age')?.value)||0;
   const birthday=(document.getElementById('add-dog-birthday')?.value||'').trim();
   const notes=(document.getElementById('add-dog-notes')?.value||'').trim();
@@ -5522,7 +5522,7 @@ function buildAddDogModal(){
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="block text-xs text-gray-500 mb-1">Breed</label>
-            <input id="add-dog-breed" placeholder="Mixed Breed" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none">
+            ${breedSelectHtml('add-dog-breed','add-dog-breed-other')}
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1">Age (years)</label>
