@@ -163,7 +163,7 @@ function profileRequiredFieldsMissing(cl){
         label:'Veterinary clinic not on file',
         detail:`${dogsWithNoVet.map(d=>d.name).join(', ')} need${dogsWithNoVet.length===1?'s':''} a verified vet clinic before booking can be unlocked.`,
         action:'mydog',
-        actionLabel:'Go to My Dog →',
+        actionLabel:'Go to My Pet →',
       });
     }
   }
@@ -1690,7 +1690,7 @@ function showDayQuickMenu(ds,event){
       🔒 Closed${cap===0?' ✓':''}
     </button>
     <div style="border-top:1px solid #F3F4F6;margin:4px 0;padding-top:6px;">
-      <div style="font-size:11px;color:#9CA3AF;padding:0 10px 4px;">Custom max dogs:</div>
+      <div style="font-size:11px;color:#9CA3AF;padding:0 10px 4px;">Custom max pets:</div>
       <div style="display:flex;align-items:center;gap:6px;padding:0 8px 4px;">
         <input type="number" id="dqm-cap" value="${cap!==state.settings.dailyCapacity&&cap!==0?cap:''}" min="1" max="100"
           placeholder="${state.settings.dailyCapacity}"
@@ -1720,9 +1720,9 @@ function setDayStatus(ds,status){
     showToast(`${fmtDate(ds)} blocked 🔒`,'#7B4015');
   }else if(status==='custom'){
     const v=parseInt(document.getElementById('dqm-cap')?.value);
-    if(!v||v<1){showToast('Enter a valid number of dogs.','#EF4444');return;}
+    if(!v||v<1){showToast('Enter a valid number of pets.','#EF4444');return;}
     state.settings.capacityOverrides[ds]=v;
-    showToast(`${fmtDate(ds)} — max ${v} dogs set 📊`);
+    showToast(`${fmtDate(ds)} — max ${v} pets set 📊`);
   }
   render();
   try{persistSettings();}catch(e){}
@@ -2215,7 +2215,7 @@ function buildOnboarding(){
   const email=state.userEmail||'';
 
   // ── Step indicator pills ──────────────────────────────────────────────────
-  const stepLabels=['Your Info','Your Dog','Agreements'];
+  const stepLabels=['Your Info','Your Pet','Agreements'];
   const stepsHtml=stepLabels.map((s,i)=>{
     const n=i+1,active=n===step,done=n<step;
     const bg=done?'#7B4015':active?'#C4952A':'#E5E7EB';
@@ -2254,7 +2254,7 @@ function buildOnboarding(){
         </div>
         <button onclick="onboardingNext(1)"
           style="width:100%;background:#7B4015;color:#fff;border:none;border-radius:14px;padding:.75rem;font-size:.9rem;font-weight:600;cursor:pointer;margin-top:.25rem;">
-          Continue &rarr; Add Your Dog
+          Continue &rarr; Add Your Pet
         </button>
       </div>`;
 
@@ -2262,7 +2262,7 @@ function buildOnboarding(){
     formContent=`
       <div style="display:flex;flex-direction:column;gap:1rem;">
         <div>
-          <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:.35rem;">Dog's Name *</label>
+          <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:.35rem;">Pet's Name *</label>
           <input id="ob-dogname" type="text" placeholder="What's your pup's name?" value="${(d.dogName||'').replace(/"/g,'&quot;')}"
             style="width:100%;border:1px solid #E5E7EB;border-radius:12px;padding:.6rem .75rem;font-size:.875rem;box-sizing:border-box;">
         </div>
@@ -2336,11 +2336,11 @@ function buildOnboarding(){
             </label>
             <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
               <input type="checkbox" id="ob-agree-liability" ${d.agreeLiability?'checked':''} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
-              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I acknowledge the <strong>Liability Waiver</strong> and understand that Nigel's Place is not liable for injuries or illness while boarding, provided reasonable care is taken. I assume responsibility for any harm my dog causes. <span style="color:#DC2626;">*</span></span>
+              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I acknowledge the <strong>Liability Waiver</strong> and understand that Nigel's Place is not liable for injuries or illness while boarding, provided reasonable care is taken. I assume responsibility for any harm my pet causes. <span style="color:#DC2626;">*</span></span>
             </label>
             <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
               <input type="checkbox" id="ob-agree-medical" ${d.agreeMedical?'checked':''} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
-              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I authorize Nigel's Place to seek <strong>emergency veterinary care</strong> for my dog if needed, and agree to cover associated costs. Nigel's Place will make every effort to contact me first. <span style="color:#DC2626;">*</span></span>
+              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I authorize Nigel's Place to seek <strong>emergency veterinary care</strong> for my pet if needed, and agree to cover associated costs. Nigel's Place will make every effort to contact me first. <span style="color:#DC2626;">*</span></span>
             </label>
             <!-- Emergency vet spending limit — shown always so client doesn't sign a blank check -->
             <div style="margin-left:1.6rem;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:10px;padding:.75rem;margin-top:-.25rem;">
@@ -2353,12 +2353,12 @@ function buildOnboarding(){
                 <option value="1000" ${d.vetLimit==='1000'?'selected':''}>Up to $1,000</option>
                 <option value="2500" ${d.vetLimit==='2500'?'selected':''}>Up to $2,500</option>
                 <option value="5000" ${d.vetLimit==='5000'?'selected':''}>Up to $5,000</option>
-                <option value="unlimited" ${d.vetLimit==='unlimited'?'selected':''}>No limit — do whatever is needed to keep my dog safe</option>
+                <option value="unlimited" ${d.vetLimit==='unlimited'?'selected':''}>No limit — do whatever is needed to keep my pet safe</option>
               </select>
             </div>
             <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
               <input type="checkbox" id="ob-photo-consent" ${d.photoConsent===false?'':' checked'} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
-              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I agree that Nigel's Place may <strong>photograph &amp; video</strong> my dog for use in social media and marketing. <em style="color:#6B7280;">(Uncheck to opt out)</em></span>
+              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I agree that Nigel's Place may <strong>photograph &amp; video</strong> my pet for use in social media and marketing. <em style="color:#6B7280;">(Uncheck to opt out)</em></span>
             </label>
           </div>
         </div>
@@ -2412,7 +2412,7 @@ function onboardingNext(fromStep){
     state.onboardingStep=2;
   }else if(fromStep===2){
     const dogName=(document.getElementById('ob-dogname')?.value||'').trim();
-    if(!dogName){showToast("Please enter your dog's name.",'#EF4444');return;}
+    if(!dogName){showToast("Please enter your pet's name.",'#EF4444');return;}
     d.dogName=dogName;
     d.dogBreed=getBreedValue('ob-breed','ob-breed-other');
     d.dogAge=parseFloat(document.getElementById('ob-age')?.value)||0;
@@ -2552,7 +2552,7 @@ async function submitOnboarding(){
 function buildAdminLayout(){
   const nav=[
     {id:'dashboard', icon:'📊',label:'Dashboard'}, {id:'calendar',  icon:'📅',label:'Calendar'},
-    {id:'clients',   icon:'👥',label:'Clients'},   {id:'dogs',      icon:'🐾',label:'Dogs'},
+    {id:'clients',   icon:'👥',label:'Clients'},   {id:'dogs',      icon:'🐾',label:'Pets'},
     {id:'vetclinics',icon:'🏥',label:'Vet Clinics'},{id:'services',  icon:'🛎️',label:'Services'},
     {id:'invoices',  icon:'💰',label:'Invoices'},  {id:'settings',  icon:'⚙️',label:'Settings'},
     {id:'kiosk',     icon:'🖥️',label:'Kiosk Preview'},
@@ -2665,7 +2665,7 @@ function buildClientLayout(){
         </button>
         <button onclick="setClientView('mydog')"
           class="px-3 py-2 text-sm rounded-xl transition-all font-medium ${state.clientView==='mydog'?'text-amber-800" style="background:#FEF3C7"':'text-gray-500 hover:bg-gray-100'}">
-          🐾 <span class="hidden sm:inline">My Dog</span>
+          🐾 <span class="hidden sm:inline">My Pet</span>
         </button>
       </div>
       <div class="flex items-center gap-1.5">
@@ -2728,7 +2728,7 @@ function buildDashboard(){
       <div class="stat-card">
         <div class="text-2xl mb-1">🐕</div>
         <div class="text-2xl font-bold" style="color:${c.txt}">${todayBks.length}<span class="text-gray-300 font-normal text-lg">/${cap}</span></div>
-        <div class="text-xs text-gray-400 mb-2">Dogs Today</div>
+        <div class="text-xs text-gray-400 mb-2">Pets Today</div>
         <div class="cap-bar"><div class="cap-fill" style="width:${Math.min(100,todayBks.length/cap*100)}%;background:${c.bar}"></div></div>
         <div class="text-xs mt-1" style="color:${c.txt}">${c.label}</div>
       </div>
@@ -2738,10 +2738,10 @@ function buildDashboard(){
         <div class="text-xs text-gray-400">Total Clients</div>
         ${vaccAlertCt>0?`<div class="text-xs mt-1 text-red-500">🚩 ${vaccAlertCt} vacc expired</div>`:'<div class="text-xs mt-1 text-gray-200">—</div>'}
       </div>
-      <div class="stat-card cursor-pointer" onclick="setView('dogs')" title="View all dogs">
+      <div class="stat-card cursor-pointer" onclick="setView('dogs')" title="View all pets">
         <div class="text-2xl mb-1">🐾</div>
         <div class="text-2xl font-bold text-gray-800">${activeDogs}</div>
-        <div class="text-xs text-gray-400">Active Dogs</div>
+        <div class="text-xs text-gray-400">Active Pets</div>
       </div>
       <div class="stat-card"><div class="text-2xl mb-1">💵</div><div class="text-2xl font-bold text-gray-800">$${weekRev}</div><div class="text-xs text-gray-400">This Week Revenue</div></div>
       <div class="stat-card"><div class="text-2xl mb-1">📅</div><div class="text-2xl font-bold text-gray-800">${monthBks}</div><div class="text-xs text-gray-400">${now.toLocaleString('default',{month:'long'})} Bookings</div></div>
@@ -2901,7 +2901,7 @@ function buildCalendarView(role){
             <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">📊 Custom Capacity (single date)</label>
             <div class="flex gap-2">
               <input type="date" id="cap-override-date" min="${TODAY}" class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm">
-              <input type="number" id="cap-override-val" placeholder="Max dogs" min="1" max="100" class="w-24 border border-gray-200 rounded-xl px-3 py-2 text-sm">
+              <input type="number" id="cap-override-val" placeholder="Max pets" min="1" max="100" class="w-24 border border-gray-200 rounded-xl px-3 py-2 text-sm">
               <button type="button" onclick="addCapOverride()" class="px-3 py-2 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">+ Set</button>
             </div>
           </div>
@@ -2934,7 +2934,7 @@ function buildCalendarView(role){
                     <span class="text-xs font-medium ${+v===0?'text-gray-600':'text-amber-900'}">${fmtDate(d)}</span>
                   </div>
                   <div class="flex items-center gap-2 flex-shrink-0">
-                    <span class="text-xs font-bold ${+v===0?'text-gray-500':'text-amber-700'}">${+v===0?'Closed':v+' dogs max'}</span>
+                    <span class="text-xs font-bold ${+v===0?'text-gray-500':'text-amber-700'}">${+v===0?'Closed':v+' pets max'}</span>
                     <button onclick="removeCapOverride('${d}')" class="text-gray-300 hover:text-red-400 text-sm leading-none">×</button>
                   </div>
                 </div>`).join('')}
@@ -3032,7 +3032,7 @@ function buildClientsView(){
     <div class="flex items-center justify-between mb-6">
       <div>
         <h1 class="text-2xl font-bold text-gray-800">Clients</h1>
-        <p class="text-gray-400 text-sm mt-1">${clients.length} client${clients.length!==1?'s':''} · click a dog to view their profile</p>
+        <p class="text-gray-400 text-sm mt-1">${clients.length} client${clients.length!==1?'s':''} · click a pet to view their profile</p>
       </div>
       <button onclick="openAddClientModal()" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ Add Client</button>
     </div>
@@ -3066,7 +3066,7 @@ function buildClientsView(){
           </div>
           <!-- Dog quick-links -->
           <div class="border-t border-gray-50 pt-3">
-            <div class="text-xs text-gray-400 font-medium mb-2 uppercase tracking-wider">Dogs</div>
+            <div class="text-xs text-gray-400 font-medium mb-2 uppercase tracking-wider">Pets</div>
             <div class="flex gap-2 flex-wrap">
               ${cl.dogs.map(d=>{
                 const vs=vaccStatus(d);
@@ -3114,7 +3114,7 @@ function buildDogsView(){
     return`
     <div class="p-6 slide-in">
       <div class="flex items-center gap-3 mb-6">
-        <button onclick="clearDogDetail()" class="flex items-center gap-1.5 text-sm text-amber-700 hover:text-amber-900 font-medium">← Back to All Dogs</button>
+        <button onclick="clearDogDetail()" class="flex items-center gap-1.5 text-sm text-amber-700 hover:text-amber-900 font-medium">← Back to All Pets</button>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
         <!-- Left: Dog profile card -->
@@ -3250,12 +3250,12 @@ function buildDogsList(){
   <div class="p-6 slide-in">
     <div class="flex items-center justify-between mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-gray-800">🐾 Dogs</h1>
+        <h1 class="text-2xl font-bold text-gray-800">🐾 Pets</h1>
         <p class="text-gray-400 text-sm mt-1">${activeCt} active${rbCt>0?` · <span style="color:#9CA3AF;">🌈 ${rbCt} at the Rainbow Bridge</span>`:''}
         </p>
       </div>
     </div>
-    ${allDogs.length===0?`<div class="text-center text-gray-300 py-16"><div class="text-5xl mb-3">🐶</div><p>No dogs yet. Add a client with a dog first.</p></div>`:''}
+    ${allDogs.length===0?`<div class="text-center text-gray-300 py-16"><div class="text-5xl mb-3">🐶</div><p>No pets yet. Add a client with a pet first.</p></div>`:''}
     ${rbCt>0&&activeCt>0?`<div class="text-xs text-gray-400 mb-3 font-medium uppercase tracking-wide">Active Guests</div>`:''}
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       ${allDogs.map((dog,i)=>{
@@ -3340,7 +3340,7 @@ function buildVetClinicsView(){
     ?`<div class="text-center py-16 text-gray-400">
         <div class="text-4xl mb-3">🏥</div>
         <div class="font-semibold text-lg mb-1">No vet clinics on file yet</div>
-        <div class="text-sm">Clinics appear here once clients add their veterinarian in My Dog → Edit.</div>
+        <div class="text-sm">Clinics appear here once clients add their veterinarian in My Pet → Edit.</div>
       </div>`
     :clinics.map(c=>`
       <div class="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm hover:shadow-md transition-shadow">
@@ -3374,7 +3374,7 @@ function buildVetClinicsView(){
     <div class="flex items-center justify-between mb-5">
       <div>
         <h1 class="text-2xl font-bold text-gray-800">🏥 Vet Clinics</h1>
-        <p class="text-sm text-gray-400 mt-0.5">${total} clinic${total===1?'':'s'} on file across ${totalDogs} dog${totalDogs===1?'':'s'}</p>
+        <p class="text-sm text-gray-400 mt-0.5">${total} clinic${total===1?'':'s'} on file across ${totalDogs} pet${totalDogs===1?'':'s'}</p>
       </div>
     </div>
 
@@ -3382,7 +3382,7 @@ function buildVetClinicsView(){
       <div class="flex items-start gap-2.5">
         <span class="text-lg flex-shrink-0">ℹ️</span>
         <div class="text-sm text-blue-800">
-          <strong>About this list:</strong> Clinics are aggregated automatically from your clients' dog profiles. To add or update a clinic, ask the client to edit their dog profile in the portal, or edit the dog directly from the Dogs view. Website and phone auto-fill via AI Lookup.
+          <strong>About this list:</strong> Clinics are aggregated automatically from your clients' pet profiles. To add or update a clinic, ask the client to edit their pet profile in the portal, or edit the pet directly from the Pets view. Website and phone auto-fill via AI Lookup.
         </div>
       </div>
     </div>
@@ -3570,7 +3570,7 @@ function buildSettingsView(){
       <!-- ── Required Vaccine Manager ──────────────────────────────── -->
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
         <h2 class="font-semibold text-gray-800 mb-1">💉 Required Vaccine Records</h2>
-        <p class="text-xs text-gray-400 mb-4">Clients cannot book until their dog has current records for every vaccine below. Toggle one off to make it optional. Add new ones or remove any you don't require.</p>
+        <p class="text-xs text-gray-400 mb-4">Clients cannot book until their pet has current records for every vaccine below. Toggle one off to make it optional. Add new ones or remove any you don't require.</p>
         <div id="vacc-req-list" class="space-y-2 mb-3">
           ${(state.settings.requiredVaccines||[]).map((v,i)=>`
           <div class="flex items-center gap-2 p-2 rounded-xl border border-gray-100 bg-gray-50">
@@ -3599,8 +3599,8 @@ function buildSettingsView(){
         </div>
       </div>
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h2 class="font-semibold text-gray-800 mb-1">📅 Daily Dog Capacity</h2>
-        <p class="text-xs text-gray-400 mb-3">Default max dogs per day. Override specific dates below — or block entire date ranges for vacations.</p>
+        <h2 class="font-semibold text-gray-800 mb-1">📅 Daily Pet Capacity</h2>
+        <p class="text-xs text-gray-400 mb-3">Default max pets per day. Override specific dates below — or block entire date ranges for vacations.</p>
         <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Default Max Per Day</label>
         <input id="set-cap" type="number" value="${state.settings.dailyCapacity}" min="1" max="100" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mb-5">
 
@@ -3615,7 +3615,7 @@ function buildSettingsView(){
       </div>
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
         <h2 class="font-semibold text-gray-800 mb-1">🖥️ Kiosk Mode Setup</h2>
-        <p class="text-xs text-gray-400 mb-3">A lobby display that shows today's dogs — no login needed, always live. Set up once, run forever on a tablet or TV.</p>
+        <p class="text-xs text-gray-400 mb-3">A lobby display that shows today's pets — no login needed, always live. Set up once, run forever on a tablet or TV.</p>
         <ol class="text-xs text-gray-600 space-y-2 list-decimal pl-4 mb-3">
           <li>In <strong>Google Cloud Console</strong> → APIs &amp; Services → Credentials → <strong>Create API Key</strong>. Restrict it to the Sheets API.</li>
           <li>Paste that key into <code class="bg-gray-100 px-1 rounded">CONFIG.KIOSK_API_KEY</code> in the HTML source file (near the top, same section as <code class="bg-gray-100 px-1 rounded">SHEET_ID</code>).</li>
@@ -3682,7 +3682,7 @@ function buildWhatsNewModal(){
     <div style="display:flex;gap:.75rem;">
       ${missing.length>0?`
       <button onclick="closeWhatsNew('mydog')" style="flex:2;background:#7B4015;color:white;border:none;border-radius:14px;padding:.75rem;font-size:.88rem;font-weight:600;cursor:pointer;">
-        🐾 Update My Dog's Profile
+        🐾 Update My Pet's Profile
       </button>
       <button onclick="closeWhatsNew(null,true)" style="flex:1;background:#F9FAFB;color:#6B7280;border:1px solid #E5E7EB;border-radius:14px;padding:.75rem;font-size:.88rem;font-weight:600;cursor:pointer;">
         Remind Later
@@ -3735,15 +3735,15 @@ function buildClientHome(){
   const vetOnFile=dogs.some(d=>d.vetName&&d.vetName.trim());
   const steps=[
     {done:true,            label:'Profile created',       icon:'👤',detail:''},
-    {done:hasAnyDog,       label:'Dog added',             icon:'🐶',detail:!hasAnyDog?'Go to My Dog to add your pup.':''},
+    {done:hasAnyDog,       label:'Pet added',             icon:'🐶',detail:!hasAnyDog?'Go to My Pet to add your pup.':''},
     {done:vaccOk,          label:vaccOk?'Vaccines current':'Vaccines needed',icon:'💉',
-     detail:!hasAnyDog?'Add your dog first.'
-           :anyVaccExpired?'One or more vaccines are expired — go to My Dog to upload updated records.'
-           :anyVaccMissing?'Required vaccine records are missing — go to My Dog to upload them.'
+     detail:!hasAnyDog?'Add your pet first.'
+           :anyVaccExpired?'One or more vaccines are expired — go to My Pet to upload updated records.'
+           :anyVaccMissing?'Required vaccine records are missing — go to My Pet to upload them.'
            :''},
     {done:vetOnFile,       label:vetOnFile?'Vet on file':'Add your vet',icon:'🏥',
-     detail:!hasAnyDog?'Add your dog first.'
-           :!vetOnFile?'Add your vet clinic in My Dog → Edit so we can verify records and reach your vet in an emergency.'
+     detail:!hasAnyDog?'Add your pet first.'
+           :!vetOnFile?'Add your vet clinic in My Pet → Edit so we can verify records and reach your vet in an emergency.'
            :''},
   ];
   const allDone=steps.every(s=>s.done);
@@ -3758,8 +3758,8 @@ function buildClientHome(){
   <div class="mb-5 rounded-2xl border border-gray-200 bg-white p-5 flex flex-col items-center text-center gap-2 shadow-sm">
     <div style="font-size:2rem;line-height:1;">🐾</div>
     <div class="font-semibold text-gray-700 text-sm">No active pets on your profile</div>
-    <div class="text-xs text-gray-400 leading-snug max-w-xs">It looks like there are currently no dogs linked to your account. Ready to add a new furry family member?</div>
-    <button onclick="setClientView('mydog')" class="mt-2 px-5 py-2 text-white text-xs font-semibold rounded-xl" style="background:#7B4015">Add a Dog Profile →</button>
+    <div class="text-xs text-gray-400 leading-snug max-w-xs">It looks like there are currently no pets linked to your account. Ready to add a new furry family member?</div>
+    <button onclick="setClientView('mydog')" class="mt-2 px-5 py-2 text-white text-xs font-semibold rounded-xl" style="background:#7B4015">Add a Pet Profile →</button>
   </div>`:'';
   const checklistHtml=allDeceased?'':allDone?'':`
   <div class="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 pb-5">
@@ -3812,8 +3812,8 @@ function buildClientHome(){
     <div class="absolute inset-0 flex flex-col items-center justify-center rounded-2xl" style="background:rgba(255,255,255,0.85);z-index:10;">
       <div style="font-size:2.5rem;margin-bottom:.75rem;">🐾</div>
       <div class="text-lg font-bold text-gray-800 mb-1">Ready When You Are</div>
-      <div class="text-sm text-gray-500 text-center max-w-xs mb-4">Add a dog profile to start booking stays.</div>
-      <button onclick="setClientView('mydog')" class="px-5 py-2.5 text-white text-sm font-semibold rounded-xl" style="background:#7B4015">Add a Dog Profile →</button>
+      <div class="text-sm text-gray-500 text-center max-w-xs mb-4">Add a pet profile to start booking stays.</div>
+      <button onclick="setClientView('mydog')" class="px-5 py-2.5 text-white text-sm font-semibold rounded-xl" style="background:#7B4015">Add a Pet Profile →</button>
     </div>
   </div>`:showVetLock?`
   <div class="relative">
@@ -3854,7 +3854,7 @@ function buildClientHome(){
   ${checklistHtml}
   <div class="mb-5">
     <h1 class="text-2xl font-bold text-gray-800">Book a Stay 🐾</h1>
-    <p class="text-gray-400 text-sm mt-1">${allDeceased?'Add a dog profile to get started.':`Select available days to book a stay for ${dogName}.`}</p></div>
+    <p class="text-gray-400 text-sm mt-1">${allDeceased?'Add a pet profile to get started.':`Select available days to book a stay for ${dogName}.`}</p></div>
     ${calendarSection}</div>`;
 }
 function buildClientBookings(){
@@ -3947,7 +3947,7 @@ function buildClientAccount(){
   <div class="space-y-5 pb-10">
     <div>
       <h1 class="text-2xl font-bold text-gray-800">My Account</h1>
-      <p class="text-sm text-gray-400 mt-0.5">Manage your contact info, dog profiles, and preferences.</p>
+      <p class="text-sm text-gray-400 mt-0.5">Manage your contact info, pet profiles, and preferences.</p>
     </div>
 
     <!-- Contact Information -->
@@ -3971,21 +3971,21 @@ function buildClientAccount(){
         <div class="flex items-center justify-between pt-1">
           <label class="flex items-center gap-2 cursor-pointer select-none">
             <input id="acct-photo" type="checkbox" ${cl.photoConsent?'checked':''} class="w-4 h-4 rounded accent-amber-600">
-            <span class="text-sm text-gray-600">📸 I allow Nigel's Place to share photos of my dog(s) on social media</span>
+            <span class="text-sm text-gray-600">📸 I allow Nigel's Place to share photos of my pet(s) on social media</span>
           </label>
         </div>
         <button type="submit" id="acct-save-btn" class="w-full py-2.5 rounded-xl text-white text-sm font-semibold" style="background:#7B4015;">Save Changes</button>
       </form>
     </div>
 
-    <!-- My Dogs -->
+    <!-- My Pets -->
     <div>
       <div class="flex items-center justify-between mb-3">
-        <h2 class="font-semibold text-gray-700 flex items-center gap-2">🐾 My Dogs</h2>
-        <button onclick="showAddDogModal()" class="text-xs px-3 py-1.5 rounded-lg text-white font-semibold" style="background:#7B4015">+ Add Dog</button>
+        <h2 class="font-semibold text-gray-700 flex items-center gap-2">🐾 My Pets</h2>
+        <button onclick="showAddDogModal()" class="text-xs px-3 py-1.5 rounded-lg text-white font-semibold" style="background:#7B4015">+ Add Pet</button>
       </div>
       <div class="space-y-3">
-        ${dogsHtml||`<div class="text-sm text-gray-400 text-center py-4">No active dogs on your profile.</div>`}
+        ${dogsHtml||`<div class="text-sm text-gray-400 text-center py-4">No active pets on your profile.</div>`}
         ${deceasedHtml}
       </div>
     </div>
@@ -4031,7 +4031,7 @@ function buildEditMyDogModal(){
     <div class="flex items-center justify-between mb-5">
       <div>
         <h2 class="text-lg font-bold text-gray-800">✏️ Edit ${dog.name}</h2>
-        <p class="text-xs text-gray-400 mt-0.5">Update your dog's profile info</p>
+        <p class="text-xs text-gray-400 mt-0.5">Update your pet's profile info</p>
       </div>
       <button onclick="state.showModal=null;render()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
     </div>
@@ -4203,7 +4203,7 @@ function buildClientDog(){
               <div class="font-bold text-gray-400 text-base">${dog.name}</div>
               <span class="text-xs px-2 py-0.5 rounded-full font-semibold" style="background:#F3F4F6;color:#9CA3AF;">🌈 Rainbow Bridge</span>
             </div>
-            <div class="text-sm text-gray-300">${dog.breed||'Dog'}${dog.age?' · '+dog.age+' yr':''}</div>
+            <div class="text-sm text-gray-300">${dog.breed||'Pet'}${dog.age?' · '+dog.age+' yr':''}</div>
           </div>
         </div>
         <div class="text-center py-3 text-gray-300 border-t border-gray-100">
@@ -4237,7 +4237,7 @@ function buildClientDog(){
           <!-- Name + details -->
           <div class="flex-1 min-w-0">
             <div class="font-bold text-gray-800 text-xl leading-tight">${dog.name}</div>
-            <div class="text-sm text-amber-700 font-medium mt-0.5">${dog.breed||'Dog'}</div>
+            <div class="text-sm text-amber-700 font-medium mt-0.5">${dog.breed||'Pet'}</div>
             <div class="flex flex-wrap gap-2 mt-2">
               ${dog.age?`<span class="text-xs bg-white rounded-full px-2.5 py-0.5 border border-amber-200 text-amber-800">${dog.age} yr old</span>`:''}
               ${dog.birthday?`<span class="text-xs bg-white rounded-full px-2.5 py-0.5 border border-amber-200 text-amber-800">🎂 ${fmtDateShort(dog.birthday)}</span>`:''}
@@ -4340,14 +4340,14 @@ function buildClientDog(){
 
   return`
   <div class="slide-in">
-    <h1 class="text-2xl font-bold text-gray-800 mb-1">My Dog 🐾</h1>
-    <p class="text-gray-400 text-sm mb-5">View your dog's profile, manage vet info, and upload vaccine records.</p>
+    <h1 class="text-2xl font-bold text-gray-800 mb-1">My Pet 🐾</h1>
+    <p class="text-gray-400 text-sm mb-5">View your pet's profile, manage vet info, and upload vaccine records.</p>
     ${dogsHtml}
     <div class="mt-4 flex flex-col items-center gap-2">
       <button onclick="showAddDogModal()" class="flex items-center gap-2 px-5 py-2.5 text-white text-sm font-semibold rounded-xl shadow-sm hover:opacity-90 transition-opacity" style="background:#7B4015;">
-        + Add Another Dog
+        + Add Another Pet
       </button>
-      <p class="text-xs text-center text-gray-300 mt-1">To update a dog's name — contact Nigel's Place directly.</p>
+      <p class="text-xs text-center text-gray-300 mt-1">To update a pet's name — contact Nigel's Place directly.</p>
     </div>
   </div>`;
 }
@@ -4491,7 +4491,7 @@ function buildDayModal(ds){
         <div class="text-2xl">${isClosed?'🔒':full?'🚫':'🐾'}</div>
         <div class="flex-1 min-w-0">
           <div class="font-semibold text-sm" style="color:${c.txt}">
-            ${isClosed?'Closed — no bookings this day':isAdm?(bks.length+'/'+cap+' dogs · '+c.label):c.label}
+            ${isClosed?'Closed — no bookings this day':isAdm?(bks.length+'/'+cap+' pets · '+c.label):c.label}
           </div>
           ${isClosed
             ?`<div class="text-xs mt-1 text-gray-400">${isAdm?'Use Calendar → Days Off ▾ or the ⚙ on any cell to unblock.':''}</div>`
@@ -4612,11 +4612,11 @@ function buildBookingModal(selectedDate){
             <option value="">Select client...</option>
             ${clients.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
           </select></div>
-        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Dog</label>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Pet</label>
           <select id="bk-dog" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="checkDogVaccWarning()"><option>Select client first...</option></select></div>`
-        :`<div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Dog</label>
+        :`<div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Pet</label>
           <select id="bk-dog" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="checkDogVaccWarning()">
-            ${(cl?.dogs||[]).filter(d=>!d.deceased).map(d=>`<option value="${d.id}">${d.name} (${d.breed})</option>`).join('')||'<option>No active dogs on file</option>'}
+            ${(cl?.dogs||[]).filter(d=>!d.deceased).map(d=>`<option value="${d.id}">${d.name} (${d.breed})</option>`).join('')||'<option>No active pets on file</option>'}
           </select></div>
         ${pkgBalance>0?`<div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
           🎫 <span>You have <strong>${pkgBalance} session${pkgBalance===1?'':'s'}</strong> in your package — they'll be used automatically when scheduling.</span>
@@ -4800,7 +4800,7 @@ function buildBookingModal(selectedDate){
         <div class="p-3.5 rounded-xl border border-blue-100" style="background:#EFF6FF">
           <label class="flex items-start gap-3 cursor-pointer">
             <input type="checkbox" id="bk-photo" class="mt-0.5 accent-amber-700 w-4 h-4" ${cl?.photoConsent?'checked':''}>
-            <span class="text-xs text-blue-800 leading-relaxed">I consent to photos and videos of my dog being taken at Nigel's Place and posted to social media (Instagram, Facebook, etc.).</span>
+            <span class="text-xs text-blue-800 leading-relaxed">I consent to photos and videos of my pet being taken at Nigel's Place and posted to social media (Instagram, Facebook, etc.).</span>
           </label>
         </div>`:''}
 
@@ -4873,7 +4873,7 @@ function buildAddClientModal(){
             ${hasGemini?'Say the client details out loud and AI will fill the form.':'Add a Gemini key in Settings to enable AI voice intake.'}
           </span>
         </div>
-        <p class="text-xs text-amber-600 m-0">Try: <em>"Add client Tag Wilson, phone 8041231234, email tag@gmail.com. Dog's name is Lulu, mixed breed female, birthday September 15th 2020, takes daily medication."</em></p>
+        <p class="text-xs text-amber-600 m-0">Try: <em>"Add client Tag Wilson, phone 8041231234, email tag@gmail.com. Pet's name is Lulu, mixed breed female, birthday September 15th 2020, takes daily medication."</em></p>
       </div>
       <form onsubmit="submitClient(event)" class="space-y-4">
         <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Full Name *</label>
@@ -4885,9 +4885,9 @@ function buildAddClientModal(){
             <input id="cl-phone" type="tel" placeholder="804-370-4518" oninput="phoneInputHandler(this)" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
         </div>
         <div class="border-t border-gray-100 pt-4">
-          <h3 class="text-sm font-bold text-gray-700 mb-3">🐶 Dog Profile</h3>
+          <h3 class="text-sm font-bold text-gray-700 mb-3">🐶 Pet Profile</h3>
           <div class="grid grid-cols-2 gap-3">
-            <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Dog Name *</label>
+            <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Pet Name *</label>
               <input id="dog-name" type="text" placeholder="Buddy" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
             <div class="col-span-2"><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Breed</label>
               ${breedSelectHtml('dog-breed','dog-breed-other')}</div>
@@ -4951,12 +4951,12 @@ function buildEditDogModal(clientId,dogId){
   <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 slide-in max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-5">
-        <h2 class="text-lg font-bold text-gray-800">Edit Dog — ${dog.name}</h2>
+        <h2 class="text-lg font-bold text-gray-800">Edit Pet — ${dog.name}</h2>
         <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
       </div>
       <form onsubmit="submitEditDog(event,${clientId},${dogId})" class="space-y-4">
         <div class="grid grid-cols-2 gap-3">
-          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Dog Name *</label>
+          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Pet Name *</label>
             <input id="edog-name" type="text" value="${dog.name}" required class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
           <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Age (yrs)</label>
             <input id="edog-age" type="number" min="0" max="25" step="0.1" value="${dog.age||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
@@ -5221,7 +5221,7 @@ function inlineVaccUpload(clientId){
       🐶 ${d.name}</button>`).join('');
     overlay.id='_vpick';
     overlay.innerHTML=`<div style="background:white;border-radius:20px;padding:1.5rem;max-width:320px;width:90%;box-shadow:0 24px 64px rgba(0,0,0,0.22);">
-      <div style="font-weight:700;margin-bottom:1rem;">Which dog's records?</div>
+      <div style="font-weight:700;margin-bottom:1rem;">Which pet's records?</div>
       ${btns}
       <button onclick="document.getElementById('_vpick').remove()" style="width:100%;padding:.5rem;border-radius:10px;border:1px solid #E5E7EB;background:#F9FAFB;color:#6B7280;cursor:pointer;font-size:.82rem;">Cancel</button>
     </div>`;
@@ -5248,7 +5248,7 @@ async function parseClientIntakeWithGemini(transcript){
   if(!key)throw new Error('No Gemini API key configured in Settings.');
   const model=await getGeminiModel(key);
   const today=new Date().toISOString().split('T')[0];
-  const prompt=`You are a dog daycare intake assistant. Parse the following spoken client intake and extract structured data.
+  const prompt=`You are a pet daycare intake assistant. Parse the following spoken client intake and extract structured data.
 Today's date: ${today}
 
 Return ONLY valid JSON, no markdown:
@@ -5742,7 +5742,7 @@ function updateDogSelect(){
   const sel=document.getElementById('bk-dog');if(!sel)return;
   const cl=clients.find(c=>c.id===cId);
   const activeDogs=(cl?.dogs||[]).filter(d=>!d.deceased);
-  sel.innerHTML=cl?(activeDogs.length?activeDogs.map(d=>`<option value="${d.id}">${d.name} (${d.breed})</option>`).join(''):'<option>No active dogs on file</option>'):'<option>Select client first...</option>';
+  sel.innerHTML=cl?(activeDogs.length?activeDogs.map(d=>`<option value="${d.id}">${d.name} (${d.breed})</option>`).join(''):'<option>No active pets on file</option>'):'<option>Select client first...</option>';
   checkDogVaccWarning();
 }
 function checkDogVaccWarning(){
@@ -5794,7 +5794,7 @@ function checkDogVaccWarning(){
       warn.className='text-xs p-3 rounded-xl bg-red-50 text-red-700 border border-red-300 font-medium';
       const missingLabel=missing.length?missing.join(', '):'required vaccines';
       if(state.role==='client'){
-        warn.innerHTML=`🚩 <strong>${dog.name} is missing required vaccine records: ${missingLabel}.</strong> Please upload records in My Dog to unlock booking.`;
+        warn.innerHTML=`🚩 <strong>${dog.name} is missing required vaccine records: ${missingLabel}.</strong> Please upload records in My Pet to unlock booking.`;
         hideOverride();lockDates();
         warn.classList.remove('hidden');return;
       }else{
@@ -5924,7 +5924,7 @@ async function generateInvoiceDescriptionAI(){
   try{
     const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({contents:[{parts:[{text:`Write a concise, warm invoice description (1 sentence, max 25 words) for a dog boarding business called Nigel's Place. Mention the dog's name(s), services, and date range naturally.\n\nServices:\n${serviceList}`}]}]})
+      body:JSON.stringify({contents:[{parts:[{text:`Write a concise, warm invoice description (1 sentence, max 25 words) for a pet boarding/daycare business called Nigel's Place. Mention the pet's name(s), services, and date range naturally.\n\nServices:\n${serviceList}`}]}]})
     });
     const data=await resp.json();
     const text=data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()||'';
@@ -6022,7 +6022,7 @@ async function parseVaccRecordWithGemini(file, knownVetName=''){
   });
   const mimeType=file.type||'application/pdf';
   const vetHint=knownVetName?`\nThe client's registered vet clinic is: "${knownVetName}". If you detect a clinic name/letterhead, note whether it matches.`:'';
-  const prompt=`You are a veterinary records verification assistant. Analyze this document uploaded as a dog vaccine record.
+  const prompt=`You are a veterinary records verification assistant. Analyze this document uploaded as a pet vaccine record.
 
 STEP 1 — AUTHENTICITY CHECK:
 Determine if this document appears to be an official veterinary record. Official records typically have:
@@ -6139,7 +6139,7 @@ async function handleVaccUpload(clientId, dogId, altBtnId){
           const freshDog=freshCl?.dogs.find(d=>d.id===dogId);
           if(!freshDog||!freshCl){
             hideVaccOverlay();
-            showToast('⚠️ Dog not found after scan — please reload and try again.','#EF4444');
+            showToast('⚠️ Pet not found after scan — please reload and try again.','#EF4444');
             if(btn){btn.disabled=false;btn.innerHTML='📄 Upload Records';}
             resolve();return;
           }
@@ -6235,7 +6235,7 @@ async function handleVaccTypeUpload(clientId, dogId, vaccTypeName){
         // Re-fetch fresh dog reference (auto-refresh may have run during Gemini await)
         const freshCl=clients.find(c=>c.id===clientId);
         const freshDog=freshCl?.dogs.find(d=>d.id===dogId);
-        if(!freshDog){showToast('Dog not found — please reload.','#EF4444');return;}
+        if(!freshDog){showToast('Pet not found — please reload.','#EF4444');return;}
         // Merge: remove old records of this type, add newly parsed ones
         const typeKeep=(freshDog.vaccines||[]).filter(v=>{
           const vn=(v.name||'').trim().toLowerCase();
@@ -6309,7 +6309,7 @@ async function handleDogPhotoUpload(clientId, dogId){
       // Re-fetch fresh reference inside the async callback
       const freshCl=clients.find(c=>c.id===clientId);
       const freshDog=freshCl?.dogs.find(d=>d.id===dogId);
-      if(!freshDog||!freshCl){showToast('Dog not found — please reload.','#EF4444');return;}
+      if(!freshDog||!freshCl){showToast('Pet not found — please reload.','#EF4444');return;}
       // Compress to 800px JPEG before uploading — faster and smaller
       const compressed=await compressImage(file,800,0.82);
       const df=await uploadToDriveFolder(compressed,["Nigel's Place",'Dog Photos',freshDog.name]);
@@ -6341,7 +6341,7 @@ async function handlePlayPhotoUpload(clientId, dogId){
       // Re-fetch fresh reference inside the async callback
       const freshCl=clients.find(c=>c.id===clientId);
       const freshDog=freshCl?.dogs.find(d=>d.id===dogId);
-      if(!freshDog||!freshCl){showToast('Dog not found — please reload.','#EF4444');return;}
+      if(!freshDog||!freshCl){showToast('Pet not found — please reload.','#EF4444');return;}
       // Compress play photos aggressively — 600px thumbnails, fast to display
       const compressed=await compressImage(file,600,0.75);
       const df=await uploadToDriveFolder(compressed,["Nigel's Place",'Play Photos',freshDog.name]);
@@ -6372,7 +6372,7 @@ async function submitBooking(e){
     clientId=state.currentClientId;
     dogId=parseInt(document.getElementById('bk-dog')?.value);
     const cl=clients.find(c=>c.id===clientId),dg=cl?.dogs.find(d=>d.id===dogId);
-    dogName=dg?.name||'Dog';clientName=cl?.name||'Client';
+    dogName=dg?.name||'Pet';clientName=cl?.name||'Client';
     if(dg&&vaccStatus(dg)==='expired'){
       showToast(`🚩 ${dg.name}'s vaccines are expired. Please contact ${state.settings.businessName||"Nigel's Place"} to update records before booking.`,'#EF4444');
       return;
@@ -6384,7 +6384,7 @@ async function submitBooking(e){
     dogId=parseInt(document.getElementById('bk-dog')?.value);
     if(!clientId||!dogId){showToast('Please select a client and dog.','#EF4444');return;}
     const cl=clients.find(c=>c.id===clientId),dg=cl?.dogs.find(d=>d.id===dogId);
-    dogName=dg?.name||'Dog';clientName=cl?.name||'Client';
+    dogName=dg?.name||'Pet';clientName=cl?.name||'Client';
     if(dg&&vaccStatus(dg)==='expired'){
       const override=document.getElementById('vacc-override-cb')?.checked||false;
       if(!override){
@@ -6491,7 +6491,7 @@ async function submitClient(e){
     phone:document.getElementById('cl-phone')?.value||'',
     photoConsent:false,
     dogs:[{id:maxDogId+1,
-      name:document.getElementById('dog-name')?.value||'Dog',
+      name:document.getElementById('dog-name')?.value||'Pet',
       breed:getBreedValue('dog-breed','dog-breed-other'),
       age:parseFloat(document.getElementById('dog-age')?.value)||0,
       birthday:document.getElementById('dog-birthday')?.value||'',
@@ -6543,7 +6543,7 @@ async function deleteService(id){
 // ─── DELETE CLIENT ────────────────────────────────────────────────────────────
 async function deleteClient(id){
   const cl=clients.find(c=>c.id===id);if(!cl)return;
-  if(!confirm(`Archive and remove ${cl.name}? Their record + dogs will be saved to the Archived tab so you can restore if needed. Their bookings will also be removed.`))return;
+  if(!confirm(`Archive and remove ${cl.name}? Their record + pets will be saved to the Archived tab so you can restore if needed. Their bookings will also be removed.`))return;
   // 1. Update memory immediately so the UI feels fast
   const idx=clients.findIndex(c=>c.id===id);
   if(idx>=0)clients.splice(idx,1);
@@ -6689,7 +6689,7 @@ function showVaccOverrideModal(clientId,dogId){
       <h3 style="margin:0;font-size:1rem;font-weight:700;color:#1f2937;">🛡️ Vaccine Override — ${dog.name}</h3>
       <button onclick="document.getElementById('vacc-override-overlay').remove()" style="background:none;border:none;color:#9ca3af;font-size:1.5rem;cursor:pointer;line-height:1;">×</button>
     </div>
-    <p style="font-size:.8rem;color:#6b7280;margin-bottom:1rem;line-height:1.5;">Override temporarily unlocks booking for this dog, bypassing all vaccine requirements. Use when a client is actively getting records updated, or as a goodwill gesture.</p>
+    <p style="font-size:.8rem;color:#6b7280;margin-bottom:1rem;line-height:1.5;">Override temporarily unlocks booking for this pet, bypassing all vaccine requirements. Use when a client is actively getting records updated, or as a goodwill gesture.</p>
     ${hasOverride?`<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:.6rem .9rem;font-size:.8rem;color:#C2410C;margin-bottom:1rem;">
       🔓 Current override: ${current.until==='indefinite'?'Waived indefinitely':`Extended until ${current.until}`}${current.by?` · by ${current.by}`:''}
     </div>`:''}
@@ -6750,7 +6750,7 @@ function showAddDogModal(){
 async function submitAddDog(e){
   e.preventDefault();
   const name=(document.getElementById('add-dog-name')?.value||'').trim();
-  if(!name){showToast('Dog name is required.','#EF4444');return;}
+  if(!name){showToast('Pet name is required.','#EF4444');return;}
   const breed=getBreedValue('add-dog-breed','add-dog-breed-other')||'Mixed Breed';
   const age=parseInt(document.getElementById('add-dog-age')?.value)||0;
   const birthday=(document.getElementById('add-dog-birthday')?.value||'').trim();
@@ -6768,7 +6768,7 @@ async function submitAddDog(e){
     showToast(`${name} added to your profile! 🐾`);
   }catch(err){
     showToast('Error: '+err.message,'#EF4444');
-    if(btn){btn.disabled=false;btn.textContent='Add Dog';}
+    if(btn){btn.disabled=false;btn.textContent='Add Pet';}
   }
 }
 function buildAddDogModal(){
@@ -6776,7 +6776,7 @@ function buildAddDogModal(){
   <div class="modal-box" style="max-width:440px;">
     <div class="flex items-center justify-between mb-5">
       <div>
-        <h2 class="text-lg font-bold text-gray-800">🐾 Add a Dog</h2>
+        <h2 class="text-lg font-bold text-gray-800">🐾 Add a Pet</h2>
         <p class="text-xs text-gray-400 mt-0.5">Tell us about your new furry family member</p>
       </div>
       <button onclick="state.showModal=null;render()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
@@ -6784,7 +6784,7 @@ function buildAddDogModal(){
     <form onsubmit="submitAddDog(event)" class="space-y-3">
       <!-- Dog name — full width, prominent -->
       <div class="modal-field-group">
-        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Dog's Name <span class="text-red-400">*</span></label>
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Pet's Name <span class="text-red-400">*</span></label>
         <input id="add-dog-name" required placeholder="e.g. Biscuit" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium focus:outline-none" style="color:#1F2937;">
       </div>
       <!-- Breed + Age side by side -->
@@ -6826,7 +6826,7 @@ function buildAddDogModal(){
       <p class="text-xs text-gray-400 px-1">After adding, bring vaccine records to your first visit — or upload them here once your profile is saved.</p>
       <div class="flex gap-3 pt-1">
         <button type="button" onclick="state.showModal=null;render()" class="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50">Cancel</button>
-        <button id="add-dog-submit" type="submit" class="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style="background:#7B4015;">Add Dog</button>
+        <button id="add-dog-submit" type="submit" class="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style="background:#7B4015;">Add Pet</button>
       </div>
     </form>
   </div>
@@ -6852,7 +6852,7 @@ async function submitEditDog(e,clientId,dogId){
   e.preventDefault();
   const cl=clients.find(c=>c.id===clientId);const dog=cl?.dogs.find(d=>d.id===dogId);if(!dog)return;
   const name=document.getElementById('edog-name')?.value?.trim();
-  if(!name){showToast('Dog name is required.','#EF4444');return;}
+  if(!name){showToast('Pet name is required.','#EF4444');return;}
   dog.name=name;
   dog.age=parseFloat(document.getElementById('edog-age')?.value)||0;
   dog.breed=getBreedValue('edog-breed','edog-breed-other');
@@ -6939,7 +6939,7 @@ function addCapOverride(){
   if(!v||v<1){showToast('Please enter a valid capacity (min 1).','#EF4444');return;}
   if(!state.settings.capacityOverrides)state.settings.capacityOverrides={};
   state.settings.capacityOverrides[d]=v;
-  showToast(`Override set: ${fmtDate(d)} → ${v} dogs max`);
+  showToast(`Override set: ${fmtDate(d)} → ${v} pets max`);
   render();
   try{persistSettings();}catch(e){}
 }
@@ -7256,7 +7256,7 @@ function showCancellationPolicyModal(){
         <h3>Holiday &amp; Peak Period Cancellations</h3>
         <p>During holiday and peak periods (major holidays, school breaks, and high-demand weekends), cancellations require <strong>7 days' notice</strong> for a full deposit refund. Cancellations within 7 days of the scheduled stay will forfeit the deposit in full.</p>
         <h3>Early Pick-Up</h3>
-        <p>If you pick up your dog earlier than the scheduled check-out date, the full originally-booked rate applies — no partial refunds are issued for unused nights.</p>
+        <p>If you pick up your pet earlier than the scheduled check-out date, the full originally-booked rate applies — no partial refunds are issued for unused nights.</p>
         <h3>Emergency Exceptions</h3>
         <p>Nigel's Place reviews cancellation exceptions on a case-by-case basis for genuine emergencies (medical, family, etc.). Please contact Nigel's Place as soon as possible if you need to cancel due to an emergency.</p>
         <h3>Pick-Up &amp; Drop-Off Times</h3>
@@ -7300,13 +7300,13 @@ function showPolicyModal(type){
     <h3>PawDesk Is Not the Pet Care Provider</h3>
     <p>PawDesk is the software platform — not the pet care facility. Questions or concerns about your pet's care should be directed to the facility directly. We are not responsible for the services your pet receives during a visit.</p>
     <h3>Vaccination Requirement</h3>
-    <p><strong>All dogs must be up to date on required vaccinations before attending any stay or day care visit at Nigel's Place.</strong> By agreeing to these Terms, you confirm you understand this requirement and agree to keep your dog's records current. Nigel's Place reserves the right to refuse service or turn away any dog whose vaccination status cannot be verified or is expired. Required vaccinations include, but may not be limited to:</p>
+    <p><strong>All pets must be up to date on required vaccinations before attending any stay or day care visit at Nigel's Place.</strong> By agreeing to these Terms, you confirm you understand this requirement and agree to keep your pet's records current. Nigel's Place reserves the right to refuse service or turn away any pet whose vaccination status cannot be verified or is expired. Required vaccinations include, but may not be limited to:</p>
     <ul>
       <li>Rabies</li>
       <li>Distemper / DHPP (Distemper, Hepatitis, Parvovirus, Parainfluenza)</li>
       <li>Bordetella (Kennel Cough) — required annually</li>
     </ul>
-    <p>Proof of vaccination must be uploaded through your client portal or provided directly to Nigel's Place prior to your dog's first visit and kept up to date thereafter. If you do not read or notice these Terms, you remain bound by them — it is your responsibility to ensure your dog meets all health requirements before booking.</p>
+    <p>Proof of vaccination must be uploaded through your client portal or provided directly to Nigel's Place prior to your pet's first visit and kept up to date thereafter. If you do not read or notice these Terms, you remain bound by them — it is your responsibility to ensure your pet meets all health requirements before booking.</p>
     <h3>Your Responsibilities</h3>
     <ul>
       <li>Provide accurate, up-to-date information about yourself and your pet.</li>
@@ -7464,7 +7464,7 @@ function buildKioskView(adminPreview=false){
       <!-- LEFT: Today's guests -->
       <div style="flex:1;padding:${adminPreview?'1.2rem 1.5rem':'1.8rem 2rem'};overflow-y:auto;border-right:1px solid rgba(255,255,255,0.07);">
         <div style="color:rgba(255,200,100,0.85);font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:2.5px;margin-bottom:1.25rem;">
-          🐕 Today's Guests &nbsp;·&nbsp; ${dogs.length} dog${dogs.length!==1?'s':''}
+          🐕 Today's Guests &nbsp;·&nbsp; ${dogs.length} pet${dogs.length!==1?'s':''}
         </div>
         ${dogs.length===0?`
           <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3rem 1rem;color:rgba(255,255,255,0.22);">
