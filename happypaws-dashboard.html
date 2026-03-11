@@ -1251,7 +1251,7 @@ async function ensurePackagesSheet(){
 }
 async function loadAllData(){
   const[cR,dR,bR,iR,sR]=await Promise.all([
-    readRangeSafe('Clients!A2:E'),readRangeSafe('Dogs!A2:P'),readRangeSafe('Bookings!A2:L'),
+    readRangeSafe('Clients!A2:E'),readRangeSafe('Dogs!A2:Q'),readRangeSafe('Bookings!A2:L'),
     readRangeSafe('Invoices!A2:K'),readRangeSafe('Settings!A2:B'),
   ]);
   const svR=await readRangeSafe('Services!A2:F');
@@ -1299,6 +1299,21 @@ async function loadAllData(){
         service:String(r[9]||'Full Day'),addons:String(r[10]||''),price:+r[11]||0});
     }
   });
+  // ── Orphan booking cleanup ──────────────────────────────────────────────────
+  // If a client was deleted but their bookings weren't removed (e.g. due to a
+  // failed persist mid-operation), remove those stale bookings from memory and
+  // sync the sheet so the calendar stays clean.
+  {
+    const validClientIds=new Set(clients.map(c=>c.id));
+    const orphans=bookings.filter(b=>!validClientIds.has(b.clientId));
+    if(orphans.length>0){
+      console.warn(`[PawDesk] Removing ${orphans.length} orphan booking(s) for deleted client IDs:`,
+        [...new Set(orphans.map(b=>b.clientId))]);
+      bookings.splice(0,bookings.length,...bookings.filter(b=>validClientIds.has(b.clientId)));
+      // Silently sync the bookings sheet to match
+      persistBookings().catch(e=>console.warn('[PawDesk] Could not sync orphan bookings:',e));
+    }
+  }
   invoices.length=0;
   (iR||[]).forEach(r=>{if(r[0])invoices.push({id:+r[0],clientId:+r[1],clientName:r[2]||'',amount:+r[3]||0,paid:+r[4]||0,status:r[5]||'unpaid',dueDate:r[6]||'',issueDate:r[7]||'',items:r[8]||'',externalPaid:+r[9]||0,paymentNote:r[10]||''});});
   (sR||[]).forEach(r=>{
@@ -1344,25 +1359,28 @@ async function persistBookings(){
   if(state.mode!=='live')return;
   const rows=[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price'],
     ...bookings.map(b=>[b.id,b.clientId,b.dogId,b.dogName,b.clientName,b.checkIn,b.checkOut,b.nights,b.status,b.service,b.addons||'',b.price])];
-  await clearRange('Bookings!A2:L9999');
+  // Write first (data always present), then clear any leftover rows below
   await writeRange(`Bookings!A1:L${rows.length}`,rows);
+  if(rows.length<9999)await clearRange(`Bookings!A${rows.length+1}:L9999`);
 }
 async function persistClients(){
   if(state.mode!=='live')return;
   const cRows=[['id','name','email','phone','photoConsent'],...clients.map(c=>[c.id,c.name,c.email,c.phone,c.photoConsent?'true':'false'])];
   const dRows=[['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit','deceased','vaccOverride'],
     ...clients.flatMap(c=>c.dogs.map(d=>{const off=d.photoOffset||{x:50,y:50};return[d.id,c.id,d.name,d.breed,d.age,d.vaccinated,d.notes,d.birthday||'',d.vaccExpiry||'',JSON.stringify(d.vaccines||[]),d.driveFileLink||'',d.photoLink||'',JSON.stringify(d.playPhotos||[]),`${off.x},${off.y}`,d.emergencyVetLimit||'',d.deceased?'true':'false',d.vaccOverride||''];}))];
-  await clearRange('Clients!A2:E9999');
-  await clearRange('Dogs!A2:Q9999');
+  // Write first (data always present), then clear any leftover rows below.
+  // NEVER clear before writing — a failed write after a clear = permanent data loss.
   await writeRange(`Clients!A1:E${cRows.length}`,cRows);
+  if(cRows.length<9999)await clearRange(`Clients!A${cRows.length+1}:E9999`);
   await writeRange(`Dogs!A1:Q${dRows.length}`,dRows);
+  if(dRows.length<9999)await clearRange(`Dogs!A${dRows.length+1}:Q9999`);
 }
 async function persistInvoices(){
   if(state.mode!=='live')return;
   const rows=[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items','externalPaid','paymentNote'],
     ...invoices.map(i=>[i.id,i.clientId,i.clientName,i.amount,i.paid,i.status,i.dueDate,i.issueDate,i.items,i.externalPaid||0,i.paymentNote||''])];
-  await clearRange('Invoices!A2:K9999');
   await writeRange(`Invoices!A1:K${rows.length}`,rows);
+  if(rows.length<9999)await clearRange(`Invoices!A${rows.length+1}:K9999`);
 }
 // ─── ARCHIVE DELETED CLIENT ──────────────────────────────────────────────────
 async function ensureArchivedSheet(){
@@ -5517,16 +5535,31 @@ async function deleteService(id){
 // ─── DELETE CLIENT ────────────────────────────────────────────────────────────
 async function deleteClient(id){
   const cl=clients.find(c=>c.id===id);if(!cl)return;
-  if(!confirm(`Archive and remove ${cl.name}? Their data will be saved to the Archived tab in the spreadsheet so you can restore it if needed. This will also remove all their bookings from the calendar.`))return;
+  if(!confirm(`Archive and remove ${cl.name}? Their record + dogs will be saved to the Archived tab so you can restore if needed. Their bookings will also be removed.`))return;
+  // 1. Update memory immediately so the UI feels fast
   const idx=clients.findIndex(c=>c.id===id);
   if(idx>=0)clients.splice(idx,1);
   bookings.splice(0,bookings.length,...bookings.filter(b=>b.clientId!==id));
-  render();showToast(`${cl.name} archived & removed.`);
+  render();
+  showToast('Archiving…');
   try{
+    // 2. Archive to sheet FIRST (so data is preserved before any writes)
     await archiveClientToSheet(cl);
+    // 3. Persist updated clients/dogs and bookings (write-first, then clear excess)
     await persistClients();
     await persistBookings();
-  }catch(e){showToast('Sheet sync failed — check your connection.','#F97316');}
+    // 4. Re-read from the sheet to verify ground truth matches memory
+    //    This catches any partial failures and keeps the UI in sync with reality
+    await loadAllData();
+    render();
+    showToast(`${cl.name} archived & removed. ✓`);
+  }catch(e){
+    // Something failed — reload from sheet to restore a consistent state
+    showToast('Sync error — reloading from sheet…','#F97316');
+    try{await loadAllData();render();}catch(e2){}
+    showToast('Reload complete. Check the Clients list.','#F97316');
+    console.error('[PawDesk] deleteClient failed:',e);
+  }
 }
 // ─── CANCEL/DELETE BOOKING ────────────────────────────────────────────────────
 async function cancelBooking(id){
