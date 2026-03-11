@@ -225,7 +225,8 @@ function getClientData(ss, req, callerEmail) {
 
   // Return a SAFE subset of settings — never return API keys, passwords, etc.
   const SAFE_KEYS = ['businessName','dailyCapacity','fullDayRate','halfDayRate',
-                     'groomingAddOn','venmoHandle','squareLink','capacityOverrides'];
+                     'groomingAddOn','venmoHandle','squareLink','capacityOverrides',
+                     'requiredVaccines'];
   const settings = {};
   if (settingsSheet) {
     const settingRows = settingsSheet.getDataRange().getValues();
