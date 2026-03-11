@@ -292,10 +292,12 @@ function getClientData(ss, req, callerEmail) {
     }
   }
 
-  // Return a SAFE subset of settings — never return API keys, passwords, etc.
+  // Return a SAFE subset of settings.
+  // geminiApiKey and googleMapsApiKey are included so clients can use AI features
+  // (vaccine scanning, vet lookup) when accessing the portal from their own browser.
   const SAFE_KEYS = ['businessName','dailyCapacity','fullDayRate','halfDayRate',
                      'groomingAddOn','venmoHandle','squareLink','capacityOverrides',
-                     'requiredVaccines'];
+                     'requiredVaccines','geminiApiKey','googleMapsApiKey'];
   const settings = {};
   if (settingsSheet) {
     const settingRows = settingsSheet.getDataRange().getValues();

@@ -45,6 +45,10 @@
     .fs-btn-dark:hover { background:rgba(255,255,255,0.18); color:white; }
     /* ── Policy footer ── */
     .policy-footer { padding:0.85rem 1.5rem; text-align:center; border-top:1px solid #F3F4F6; background:white; font-size:0.72rem; color:#9CA3AF; }
+    /* AI-suggested field highlight — amber glow until user confirms */
+    .ai-suggested { border-color:#F59E0B !important; background:#FFFBEB !important; box-shadow:0 0 0 3px rgba(245,158,11,0.15) !important; }
+    .ai-suggested:focus { border-color:#D97706 !important; box-shadow:0 0 0 3px rgba(217,119,6,0.2) !important; }
+    @keyframes mic-pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.15);opacity:.75} }
     .policy-footer a, .policy-footer button.policy-link { color:#9CA3AF; text-decoration:underline; background:none; border:none; cursor:pointer; font-size:0.72rem; font-family:inherit; padding:0; }
     .policy-footer a:hover, .policy-footer button.policy-link:hover { color:#6B7280; }
     /* ── Mobile nav drawer ── */
@@ -648,15 +652,43 @@ async function initVetAutocomplete(nameInputId, phoneInputId, websiteDisplayId){
     }
   }
 }
+// Google Places Text Search (New API) — more reliable than Gemini for real business lookups
+async function lookupVetWithPlacesAPI(vetName, apiKey){
+  if(!vetName||!apiKey)return null;
+  try{
+    const r=await fetch('https://places.googleapis.com/v1/places:searchText',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'X-Goog-Api-Key':apiKey,
+        'X-Goog-FieldMask':'places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri'
+      },
+      body:JSON.stringify({textQuery:vetName+' veterinarian',maxResultCount:1})
+    });
+    const d=await r.json();
+    if(d.error||!d.places||!d.places[0])return null;
+    const p=d.places[0];
+    return{
+      found:true,
+      name:p.displayName?.text||vetName,
+      phone:p.nationalPhoneNumber||'',
+      website:p.websiteUri||'',
+      city:p.formattedAddress||''
+    };
+  }catch(e){console.warn('[PawDesk] Places text search failed:',e);return null;}
+}
 // Gemini fallback: given a free-text vet name, look up phone + website
+// NOTE: Gemini is a language model — it may not know specific local clinic phone numbers.
+// It works best for large regional chains. Use lookupVetWithPlacesAPI when a Maps key exists.
 async function lookupVetWithGemini(vetName){
   const key=state.settings.geminiApiKey;
   if(!key||!vetName.trim())return null;
   try{
     const model=await getGeminiModel(key);
-    const prompt=`You are a veterinary clinic directory assistant. Look up the following veterinary clinic and return ONLY valid JSON with no markdown:
+    const prompt=`You are a veterinary clinic directory assistant. If you have confident knowledge of the following veterinary clinic's real phone number, return ONLY valid JSON with no markdown:
 {"name":"official clinic name","phone":"xxx-xxx-xxxx","website":"https://...","city":"city, state","found":true}
-If the clinic cannot be found with confidence, return: {"found":false}
+If you do NOT have confident, accurate knowledge of this specific clinic's contact info (e.g. it is a small local clinic you may not have data for), return: {"found":false}
+Do NOT guess or hallucinate phone numbers. Only return found:true if you are highly confident.
 Clinic to look up: "${vetName.replace(/"/g,'\\"')}"`;
     const r=await fetch(`https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${key}`,{
       method:'POST',headers:{'Content-Type':'application/json'},
@@ -670,28 +702,43 @@ Clinic to look up: "${vetName.replace(/"/g,'\\"')}"`;
     return result.found?result:null;
   }catch(e){console.warn('[PawDesk] Gemini vet lookup failed:',e);return null;}
 }
-// AI Lookup button handler — tries Gemini to resolve vet info from typed name
-async function lookupVetFromModal(nameInputId, phoneInputId){
+// AI Lookup button handler — tries Places API first, then Gemini fallback
+// btnId is optional: defaults to 'emydog-vet-lookup-btn' for the edit modal,
+// pass 'ob-vet-lookup-btn' (or any id) when calling from other contexts.
+async function lookupVetFromModal(nameInputId, phoneInputId, btnId){
   const nameEl=document.getElementById(nameInputId);
   const vetName=(nameEl?.value||'').trim();
   if(!vetName){showToast('Type the clinic name first, then click AI Lookup.','#F97316');return;}
-  const btn=document.getElementById('emydog-vet-lookup-btn');
-  const prevText=btn?.textContent;
+  const resolvedBtnId=btnId||'emydog-vet-lookup-btn';
+  const btn=document.getElementById(resolvedBtnId);
+  const prevText=btn?.innerHTML;
   if(btn){btn.disabled=true;btn.textContent='🔍 Looking up…';}
   try{
-    const info=await lookupVetWithGemini(vetName);
+    let info=null;
+    const mapsKey=state.settings.googleMapsApiKey;
+    // Primary: Google Places Text Search (requires Maps API key)
+    if(mapsKey){
+      info=await lookupVetWithPlacesAPI(vetName, mapsKey);
+    }
+    // Fallback: Gemini (less reliable for specific local clinics)
+    if(!info){
+      info=await lookupVetWithGemini(vetName);
+    }
     if(info&&info.found){
       if(nameEl&&info.name)nameEl.value=info.name;
       const phoneEl=document.getElementById(phoneInputId);
       if(phoneEl&&info.phone)phoneEl.value=fmtPhone(info.phone.replace(/\D/g,''));
-      showToast(`🏥 Found: ${info.name}${info.city?' in '+info.city:''}${info.phone?' — '+info.phone:''}!`);
+      showToast(`🏥 Found: ${info.name}${info.city?' — '+info.city.split(',').slice(-2).join(','):''}${info.phone?' · '+info.phone:''}!`);
     }else{
-      showToast('Could not find that clinic automatically. Try the full official name or enter details manually.','#F97316');
+      showToast(mapsKey
+        ?'Clinic not found in Google Places. Try the full official name (e.g. "Richmond Animal Hospital Richmond VA").'
+        :'Could not find that clinic automatically. Add a Google Maps API key in Settings for better results, or enter details manually.',
+        '#F97316');
     }
   }catch(e){
     showToast('Lookup failed: '+e.message,'#EF4444');
   }finally{
-    if(btn){btn.disabled=false;btn.textContent=prevText||'🔍 AI Lookup';}
+    if(btn){btn.disabled=false;btn.innerHTML=prevText||'🔍 AI Lookup';}
   }
 }
 // ── Vaccine processing overlay (shown during AI scan regardless of button stale refs) ──
@@ -1890,6 +1937,10 @@ async function loadClientDataViaProxy(){
     if(s.squareLink)state.settings.squareLink=String(s.squareLink);
     if(s.capacityOverrides){try{state.settings.capacityOverrides=JSON.parse(s.capacityOverrides)||{};}catch(e){}}
     if(s.requiredVaccines){try{const rv=JSON.parse(s.requiredVaccines);if(Array.isArray(rv))state.settings.requiredVaccines=rv;}catch(e){}}
+    // Accept API keys from server — only set if not already configured locally so admin
+    // overrides from localStorage take precedence, but clients get keys via proxy.
+    if(s.geminiApiKey&&!state.settings.geminiApiKey)state.settings.geminiApiKey=String(s.geminiApiKey);
+    if(s.googleMapsApiKey&&!state.settings.googleMapsApiKey)state.settings.googleMapsApiKey=String(s.googleMapsApiKey);
 
     // Cache client email so we recognise this user on next sign-in even if proxy is slow
     try{if(cr[2])localStorage.setItem('np_client_email',String(cr[2]).toLowerCase());}catch(e){}
@@ -2199,7 +2250,7 @@ function buildOnboarding(){
         <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:14px;padding:.85rem 1rem;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem;">
             <p style="font-size:.78rem;font-weight:700;color:#DC2626;margin:0;">🏥 Veterinary Information <span style="background:#DC2626;color:white;font-size:.6rem;padding:1px 5px;border-radius:999px;margin-left:3px;">Required</span></p>
-            <button type="button" onclick="lookupVetFromModal('ob-vet-name','ob-vet-phone')" style="font-size:.68rem;padding:2px 7px;border-radius:8px;border:1px solid #FECACA;background:#FFF5F5;color:#DC2626;cursor:pointer;">🔍 AI Lookup</button>
+            <button id="ob-vet-lookup-btn" type="button" onclick="lookupVetFromModal('ob-vet-name','ob-vet-phone','ob-vet-lookup-btn')" style="font-size:.68rem;padding:2px 7px;border-radius:8px;border:1px solid #FECACA;background:#FFF5F5;color:#DC2626;cursor:pointer;">🔍 AI Lookup</button>
           </div>
           <p style="font-size:.7rem;color:#374151;margin:0 0 .65rem;line-height:1.4;">Required before booking. Helps verify vaccine records and lets us reach your vet in an emergency. Start typing to search for your clinic.</p>
           <div style="display:flex;flex-direction:column;gap:.5rem;">
@@ -3511,7 +3562,11 @@ function buildWhatsNewModal(){
 }
 function closeWhatsNew(nav, remindLater=false){
   const email=(state.userEmail||'').toLowerCase();
-  if(!remindLater)markChangelogSeen(email);
+  // Always mark informational changelog as seen — even on "Remind Later" —
+  // so they don't repeat. Required-field prompts (vet clinic, etc.) are driven by
+  // live data checks in profileRequiredFieldsMissing(), not the version number,
+  // so the action-required alert will still appear next login if fields are still empty.
+  markChangelogSeen(email);
   state.showModal=null;
   if(nav)setClientView(nav);
   else render();
@@ -3556,6 +3611,9 @@ function buildClientHome(){
   ];
   const allDone=steps.every(s=>s.done);
   const doneCt=steps.filter(s=>s.done).length;
+  // First dogs needing action — used for inline pill direct-action buttons
+  const firstDogNeedingVacc=dogs.find(d=>!hasRequiredVaccines(d));
+  const firstDogNeedingVet=dogs.find(d=>!d.vetName?.trim());
   // ── Horizontal milestone bar HTML ─────────────────────────────────────────
   // Special case: all dogs are Rainbow Bridge → skip the checklist entirely,
   // show a warm "no active pets" banner with an Add a Dog prompt instead.
@@ -3593,18 +3651,18 @@ function buildClientHome(){
       <span class="text-lg flex-shrink-0">💉</span>
       <div class="flex-1 min-w-0">
         <div class="text-xs font-semibold text-gray-700">${anyVaccExpired?'Vaccine records expired':'Vaccine records needed'}</div>
-        <div class="text-xs text-gray-500 mt-0.5">${anyVaccExpired?'Please upload updated records in My Dog to unlock booking.':'Upload your dog\'s vaccine records in My Dog to unlock booking.'}</div>
+        <div class="text-xs text-gray-500 mt-0.5">${anyVaccExpired?'Tap to upload updated records — AI will scan and fill dates automatically.':'Tap to upload vaccine records — AI will scan and fill all dates automatically.'}</div>
       </div>
-      <button onclick="setClientView('mydog')" class="text-xs px-3 py-1.5 rounded-lg text-white flex-shrink-0" style="background:#7B4015">My Dog →</button>
+      <button onclick="inlineVaccUpload(${cl.id})" class="text-xs px-3 py-1.5 rounded-lg text-white flex-shrink-0" style="background:#7B4015">📄 Upload →</button>
     </div>`:''}
     ${!vetOnFile&&hasAnyDog?`
     <div class="mt-3 flex items-center gap-2 p-3 rounded-xl border" style="background:#FEF2F2;border-color:#FECACA;">
       <span class="text-lg flex-shrink-0">🏥</span>
       <div class="flex-1 min-w-0">
         <div class="text-xs font-semibold" style="color:#DC2626;">Vet clinic required for booking</div>
-        <div class="text-xs text-gray-500 mt-0.5">Add your veterinary clinic in My Dog to unlock booking.</div>
+        <div class="text-xs text-gray-500 mt-0.5">Tap to add your vet — AI can look up the phone number automatically.</div>
       </div>
-      <button onclick="setClientView('mydog')" class="text-xs px-3 py-1.5 rounded-lg text-white flex-shrink-0" style="background:#DC2626;">My Dog →</button>
+      <button onclick="inlineVetAdd(${cl.id})" class="text-xs px-3 py-1.5 rounded-lg text-white flex-shrink-0" style="background:#DC2626;">Add Vet →</button>
     </div>`:''}
   </div>`;
   // ── Calendar booking gates ─────────────────────────────────────────────────
@@ -3628,7 +3686,7 @@ function buildClientHome(){
       <div class="text-lg font-bold text-gray-800 mb-1">Profile Incomplete</div>
       <div class="text-sm text-gray-500 text-center max-w-xs mb-1">Your vet clinic information is required before booking.</div>
       <div class="text-xs text-gray-400 text-center max-w-xs mb-4">This helps us verify your vaccine records and reach your vet in case of emergency.</div>
-      <button onclick="setClientView('mydog')" class="px-5 py-2.5 text-white text-sm font-semibold rounded-xl" style="background:#DC2626;">Add Vet Clinic →</button>
+      <button onclick="inlineVetAdd(${cl.id})" class="px-5 py-2.5 text-white text-sm font-semibold rounded-xl" style="background:#DC2626;">Add Vet Clinic →</button>
     </div>
   </div>`:showVaccLock?`
   <div class="relative">
@@ -3637,7 +3695,7 @@ function buildClientHome(){
       <div style="font-size:2.5rem;margin-bottom:.75rem;">🔒</div>
       <div class="text-lg font-bold text-gray-800 mb-1">Booking Locked</div>
       <div class="text-sm text-gray-500 text-center max-w-xs mb-4">Booking is available once all required vaccine records are current and on file.</div>
-      <button onclick="setClientView('mydog')" class="px-5 py-2.5 text-white text-sm font-semibold rounded-xl" style="background:#7B4015">Upload Vaccine Records →</button>
+      <button onclick="inlineVaccUpload(${cl.id})" class="px-5 py-2.5 text-white text-sm font-semibold rounded-xl" style="background:#7B4015">📄 Upload Vaccine Records →</button>
     </div>
   </div>`:buildCalendarView('client');
   // ──────────────────────────────────────────────────────────────────────────
@@ -3928,110 +3986,145 @@ function buildClientDog(){
     '5000':'Up to $5,000','unlimited':'No limit — do whatever is needed',
   };
   const dogsHtml=cl.dogs.map(dog=>{
-    const vs=vaccStatus(dog);
     const vBadge=vaccBadge(dog);
     const vetLabel=VET_LABELS[dog.emergencyVetLimit||'']||VET_LABELS[''];
     const vetColor=dog.emergencyVetLimit==='unlimited'?'#059669':dog.emergencyVetLimit===''?'#DC2626':'#D97706';
     const isRb=dog.deceased;
-    return`
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4 slide-in${isRb?' opacity-60':''}" ${isRb?'style="filter:grayscale(0.6)"':''}>
-      <!-- Dog header -->
-      <div class="flex items-center gap-3 mb-4">
-        <div class="w-14 h-14 rounded-full flex items-center justify-center text-3xl flex-shrink-0" style="background:${isRb?'#F3F4F6':'#FEF3C7'};">🐶</div>
-        <div class="flex-1">
-          <div class="flex items-center gap-2">
-            <div class="font-bold ${isRb?'text-gray-400':'text-gray-800'} text-lg">${dog.name}</div>
-            ${isRb?`<span class="text-xs px-2 py-0.5 rounded-full font-semibold" style="background:#F3F4F6;color:#9CA3AF;">🌈 Rainbow Bridge</span>`:''}
+    const hasVet=!!(dog.vetName||dog.vetPhone);
+
+    if(isRb){
+      // Rainbow Bridge — compact memorial card
+      return`
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4 slide-in opacity-60" style="filter:grayscale(0.6)">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-12 h-12 rounded-full flex items-center justify-center text-2xl flex-shrink-0" style="background:#F3F4F6;">🐶</div>
+          <div class="flex-1">
+            <div class="flex items-center gap-2">
+              <div class="font-bold text-gray-400 text-base">${dog.name}</div>
+              <span class="text-xs px-2 py-0.5 rounded-full font-semibold" style="background:#F3F4F6;color:#9CA3AF;">🌈 Rainbow Bridge</span>
+            </div>
+            <div class="text-sm text-gray-300">${dog.breed||'Dog'}${dog.age?' · '+dog.age+' yr':''}</div>
           </div>
-          <div class="text-sm text-gray-400">${dog.breed||'Dog'}${dog.age?' · '+dog.age+' yr':''}${dog.birthday?' · 🎂 '+fmtDateShort(dog.birthday):''}</div>
+        </div>
+        <div class="text-center py-3 text-gray-300 border-t border-gray-100">
+          <div style="font-size:1.75rem;margin-bottom:.3rem;">🌈</div>
+          <div class="text-sm text-gray-400">Forever in our hearts</div>
+          <div class="text-xs text-gray-300 mt-1">${dog.name} will always be part of the Nigel's Place family.</div>
+        </div>
+        <div class="mt-3 flex justify-end">
+          <button onclick="showRainbowBridgeConfirm(${cl.id},${dog.id})"
+            class="text-xs px-3 py-1.5 rounded-xl border"
+            style="background:#F9FAFB;color:#9CA3AF;border-color:#E5E7EB;">
+            ↩ Mark as Active
+          </button>
+        </div>
+      </div>`;
+    }
+
+    // ── Active dog — grid card layout ──────────────────────────────────────
+    return`
+    <div class="mb-5 slide-in">
+
+      <!-- ① Top hero card: photo + name + quick info + edit button -->
+      <div class="rounded-2xl border border-gray-100 shadow-sm mb-3 overflow-hidden" style="background:linear-gradient(135deg,#FFFBF0 0%,#FEF3C7 100%);">
+        <div class="p-4 flex items-center gap-4">
+          <!-- Avatar -->
+          <div class="relative flex-shrink-0">
+            ${dog.photoLink
+              ?`<img src="${dog.photoLink}" class="w-20 h-20 rounded-2xl object-cover shadow-sm" style="object-position:${dog.photoOffset?.x??50}% ${dog.photoOffset?.y??50}%">`
+              :`<div class="w-20 h-20 rounded-2xl flex items-center justify-center text-4xl shadow-sm" style="background:#FDE68A;">🐶</div>`}
+          </div>
+          <!-- Name + details -->
+          <div class="flex-1 min-w-0">
+            <div class="font-bold text-gray-800 text-xl leading-tight">${dog.name}</div>
+            <div class="text-sm text-amber-700 font-medium mt-0.5">${dog.breed||'Dog'}</div>
+            <div class="flex flex-wrap gap-2 mt-2">
+              ${dog.age?`<span class="text-xs bg-white rounded-full px-2.5 py-0.5 border border-amber-200 text-amber-800">${dog.age} yr old</span>`:''}
+              ${dog.birthday?`<span class="text-xs bg-white rounded-full px-2.5 py-0.5 border border-amber-200 text-amber-800">🎂 ${fmtDateShort(dog.birthday)}</span>`:''}
+            </div>
+          </div>
+          <!-- Edit button -->
+          <button onclick="showEditMyDogModal(${dog.id})"
+            class="flex-shrink-0 text-xs px-3 py-1.5 rounded-xl border font-semibold text-amber-700 hover:bg-amber-50"
+            style="background:white;border-color:#D4A96B;">
+            ✏️ Edit
+          </button>
         </div>
       </div>
 
-      <!-- Vaccine status — hidden for rainbow bridge dogs -->
-      ${!isRb?`<div class="mb-4">
-        <div class="flex items-center justify-between mb-1.5">
-          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Vaccination Status</div>
-          <button id="cvbtn-${dog.id}" onclick="handleClientVaccUpload(${cl.id},${dog.id})"
-            class="text-xs px-2.5 py-1 rounded-lg border text-amber-700 hover:bg-amber-50 flex items-center gap-1"
-            style="border-color:#D4A96B;">
-            📄 Upload Records
-          </button>
-        </div>
-        ${vBadge}
-        ${(dog.vaccines||[]).length>0
-          ?`<div class="mt-3 space-y-1">${buildVaccineRecordsHTML(dog)}</div>`
-          :`<div class="mt-2 text-xs text-amber-700 bg-amber-50 rounded-xl px-3 py-2 border border-amber-200">
-              No vaccine records on file yet. Upload a vaccine record PDF or photo — our AI will read and parse all the dates automatically.
-            </div>`}
-        ${dog.driveFileLink?`<a href="${dog.driveFileLink}" target="_blank" class="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">📂 View record in Drive →</a>`:''}
-      </div>`:`<div class="mb-4 text-center py-3 text-gray-300">
-        <div style="font-size:2rem;margin-bottom:.35rem;">🌈</div>
-        <div class="text-sm">Forever in our hearts</div>
-        <div class="text-xs mt-1">${dog.name} will always be part of the Nigel's Place family.</div>
-      </div>`}
+      <!-- ② Middle row: two side-by-side cards -->
+      <div class="grid grid-cols-2 gap-3 mb-3">
 
-      <!-- Notes -->
-      ${dog.notes&&!isRb?`<div class="mb-4">
-        <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Care Notes</div>
-        <div class="text-sm text-gray-600 bg-gray-50 rounded-xl px-3 py-2 whitespace-pre-line">${dog.notes}</div>
-      </div>`:''}
-
-      <!-- Vet info — shown for active dogs; red required card when missing -->
-      ${!isRb?(dog.vetName||dog.vetPhone)?`<div class="mb-4 rounded-xl border p-3 flex items-center gap-3" style="background:#F0F9FF;border-color:#BAE6FD;">
-        <div class="text-xl flex-shrink-0">🏥</div>
-        <div class="flex-1 min-w-0">
-          <div class="text-xs font-semibold mb-0.5" style="color:#0369A1;">Veterinarian on File</div>
-          ${dog.vetName?`<div class="text-sm text-gray-700 font-medium">${dog.vetName}</div>`:''}
-          ${dog.vetPhone?`<div class="text-xs text-gray-500 mt-0.5">${fmtPhone(dog.vetPhone)}</div>`:''}
-        </div>
-        <button onclick="showEditMyDogModal(${dog.id})" class="text-xs px-2.5 py-1 rounded-lg border text-gray-500 hover:bg-gray-50 flex-shrink-0" style="border-color:#BAE6FD;">Edit</button>
-      </div>`:`<div class="mb-4 rounded-xl border p-3" style="background:#FEF2F2;border-color:#FECACA;">
-        <div class="flex items-center gap-3">
-          <div class="text-xl flex-shrink-0">🏥</div>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 flex-wrap mb-0.5">
-              <div class="text-xs font-semibold" style="color:#DC2626;">Vet Clinic Required</div>
-              <span class="text-xs font-bold px-2 py-0.5 rounded-full text-white" style="background:#DC2626;font-size:10px;">REQUIRED</span>
-            </div>
-            <div class="text-xs" style="color:#991B1B;">Add your veterinary clinic to unlock booking appointments.</div>
+        <!-- ② A: Vet & Emergency card -->
+        <div class="rounded-2xl border p-3 flex flex-col gap-2" style="${hasVet?'background:#F0F9FF;border-color:#BAE6FD;':'background:#FEF2F2;border-color:#FECACA;'}">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wide" style="color:${hasVet?'#0369A1':'#DC2626'};">🏥 Vet Clinic</span>
+            ${hasVet?'':`<span class="text-xs font-bold px-1.5 py-0.5 rounded-full text-white" style="background:#DC2626;font-size:9px;">REQ'D</span>`}
           </div>
-          <button onclick="showEditMyDogModal(${dog.id})" class="text-xs px-2.5 py-1.5 rounded-lg text-white font-semibold flex-shrink-0 shadow-sm hover:opacity-90" style="background:#DC2626;">Add Vet →</button>
-        </div>
-        <div class="mt-2.5 flex items-start gap-1.5 text-xs rounded-lg px-2.5 py-2" style="background:#FEE2E2;color:#7F1D1D;">
-          <span class="flex-shrink-0">ℹ️</span>
-          <span>This helps us verify vaccine records and contact your vet in an emergency. Our AI can look up the clinic's details automatically.</span>
-        </div>
-      </div>`:''}
-      <!-- Emergency vet limit — only shown for active dogs -->
-      ${!isRb?`<div class="rounded-xl border p-4" style="background:#FFFBEB;border-color:#FCD34D;">
-        <div class="flex items-start justify-between gap-2 mb-2">
+          ${hasVet?`
           <div>
-            <div class="font-semibold text-sm text-gray-800">🏥 Emergency Vet Authorization</div>
-            <div class="text-xs text-gray-500 mt-0.5">Nigel's Place will contact you first whenever possible.</div>
-          </div>
-          <span class="text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0" style="background:${vetColor}20;color:${vetColor};">
-            ${dog.emergencyVetLimit==='unlimited'?'No limit':dog.emergencyVetLimit===''?'Call first':dog.emergencyVetLimit==='office-only'?'Basic only':'$'+parseInt(dog.emergencyVetLimit).toLocaleString()+' limit'}
-          </span>
+            <div class="text-sm font-semibold text-gray-800 leading-snug">${dog.vetName||''}</div>
+            ${dog.vetPhone?`<div class="text-xs text-gray-500 mt-0.5">${fmtPhone(dog.vetPhone)}</div>`:''}
+          </div>`:`
+          <div class="text-xs leading-snug" style="color:#991B1B;">Add your vet clinic to unlock booking.</div>
+          <button onclick="showEditMyDogModal(${dog.id})" class="text-xs px-2.5 py-1.5 rounded-lg text-white font-semibold mt-auto" style="background:#DC2626;">Add Vet →</button>`}
+          <!-- Emergency limit sub-section -->
+          ${hasVet?`<div class="mt-1 pt-2 border-t" style="border-color:#BAE6FD;">
+            <div class="text-xs font-semibold mb-1" style="color:#0369A1;">Emergency Auth</div>
+            <span class="text-xs font-semibold px-2 py-0.5 rounded-full" style="background:${vetColor}20;color:${vetColor};">
+              ${dog.emergencyVetLimit==='unlimited'?'No limit':dog.emergencyVetLimit===''?'Call first':dog.emergencyVetLimit==='office-only'?'Basic only':'$'+parseInt(dog.emergencyVetLimit).toLocaleString()+' limit'}
+            </span>
+            <select onchange="updateClientVetLimit(${cl.id},${dog.id},this.value)"
+              class="w-full mt-1.5 rounded-lg px-2 py-1.5 text-xs bg-white"
+              style="border:1px solid #BAE6FD;">
+              <option value="" ${!dog.emergencyVetLimit?'selected':''}>Call me first</option>
+              <option value="office-only" ${dog.emergencyVetLimit==='office-only'?'selected':''}>Basic diagnostics only</option>
+              <option value="500" ${dog.emergencyVetLimit==='500'?'selected':''}>Up to $500</option>
+              <option value="1000" ${dog.emergencyVetLimit==='1000'?'selected':''}>Up to $1,000</option>
+              <option value="2500" ${dog.emergencyVetLimit==='2500'?'selected':''}>Up to $2,500</option>
+              <option value="5000" ${dog.emergencyVetLimit==='5000'?'selected':''}>Up to $5,000</option>
+              <option value="unlimited" ${dog.emergencyVetLimit==='unlimited'?'selected':''}>No limit</option>
+            </select>
+          </div>`:
+          `<div class="mt-1 pt-2 border-t" style="border-color:#FECACA;">
+            <div class="text-xs" style="color:#9CA3AF;">Emergency auth will be set up once vet is on file.</div>
+          </div>`}
         </div>
-        <div class="text-xs text-gray-600 mb-3">${vetLabel}</div>
-        <select onchange="updateClientVetLimit(${cl.id},${dog.id},this.value)"
-          class="w-full border border-yellow-300 rounded-xl px-3 py-2 text-sm bg-white">
-          <option value="" ${!dog.emergencyVetLimit?'selected':''}>Contact me first — no treatment without my approval</option>
-          <option value="office-only" ${dog.emergencyVetLimit==='office-only'?'selected':''}>Office visit &amp; basic diagnostics only (~$200–$400)</option>
-          <option value="500" ${dog.emergencyVetLimit==='500'?'selected':''}>Up to $500</option>
-          <option value="1000" ${dog.emergencyVetLimit==='1000'?'selected':''}>Up to $1,000</option>
-          <option value="2500" ${dog.emergencyVetLimit==='2500'?'selected':''}>Up to $2,500</option>
-          <option value="5000" ${dog.emergencyVetLimit==='5000'?'selected':''}>Up to $5,000</option>
-          <option value="unlimited" ${dog.emergencyVetLimit==='unlimited'?'selected':''}>No limit — do whatever is needed to keep my dog safe</option>
-        </select>
+
+        <!-- ② B: Vaccination card -->
+        <div class="rounded-2xl border border-gray-100 p-3 flex flex-col gap-2 bg-white">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-gray-500 uppercase tracking-wide">💉 Vaccines</span>
+            <button id="cvbtn-${dog.id}" onclick="handleClientVaccUpload(${cl.id},${dog.id})"
+              class="text-xs px-2 py-1 rounded-lg border text-amber-700 hover:bg-amber-50 flex-shrink-0"
+              style="border-color:#D4A96B;font-size:10px;">
+              📄 Upload
+            </button>
+          </div>
+          <div>${vBadge}</div>
+          ${(dog.vaccines||[]).length>0
+            ?`<div class="space-y-1 text-xs">${buildVaccineRecordsHTML(dog)}</div>`
+            :`<div class="text-xs text-amber-700 bg-amber-50 rounded-xl px-2.5 py-2 border border-amber-100">
+                No records yet. Upload a PDF or photo — AI reads all dates automatically.
+              </div>`}
+          ${dog.driveFileLink?`<a href="${dog.driveFileLink}" target="_blank" class="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-auto">📂 Drive →</a>`:''}
+        </div>
+      </div>
+
+      <!-- ③ Bottom: Care Notes (only shown when notes exist) -->
+      ${dog.notes?`
+      <div class="rounded-2xl border border-gray-100 bg-white p-4 mb-3 shadow-sm">
+        <div class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">📝 Care Notes</div>
+        <div class="text-sm text-gray-600 leading-relaxed whitespace-pre-line">${dog.notes}</div>
       </div>`:''}
-      <!-- Rainbow Bridge toggle — admin only -->
-      <div class="mt-3 flex justify-end">
+
+      <!-- Rainbow Bridge toggle -->
+      <div class="flex justify-end">
         <button onclick="showRainbowBridgeConfirm(${cl.id},${dog.id})"
           class="text-xs px-3 py-1.5 rounded-xl border transition-all"
           style="background:#F9FAFB;color:#9CA3AF;border-color:#E5E7EB;"
           onmouseover="this.style.background='#F3F4F6'" onmouseout="this.style.background='#F9FAFB'">
-          ${isRb?'↩ Mark as Active':'🌈 Rainbow Bridge'}
+          🌈 Rainbow Bridge
         </button>
       </div>
     </div>`;
@@ -4040,13 +4133,13 @@ function buildClientDog(){
   return`
   <div class="slide-in">
     <h1 class="text-2xl font-bold text-gray-800 mb-1">My Dog 🐾</h1>
-    <p class="text-gray-400 text-sm mb-5">View your dog's profile and manage emergency care preferences.</p>
+    <p class="text-gray-400 text-sm mb-5">View your dog's profile, manage vet info, and upload vaccine records.</p>
     ${dogsHtml}
     <div class="mt-4 flex flex-col items-center gap-2">
       <button onclick="showAddDogModal()" class="flex items-center gap-2 px-5 py-2.5 text-white text-sm font-semibold rounded-xl shadow-sm hover:opacity-90 transition-opacity" style="background:#7B4015;">
         + Add Another Dog
       </button>
-      <p class="text-xs text-center text-gray-300 mt-1">To update a dog's name or breed — contact Nigel's Place directly. Vaccine records can be uploaded above.</p>
+      <p class="text-xs text-center text-gray-300 mt-1">To update a dog's name — contact Nigel's Place directly.</p>
     </div>
   </div>`;
 }
@@ -4550,12 +4643,28 @@ function buildServiceModal(editId){
   </div>`;
 }
 function buildAddClientModal(){
+  const hasGemini=!!state.settings.geminiApiKey;
   return`
   <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 slide-in max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between mb-5">
+      <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-bold text-gray-800">Add New Client</h2>
         <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
+      </div>
+      <!-- Voice / AI intake bar -->
+      <div class="mb-4 rounded-xl p-3 flex flex-col gap-2" style="background:#FFFBEB;border:1px solid #FDE68A;">
+        <div class="flex items-center gap-2">
+          <button id="voice-intake-btn" type="button" onclick="startVoiceIntake()"
+            class="flex items-center gap-1.5 px-3 py-1.5 text-white text-xs font-semibold rounded-lg flex-shrink-0"
+            style="background:#7B4015;border:none;cursor:pointer;${!hasGemini?'opacity:.5;pointer-events:none;':''}"
+            ${!hasGemini?'title="Add a Gemini API key in Settings to enable voice intake"':''}>
+            🎙️ Voice Fill
+          </button>
+          <span id="voice-intake-status" class="text-xs text-amber-700 leading-snug flex-1">
+            ${hasGemini?'Say the client details out loud and AI will fill the form.':'Add a Gemini key in Settings to enable AI voice intake.'}
+          </span>
+        </div>
+        <p class="text-xs text-amber-600 m-0">Try: <em>"Add client Tag Wilson, phone 8041231234, email tag@gmail.com. Dog's name is Lulu, mixed breed female, birthday September 15th 2020, takes daily medication."</em></p>
       </div>
       <form onsubmit="submitClient(event)" class="space-y-4">
         <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Full Name *</label>
@@ -4799,6 +4908,168 @@ async function handleClientVaccUpload(clientId, dogId){
   // Re-enable button after full pipeline completes (handleVaccUpload now awaits everything)
   const freshBtn=document.getElementById('cvbtn-'+dogId);
   if(freshBtn){freshBtn.disabled=false;freshBtn.innerHTML='📄 Upload Records';}
+}
+// ── Inline pill actions from client home tab ──────────────────────────────────
+// Let clients upload vaccines or add vet directly from the checklist/lock without
+// navigating away to My Dog first.
+function inlineVaccUpload(clientId){
+  const cl=clients.find(c=>c.id===clientId);
+  if(!cl)return;
+  const dogs=(cl.dogs||[]).filter(d=>!d.deceased);
+  // Find dogs still needing vaccines (show chooser if multiple, otherwise direct)
+  const needingVacc=dogs.filter(d=>!hasRequiredVaccines(d));
+  if(needingVacc.length===1){
+    handleClientVaccUpload(clientId,needingVacc[0].id);
+    return;
+  }
+  if(needingVacc.length>1){
+    // Show a tiny picker overlay so the user selects which dog
+    const overlay=document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9990;display:flex;align-items:center;justify-content:center;padding:1rem;';
+    const btns=needingVacc.map(d=>`<button onclick="document.getElementById('_vpick').remove();handleClientVaccUpload(${clientId},${d.id})"
+      style="display:block;width:100%;margin-bottom:.5rem;padding:.65rem 1rem;border-radius:12px;border:1px solid #E5E7EB;background:#fff;font-size:.9rem;cursor:pointer;text-align:left;">
+      🐶 ${d.name}</button>`).join('');
+    overlay.id='_vpick';
+    overlay.innerHTML=`<div style="background:white;border-radius:20px;padding:1.5rem;max-width:320px;width:90%;box-shadow:0 24px 64px rgba(0,0,0,0.22);">
+      <div style="font-weight:700;margin-bottom:1rem;">Which dog's records?</div>
+      ${btns}
+      <button onclick="document.getElementById('_vpick').remove()" style="width:100%;padding:.5rem;border-radius:10px;border:1px solid #E5E7EB;background:#F9FAFB;color:#6B7280;cursor:pointer;font-size:.82rem;">Cancel</button>
+    </div>`;
+    document.body.appendChild(overlay);
+    return;
+  }
+  // Fallback
+  setClientView('mydog');
+}
+function inlineVetAdd(clientId){
+  const cl=clients.find(c=>c.id===clientId);
+  if(!cl)return;
+  const dogs=(cl.dogs||[]).filter(d=>!d.deceased);
+  const needingVet=dogs.find(d=>!d.vetName?.trim());
+  if(needingVet){
+    showEditMyDogModal(needingVet.id);
+  }else{
+    setClientView('mydog');
+  }
+}
+// ── Gemini voice/text client intake parsing ───────────────────────────────────
+async function parseClientIntakeWithGemini(transcript){
+  const key=state.settings.geminiApiKey;
+  if(!key)throw new Error('No Gemini API key configured in Settings.');
+  const model=await getGeminiModel(key);
+  const today=new Date().toISOString().split('T')[0];
+  const prompt=`You are a dog daycare intake assistant. Parse the following spoken client intake and extract structured data.
+Today's date: ${today}
+
+Return ONLY valid JSON, no markdown:
+{
+  "clientName": "Full Name",
+  "phone": "digits only, no formatting",
+  "email": "email@example.com or empty string",
+  "dogName": "dog's name",
+  "dogBreed": "breed or Mixed Breed",
+  "dogGender": "male or female or unknown",
+  "dogBirthday": "YYYY-MM-DD or empty string",
+  "dogNotes": "care notes, medications, special needs — combine all relevant details",
+  "confidence": "high/medium/low"
+}
+
+Rules:
+- Spell names correctly using context clues (e.g. spoken 'Tag Wilson' → 'Tag Wilson')
+- For birthday: convert any spoken date to YYYY-MM-DD (e.g. 'September 15th 2020' → '2020-09-15')
+- For dogNotes: include medications, personality, special needs in natural language
+- If a field is not mentioned, use empty string
+- confidence: high if all major fields present, medium if some missing, low if very unclear
+
+Intake transcript:
+"${transcript.replace(/"/g,'\\"')}"`;
+  const r=await fetch(`https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${key}`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})
+  });
+  const d=await r.json();
+  if(d.error)throw new Error(`Gemini: ${d.error.message}`);
+  const text=d.candidates?.[0]?.content?.parts?.[0]?.text||'{}';
+  const clean=text.replace(/```json?|```/g,'').trim();
+  return JSON.parse(clean);
+}
+// Fills Add Client modal fields with AI-parsed data and highlights them amber
+function applyAiIntakeToForm(data){
+  const setAi=(id,val)=>{
+    const el=document.getElementById(id);
+    if(!el||!val)return;
+    el.value=val;
+    el.classList.add('ai-suggested');
+    // Remove highlight once user edits the field manually
+    el.addEventListener('input',()=>el.classList.remove('ai-suggested'),{once:true});
+  };
+  if(data.clientName)setAi('cl-name',data.clientName);
+  if(data.phone)setAi('cl-phone',fmtPhone(data.phone.replace(/\D/g,'')));
+  if(data.email)setAi('cl-email',data.email);
+  if(data.dogName)setAi('dog-name',data.dogName);
+  if(data.dogBirthday)setAi('dog-birthday',data.dogBirthday);
+  if(data.dogNotes)setAi('dog-notes',data.dogNotes);
+  // Handle breed dropdown — try to match, else set "other" text input
+  if(data.dogBreed){
+    const sel=document.getElementById('dog-breed');
+    if(sel){
+      const opt=[...sel.options].find(o=>o.value.toLowerCase()===data.dogBreed.toLowerCase())||
+                [...sel.options].find(o=>o.value.toLowerCase().includes(data.dogBreed.toLowerCase().split(' ')[0]));
+      if(opt){sel.value=opt.value;sel.classList.add('ai-suggested');sel.addEventListener('change',()=>sel.classList.remove('ai-suggested'),{once:true});}
+      else{sel.value='other';const oi=document.getElementById('dog-breed-other');if(oi){oi.style.display='block';setAi('dog-breed-other',data.dogBreed);}}
+    }
+  }
+}
+let _voiceRecognizer=null;
+function startVoiceIntake(){
+  const SpeechRec=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SpeechRec){showToast('Voice input not supported in this browser. Try Chrome.','#EF4444');return;}
+  if(!state.settings.geminiApiKey){showToast('Add a Gemini API key in Settings first.','#F97316');return;}
+  const micBtn=document.getElementById('voice-intake-btn');
+  const micStatus=document.getElementById('voice-intake-status');
+  if(_voiceRecognizer){
+    _voiceRecognizer.stop();
+    return;
+  }
+  const rec=new SpeechRec();
+  rec.continuous=true;
+  rec.interimResults=true;
+  rec.lang='en-US';
+  _voiceRecognizer=rec;
+  if(micBtn){micBtn.innerHTML='🔴 Stop Listening';micBtn.style.background='#DC2626';micBtn.style.animation='mic-pulse 1s ease infinite';}
+  if(micStatus){micStatus.textContent='Listening… speak clearly.';}
+  let finalTranscript='';
+  rec.onresult=(e)=>{
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      if(e.results[i].isFinal)finalTranscript+=e.results[i][0].transcript+' ';
+      else interim+=e.results[i][0].transcript;
+    }
+    if(micStatus)micStatus.textContent='🎙️ '+((finalTranscript+interim).slice(-80)||'Listening…');
+  };
+  rec.onerror=(e)=>{
+    showToast('Mic error: '+e.error,'#EF4444');
+    _voiceRecognizer=null;
+    if(micBtn){micBtn.innerHTML='🎙️ Voice Fill';micBtn.style.background='#7B4015';micBtn.style.animation='';}
+    if(micStatus)micStatus.textContent='';
+  };
+  rec.onend=async()=>{
+    _voiceRecognizer=null;
+    if(micBtn){micBtn.innerHTML='🎙️ Voice Fill';micBtn.style.background='#7B4015';micBtn.style.animation='';}
+    if(!finalTranscript.trim()){if(micStatus)micStatus.textContent='No speech detected.';return;}
+    if(micStatus)micStatus.textContent='🤖 Parsing with Gemini AI…';
+    try{
+      const data=await parseClientIntakeWithGemini(finalTranscript.trim());
+      applyAiIntakeToForm(data);
+      if(micStatus){
+        micStatus.innerHTML=`✅ Fields auto-filled! <span style="color:#D97706;">Amber fields</span> are AI-suggested — review and edit as needed.`;
+      }
+    }catch(err){
+      showToast('AI parse failed: '+err.message,'#EF4444');
+      if(micStatus)micStatus.textContent='Could not parse. Try again or fill manually.';
+    }
+  };
+  rec.start();
 }
 function setClientView(v,skipHistory=false){
   state.clientView=v;state.showModal=null;
