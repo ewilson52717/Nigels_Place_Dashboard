@@ -22,6 +22,8 @@
  *   addDog          — add an additional dog to an existing client profile
  *   updateVetLimit  — update a dog's emergency vet spending limit
  *   cancelBooking   — mark a booking as 'cancelled'
+ *   updateProfile   — update caller's email, phone, photoConsent (My Account)
+ *   updateDog       — update a dog's breed/age/birthday/notes/vetLimit (My Account)
  *
  * ══════════════════════════════════════════════════════════════════════════════
  *  SETUP INSTRUCTIONS — follow these steps in order
@@ -89,6 +91,8 @@ function doPost(e) {
     if (action === 'addDog')         return addDog(ss, req, email);
     if (action === 'updateVetLimit') return updateVetLimit(ss, req, email);
     if (action === 'cancelBooking')  return cancelBooking(ss, req, email);
+    if (action === 'updateProfile')  return updateProfile(ss, req, email);
+    if (action === 'updateDog')      return updateDog(ss, req, email);
 
     return respond({ ok: false, error: `Unknown action: ${action}` });
 
@@ -359,6 +363,69 @@ function cancelBooking(ss, req, callerEmail) {
     }
   }
   return respond({ ok: false, error: 'Booking not found.' });
+}
+
+// ─── ACTION: updateProfile ────────────────────────────────────────────────────
+// Updates the caller's email, phone, and photoConsent on the Clients sheet.
+function updateProfile(ss, req, callerEmail) {
+  const { email, phone, photoConsent } = req;
+
+  const clientsSheet = ss.getSheetByName('Clients');
+  if (!clientsSheet) return respond({ ok: false, error: 'Clients sheet not found' });
+
+  // Find the caller's row by matching the stored email
+  const data = clientsSheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][2]).toLowerCase() === callerEmail.toLowerCase()) {
+      const row = i + 1; // 1-indexed
+      // Columns: id(A=1), name(B=2), email(C=3), phone(D=4), photoConsent(E=5)
+      clientsSheet.getRange(row, 3).setValue(String(email || data[i][2]));
+      clientsSheet.getRange(row, 4).setValue(String(phone || ''));
+      clientsSheet.getRange(row, 5).setValue(photoConsent ? 'true' : 'false');
+      return respond({ ok: true, message: 'Profile updated.' });
+    }
+  }
+  return respond({ ok: false, error: 'Client record not found for this account.' });
+}
+
+// ─── ACTION: updateDog ────────────────────────────────────────────────────────
+// Updates a dog's breed, age, birthday, notes, and emergencyVetLimit.
+// Only the client who owns the dog (matched by callerEmail) can update it.
+function updateDog(ss, req, callerEmail) {
+  const { dogId, breed, age, birthday, notes, emergencyVetLimit } = req;
+  if (!dogId) return respond({ ok: false, error: 'dogId is required.' });
+
+  const clientsSheet = ss.getSheetByName('Clients');
+  const dogsSheet    = ss.getSheetByName('Dogs');
+  if (!clientsSheet) return respond({ ok: false, error: 'Clients sheet not found' });
+  if (!dogsSheet)    return respond({ ok: false, error: 'Dogs sheet not found' });
+
+  // Find caller's clientId
+  const clientData = clientsSheet.getDataRange().getValues();
+  let callerClientId = null;
+  for (let i = 1; i < clientData.length; i++) {
+    if (String(clientData[i][2]).toLowerCase() === callerEmail.toLowerCase()) {
+      callerClientId = clientData[i][0];
+      break;
+    }
+  }
+  if (callerClientId === null) return respond({ ok: false, error: 'Client record not found.' });
+
+  // Find the dog row — must belong to this client
+  const dogData = dogsSheet.getDataRange().getValues();
+  for (let i = 1; i < dogData.length; i++) {
+    if (String(dogData[i][0]) === String(dogId) && String(dogData[i][1]) === String(callerClientId)) {
+      const row = i + 1;
+      // Columns: id(1),clientId(2),name(3),breed(4),age(5),vaccinated(6),notes(7),birthday(8),...,emergencyVetLimit(15)
+      dogsSheet.getRange(row, 4).setValue(String(breed || dogData[i][3] || 'Mixed Breed'));
+      dogsSheet.getRange(row, 5).setValue(Number(age) || 0);
+      dogsSheet.getRange(row, 8).setValue(String(birthday || ''));
+      dogsSheet.getRange(row, 7).setValue(String(notes || ''));
+      dogsSheet.getRange(row, 15).setValue(String(emergencyVetLimit || ''));
+      return respond({ ok: true, message: 'Dog updated.' });
+    }
+  }
+  return respond({ ok: false, error: 'Dog not found or does not belong to your account.' });
 }
 
 // ─── RESPONSE HELPER ─────────────────────────────────────────────────────────

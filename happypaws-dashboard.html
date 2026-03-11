@@ -1191,6 +1191,16 @@ async function writeRange(range,values){
   await sheetsReq(`${CONFIG.API_BASE}/${state.sheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
     {method:'PUT',body:JSON.stringify({values})});
 }
+async function clearRange(range){
+  // Clears all cell values in the range (does not delete rows, just empties them)
+  await sheetsReq(`${CONFIG.API_BASE}/${state.sheetId}/values/${encodeURIComponent(range)}:clear`,
+    {method:'POST',body:'{}'});
+}
+async function appendRows(range,values){
+  // Appends rows after existing data — used for the Archived sheet
+  await sheetsReq(`${CONFIG.API_BASE}/${state.sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    {method:'POST',body:JSON.stringify({values})});
+}
 async function createSpreadsheet(){
   const d=await sheetsReq('https://sheets.googleapis.com/v4/spreadsheets',{method:'POST',body:JSON.stringify({
     properties:{title:"Nigel's Place - Live Data"},
@@ -1334,6 +1344,7 @@ async function persistBookings(){
   if(state.mode!=='live')return;
   const rows=[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price'],
     ...bookings.map(b=>[b.id,b.clientId,b.dogId,b.dogName,b.clientName,b.checkIn,b.checkOut,b.nights,b.status,b.service,b.addons||'',b.price])];
+  await clearRange('Bookings!A2:L9999');
   await writeRange(`Bookings!A1:L${rows.length}`,rows);
 }
 async function persistClients(){
@@ -1341,6 +1352,8 @@ async function persistClients(){
   const cRows=[['id','name','email','phone','photoConsent'],...clients.map(c=>[c.id,c.name,c.email,c.phone,c.photoConsent?'true':'false'])];
   const dRows=[['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit','deceased','vaccOverride'],
     ...clients.flatMap(c=>c.dogs.map(d=>{const off=d.photoOffset||{x:50,y:50};return[d.id,c.id,d.name,d.breed,d.age,d.vaccinated,d.notes,d.birthday||'',d.vaccExpiry||'',JSON.stringify(d.vaccines||[]),d.driveFileLink||'',d.photoLink||'',JSON.stringify(d.playPhotos||[]),`${off.x},${off.y}`,d.emergencyVetLimit||'',d.deceased?'true':'false',d.vaccOverride||''];}))];
+  await clearRange('Clients!A2:E9999');
+  await clearRange('Dogs!A2:Q9999');
   await writeRange(`Clients!A1:E${cRows.length}`,cRows);
   await writeRange(`Dogs!A1:Q${dRows.length}`,dRows);
 }
@@ -1348,7 +1361,24 @@ async function persistInvoices(){
   if(state.mode!=='live')return;
   const rows=[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items','externalPaid','paymentNote'],
     ...invoices.map(i=>[i.id,i.clientId,i.clientName,i.amount,i.paid,i.status,i.dueDate,i.issueDate,i.items,i.externalPaid||0,i.paymentNote||''])];
+  await clearRange('Invoices!A2:K9999');
   await writeRange(`Invoices!A1:K${rows.length}`,rows);
+}
+// ─── ARCHIVE DELETED CLIENT ──────────────────────────────────────────────────
+async function ensureArchivedSheet(){
+  try{await readRange('Archived!A1:A1');}
+  catch(e){
+    try{
+      await sheetsReq(`${CONFIG.API_BASE}/${state.sheetId}:batchUpdate`,
+        {method:'POST',body:JSON.stringify({requests:[{addSheet:{properties:{title:'Archived'}}}]})});
+      await writeRange('Archived!A1:G1',[['deletedAt','clientId','clientName','email','phone','photoConsent','dogsJson']]);
+    }catch(e2){/* already exists */}
+  }
+}
+async function archiveClientToSheet(cl){
+  await ensureArchivedSheet();
+  const now=new Date().toISOString();
+  await appendRows('Archived!A:G',[[now,cl.id,cl.name,cl.email,cl.phone,cl.photoConsent?'true':'false',JSON.stringify(cl.dogs)]]);
 }
 // ─── Calendar Settings panel toggle ──────────────────────────────────────────
 function toggleCalendarSettings(){
@@ -2309,15 +2339,18 @@ function buildClientLayout(){
         </button>
       </div>
       <div class="flex items-center gap-1.5">
-        <div class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style="background:#7B4015">
-          ${cl?cl.name[0]:'?'}
-        </div>
-        <span class="text-sm text-gray-600 font-medium hidden sm:inline max-w-[100px] truncate">${cl?.name||'Guest'}</span>
+        <button onclick="setClientView('account')" title="My Account"
+          class="flex items-center gap-1.5 px-2 py-1.5 rounded-xl transition-all hover:bg-gray-100 ${state.clientView==='account'?'bg-amber-50':''}">
+          <div class="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style="background:#7B4015">
+            ${cl?cl.name[0]:'?'}
+          </div>
+          <span class="text-sm text-gray-600 font-medium hidden sm:inline max-w-[80px] truncate">${cl?.name||'Guest'}</span>
+        </button>
         <button onclick="signOut()" class="text-xs text-gray-400 hover:text-red-500 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors hidden sm:inline-block" title="Sign out">Sign out</button>
       </div>
     </header>
     <div class="max-w-5xl mx-auto p-3 sm:p-5">
-      ${state.clientView==='home'?buildClientHome():state.clientView==='mydog'?buildClientDog():buildClientBookings()}
+      ${state.clientView==='home'?buildClientHome():state.clientView==='mydog'?buildClientDog():state.clientView==='account'?buildClientAccount():buildClientBookings()}
     </div>
     <div class="policy-footer">
       &copy; ${new Date().getFullYear()} ${CONFIG.APP_COMPANY} &nbsp;&middot;&nbsp;
@@ -3321,6 +3354,187 @@ function buildClientBookings(){
   </div>`;
 }
 
+// ─── MY ACCOUNT (client self-service) ────────────────────────────────────────
+function buildClientAccount(){
+  const cl=clients.find(c=>c.id===state.currentClientId);
+  if(!cl)return'';
+  const VET_LABELS={
+    '':'Contact me first — no treatment without my approval',
+    'office-only':'Office visit & basic diagnostics only (~$200–$400)',
+    '500':'Up to $500','1000':'Up to $1,000','2500':'Up to $2,500',
+    '5000':'Up to $5,000','unlimited':'No limit — do whatever is needed',
+  };
+  const dogsHtml=cl.dogs.filter(d=>!d.deceased).map(dog=>`
+    <div class="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 rounded-full flex items-center justify-center text-xl flex-shrink-0 bg-amber-50">🐕</div>
+        <div>
+          <div class="font-semibold text-gray-800">${dog.name}</div>
+          <div class="text-xs text-gray-400">${dog.breed||'Mixed Breed'} · ${dog.age||0} yr${dog.age===1?'':'s'}</div>
+        </div>
+        <button onclick="showEditMyDogModal(${dog.id})" class="ml-auto text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 font-medium">✏️ Edit</button>
+      </div>
+      <div class="grid grid-cols-2 gap-2 text-xs text-gray-500">
+        ${dog.birthday?`<div><span class="text-gray-400">Birthday</span><br><span class="font-medium text-gray-700">${fmtDate(dog.birthday)}</span></div>`:''}
+        <div><span class="text-gray-400">Emergency Vet Auth</span><br><span class="font-medium text-gray-700">${VET_LABELS[dog.emergencyVetLimit||'']||'Contact me first'}</span></div>
+        ${dog.notes?`<div class="col-span-2"><span class="text-gray-400">Care Notes</span><br><span class="font-medium text-gray-700">${dog.notes}</span></div>`:''}
+      </div>
+    </div>`).join('');
+  const deceasedHtml=cl.dogs.filter(d=>d.deceased).map(dog=>`
+    <div class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 flex items-center gap-3">
+      <span class="text-lg">🌈</span>
+      <span class="text-sm text-gray-500 italic">${dog.name} — Forever in our hearts</span>
+    </div>`).join('');
+  return`
+  <div class="space-y-5 pb-10">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-800">My Account</h1>
+      <p class="text-sm text-gray-400 mt-0.5">Manage your contact info, dog profiles, and preferences.</p>
+    </div>
+
+    <!-- Contact Information -->
+    <div class="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+      <h2 class="font-semibold text-gray-700 mb-1 flex items-center gap-2">📞 Contact Information</h2>
+      <p class="text-xs text-gray-400 mb-4">Your email and phone are used for booking confirmations and updates. To change your name, contact Nigel's Place directly.</p>
+      <form onsubmit="submitUpdateProfile(event)" class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Your Name</label>
+          <div class="w-full border border-gray-100 bg-gray-50 rounded-xl px-3 py-2.5 text-sm text-gray-400">${cl.name}</div>
+          <p class="text-xs text-gray-400 mt-1">Name changes must be requested through Nigel's Place.</p>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Email Address <span class="text-red-400">*</span></label>
+          <input id="acct-email" type="email" required value="${cl.email||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Phone Number</label>
+          <input id="acct-phone" type="tel" value="${cl.phone||''}" placeholder="e.g. 555-867-5309" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none">
+        </div>
+        <div class="flex items-center justify-between pt-1">
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+            <input id="acct-photo" type="checkbox" ${cl.photoConsent?'checked':''} class="w-4 h-4 rounded accent-amber-600">
+            <span class="text-sm text-gray-600">📸 I allow Nigel's Place to share photos of my dog(s) on social media</span>
+          </label>
+        </div>
+        <button type="submit" id="acct-save-btn" class="w-full py-2.5 rounded-xl text-white text-sm font-semibold" style="background:#7B4015;">Save Changes</button>
+      </form>
+    </div>
+
+    <!-- My Dogs -->
+    <div>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold text-gray-700 flex items-center gap-2">🐾 My Dogs</h2>
+        <button onclick="showAddDogModal()" class="text-xs px-3 py-1.5 rounded-lg text-white font-semibold" style="background:#7B4015">+ Add Dog</button>
+      </div>
+      <div class="space-y-3">
+        ${dogsHtml||`<div class="text-sm text-gray-400 text-center py-4">No active dogs on your profile.</div>`}
+        ${deceasedHtml}
+      </div>
+    </div>
+
+    <!-- Sign Out -->
+    <div class="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+      <h2 class="font-semibold text-gray-700 mb-1">🔐 Sign Out</h2>
+      <p class="text-xs text-gray-400 mb-3">You'll need to sign back in with your Google account to access your profile.</p>
+      <button onclick="signOut()" class="px-5 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors">Sign Out</button>
+    </div>
+  </div>`;
+}
+async function submitUpdateProfile(e){
+  e.preventDefault();
+  const cl=clients.find(c=>c.id===state.currentClientId);if(!cl)return;
+  const email=(document.getElementById('acct-email')?.value||'').trim();
+  const phone=(document.getElementById('acct-phone')?.value||'').trim();
+  const photoConsent=document.getElementById('acct-photo')?.checked||false;
+  if(!email){showToast('Email is required.','#EF4444');return;}
+  const btn=document.getElementById('acct-save-btn');
+  if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{
+    const result=await proxyClientWrite('updateProfile',{email,phone,photoConsent});
+    if(!result.ok)throw new Error(result.error||'Could not save.');
+    cl.email=email;cl.phone=phone;cl.photoConsent=photoConsent;
+    render();showToast('Profile updated! ✓');
+  }catch(err){
+    showToast('Error: '+err.message,'#EF4444');
+    if(btn){btn.disabled=false;btn.textContent='Save Changes';}
+  }
+}
+function showEditMyDogModal(dogId){
+  state.showModal={type:'editMyDog',dogId};render();
+}
+function buildEditMyDogModal(){
+  const m=state.showModal;if(!m)return'';
+  const cl=clients.find(c=>c.id===state.currentClientId);if(!cl)return'';
+  const dog=cl.dogs.find(d=>d.id===m.dogId);if(!dog)return'';
+  const VET_OPTS=['','office-only','500','1000','2500','5000','unlimited'];
+  const VET_LABELS=['Contact me first — no treatment without my approval','Office visit & basic diagnostics only (~$200–$400)','Up to $500','Up to $1,000','Up to $2,500','Up to $5,000','No limit — do whatever is needed'];
+  return`<div class="modal-overlay" onclick="if(event.target===this){state.showModal=null;render();}">
+  <div class="modal-box" style="max-width:440px;">
+    <div class="flex items-center justify-between mb-5">
+      <div>
+        <h2 class="text-lg font-bold text-gray-800">✏️ Edit ${dog.name}</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Update your dog's profile info</p>
+      </div>
+      <button onclick="state.showModal=null;render()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
+    </div>
+    <form onsubmit="submitEditMyDog(event,${dog.id})" class="space-y-3">
+      <div class="modal-field-group">
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">About</label>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Breed</label>
+            ${breedSelectHtml('emydog-breed','emydog-breed-other',dog.breed||'')}
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Age (years)</label>
+            <input id="emydog-age" type="number" min="0" max="30" value="${dog.age||0}" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none">
+          </div>
+        </div>
+        <div class="mt-2">
+          <label class="block text-xs text-gray-500 mb-1">Birthday (optional)</label>
+          <input id="emydog-birthday" type="date" value="${dog.birthday||''}" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none">
+        </div>
+      </div>
+      <div class="modal-field-group">
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Care Notes</label>
+        <textarea id="emydog-notes" rows="2" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none">${dog.notes||''}</textarea>
+      </div>
+      <div class="modal-field-group">
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">🏥 Emergency Vet Authorization</label>
+        <select id="emydog-vet" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none">
+          ${VET_OPTS.map((v,i)=>`<option value="${v}"${(dog.emergencyVetLimit||'')=== v?' selected':''}>${VET_LABELS[i]}</option>`).join('')}
+        </select>
+      </div>
+      <div class="flex gap-3 pt-1">
+        <button type="button" onclick="state.showModal=null;render()" class="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50">Cancel</button>
+        <button id="emydog-submit" type="submit" class="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style="background:#7B4015;">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>`;
+}
+async function submitEditMyDog(e,dogId){
+  e.preventDefault();
+  const cl=clients.find(c=>c.id===state.currentClientId);if(!cl)return;
+  const dog=cl.dogs.find(d=>d.id===dogId);if(!dog)return;
+  const breed=getBreedValue('emydog-breed','emydog-breed-other')||dog.breed||'Mixed Breed';
+  const age=parseInt(document.getElementById('emydog-age')?.value)||0;
+  const birthday=(document.getElementById('emydog-birthday')?.value||'').trim();
+  const notes=(document.getElementById('emydog-notes')?.value||'').trim();
+  const emergencyVetLimit=document.getElementById('emydog-vet')?.value||'';
+  const btn=document.getElementById('emydog-submit');
+  if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{
+    const result=await proxyClientWrite('updateDog',{dogId,breed,age,birthday,notes,emergencyVetLimit});
+    if(!result.ok)throw new Error(result.error||'Could not save.');
+    dog.breed=breed;dog.age=age;dog.birthday=birthday;dog.notes=notes;dog.emergencyVetLimit=emergencyVetLimit;
+    state.showModal=null;render();showToast(`${dog.name} updated! ✓`);
+  }catch(err){
+    showToast('Error: '+err.message,'#EF4444');
+    if(btn){btn.disabled=false;btn.textContent='Save Changes';}
+  }
+}
+// ─── END MY ACCOUNT ───────────────────────────────────────────────────────────
 function buildClientDog(){
   const cl=clients.find(c=>c.id===state.currentClientId);
   if(!cl)return'';
@@ -3460,6 +3674,7 @@ function buildModal(){
   if(m.type==='editDog')      return buildEditDogModal(m.clientId,m.dogId);
   if(m.type==='editInvoice')  return buildEditInvoiceModal(m.invoiceId);
   if(m.type==='addDog')       return buildAddDogModal();
+  if(m.type==='editMyDog')    return buildEditMyDogModal();
   return'';
 }
 function buildAddInvoiceModal(){
@@ -5289,14 +5504,16 @@ async function deleteService(id){
 // ─── DELETE CLIENT ────────────────────────────────────────────────────────────
 async function deleteClient(id){
   const cl=clients.find(c=>c.id===id);if(!cl)return;
-  if(!confirm(`Delete ${cl.name} and ALL their bookings? This cannot be undone.`))return;
+  if(!confirm(`Archive and remove ${cl.name}? Their data will be saved to the Archived tab in the spreadsheet so you can restore it if needed. This will also remove all their bookings from the calendar.`))return;
   const idx=clients.findIndex(c=>c.id===id);
   if(idx>=0)clients.splice(idx,1);
-  // Remove all bookings for this client
-  const bBefore=bookings.length;
   bookings.splice(0,bookings.length,...bookings.filter(b=>b.clientId!==id));
-  render();showToast(`${cl.name} deleted.`);
-  try{await persistClients();await persistBookings();}catch(e){showToast('Sheet sync failed.','#F97316');}
+  render();showToast(`${cl.name} archived & removed.`);
+  try{
+    await archiveClientToSheet(cl);
+    await persistClients();
+    await persistBookings();
+  }catch(e){showToast('Sheet sync failed — check your connection.','#F97316');}
 }
 // ─── CANCEL/DELETE BOOKING ────────────────────────────────────────────────────
 async function cancelBooking(id){
