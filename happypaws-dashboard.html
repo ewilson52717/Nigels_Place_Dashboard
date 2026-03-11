@@ -533,20 +533,25 @@ function buildVaccineRecordsHTML(dog){
     const daysLeft=exp?Math.round((exp-today)/864e5):null;
     const expired=daysLeft!==null&&daysLeft<0;
     const expiring=daysLeft!==null&&daysLeft>=0&&daysLeft<=60;
+    const dateUnclear=!latest.expiry;
     // Thin left accent strip instead of heavy full-background color
     const accentCls=expired?'bg-red-400':expiring?'bg-amber-400':exp?'bg-green-400':'bg-gray-300';
-    const statusIcon=expired?'🚩':expiring?'⚠️':exp?'✅':'📋';
-    const expiryColor=expired?'text-red-600 font-semibold':expiring?'text-amber-600 font-semibold':'text-gray-500';
+    const statusIcon=expired?'🚩':expiring?'⚠️':exp?'✅':dateUnclear?'❓':'📋';
+    const expiryColor=expired?'text-red-600 font-semibold':expiring?'text-amber-600 font-semibold':dateUnclear?'text-gray-400 italic':'text-gray-500';
+    // Date display: show value if present; if missing show context-appropriate label
+    const expiryDisplay=latest.expiry||( state.role==='client'?'Date unclear — pending review':'Date not found');
     const daysText=daysLeft!==null?(daysLeft<0?Math.abs(daysLeft)+'d ago':daysLeft===0?'today':'in '+daysLeft+'d'):'';
     const expandKey=String(dog.id)+':'+typeName;
     const isExpanded=_expandedVaccGroups.has(expandKey);
     // SMS reminder message (plain text for modal — not URI-encoded yet)
     const smsMessage=`Hi ${cl?.name||''}! 🐾 A note from Nigel's Place — ${dog.name}'s ${typeName} vaccination has ${expired?'expired':'is coming due soon'}. Could you please send us an updated record? Thank you!`;
     const needsReminder=expired||expiring;
+    const isClient=state.role==='client';
     const priorRowsHTML=prior.map(p=>{
       const pExp=p.expiry?new Date(p.expiry+'T00:00:00'):null;
       const pDays=pExp?Math.round((pExp-today)/864e5):null;
-      return`<div class="flex items-center justify-between py-1 px-3 pl-7 border-t border-gray-100 bg-gray-50"><span class="text-xs text-gray-400">↳ ${p.expiry||'no date'}</span>${pDays!==null?`<span class="text-xs text-gray-300">${Math.abs(pDays)}d ago</span>`:''}</div>`;
+      const pDisplay=p.expiry||(isClient?'Date unclear — pending review':'no date');
+      return`<div class="flex items-center justify-between py-1 px-3 pl-7 border-t border-gray-100 bg-gray-50"><span class="text-xs text-gray-400 ${p.expiry?'':'italic'}">↳ ${pDisplay}</span>${pDays!==null?`<span class="text-xs text-gray-300">${Math.abs(pDays)}d ago</span>`:''}</div>`;
     }).join('');
     const slug=vaccTypeSlug(typeName);
     // Use htmlJsonStr so double-quotes inside JS string args don't break onclick="..." attributes
@@ -556,13 +561,13 @@ function buildVaccineRecordsHTML(dog){
         <div class="flex items-center gap-2 px-2.5 py-1.5 bg-white hover:bg-gray-50/50">
           <span class="text-xs shrink-0">${statusIcon}</span>
           <span class="text-xs font-semibold text-gray-700 flex-1 truncate">${typeName}</span>
-          <span class="text-xs ${expiryColor} shrink-0">${latest.expiry||'—'}</span>
+          <span class="text-xs ${expiryColor} shrink-0">${expiryDisplay}</span>
           ${daysText?`<span class="text-xs text-gray-400 shrink-0">(${daysText})</span>`:''}
           <div class="flex items-center gap-1 shrink-0 ml-1">
-            ${needsReminder?`<button onclick="showSmsModal(${htmlJsonStr(phone)},${htmlJsonStr(smsMessage)})" title="Text reminder to ${cl?.name||'client'}" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200">💬</button>`:''}
+            ${!isClient&&needsReminder?`<button onclick="showSmsModal(${htmlJsonStr(phone)},${htmlJsonStr(smsMessage)})" title="Text reminder to ${cl?.name||'client'}" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200">💬</button>`:''}
             <button id="vtbtn-${dog.id}-${slug}" onclick="handleVaccTypeUpload(${dog.clientId},${dog.id},${htmlJsonStr(typeName)})" title="Upload updated ${typeName} record" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-gray-50 text-gray-500 hover:bg-gray-100 border border-gray-200">📄</button>
             ${prior.length>0?`<button onclick="toggleVaccGroup(${dog.id},${htmlJsonStr(typeName)})" title="${isExpanded?'Hide':'Show'} ${prior.length} prior" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-gray-50 text-gray-500 hover:bg-gray-100 border border-gray-200">${isExpanded?'▲':'▾'}<span class="ml-0.5 leading-none">${prior.length}</span></button>`:''}
-            <button onclick="deleteVaccEntry(${dog.clientId},${dog.id},${htmlJsonStr(typeName)})" title="Delete all ${typeName} records" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-red-50 text-red-400 hover:bg-red-100 border border-red-200">🗑️</button>
+            ${!isClient?`<button onclick="deleteVaccEntry(${dog.clientId},${dog.id},${htmlJsonStr(typeName)})" title="Delete all ${typeName} records" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-red-50 text-red-400 hover:bg-red-100 border border-red-200">🗑️</button>`:''}
           </div>
         </div>
         ${isExpanded&&prior.length>0?priorRowsHTML:''}
@@ -3190,7 +3195,7 @@ function buildDogsView(){
             </div>
             ${(()=>{try{const ov=dog.vaccOverride?JSON.parse(dog.vaccOverride):null;if(ov&&ov.until){const label=ov.until==='indefinite'?'Indefinitely waived by admin':`Extended until ${ov.until}`;const by=ov.by?` · by ${ov.by}`:'';return `<div class="mb-3 flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium" style="background:#FFF7ED;border:1px solid #FED7AA;color:#C2410C;">🔓 Vaccine requirement overridden — ${label}${by}</div>`;}return'';}catch(e){return'';}})()}
             ${buildVaccineRecordsHTML(dog)}
-            ${dog.driveFileLink?`<a href="${dog.driveFileLink}" target="_blank" class="mt-3 inline-flex items-center gap-1.5 text-xs text-blue-600 hover:underline">📂 View original record in Drive →</a>`:''}
+            ${state.role!=='client'&&dog.driveFileLink?`<a href="${dog.driveFileLink}" target="_blank" class="mt-3 inline-flex items-center gap-1.5 text-xs text-blue-600 hover:underline">📂 View original record in Drive →</a>`:''}
           </div>
           <!-- Play Photos -->
           <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
@@ -5163,12 +5168,18 @@ function buildVaccinesLightbox(){
       <div class="text-xs text-gray-400 mt-1">Upload a vet record above and AI will automatically extract all vaccine names and expiry dates.</div>
     </div>`}
 
-    ${dog.driveFileLink?`
+    ${state.role!=='client'&&dog.driveFileLink?`
     <div class="mt-2">
       <a href="${dog.driveFileLink}" target="_blank" rel="noopener"
         class="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:underline">
         📂 View uploaded record in Google Drive →
       </a>
+    </div>`:''}
+
+    ${state.role==='client'?`
+    <div class="mt-3 rounded-xl px-3 py-2.5 text-xs text-gray-400 flex items-start gap-2" style="background:#F9FAFB;border:1px solid #E5E7EB;">
+      <span class="shrink-0">🔍</span>
+      <span>Dates shown are read from your uploaded records. Our team reviews and confirms accuracy — if anything looks off, we'll reach out.</span>
     </div>`:''}
 
     <div class="mt-4 pt-3 border-t border-gray-100 flex justify-end">
@@ -6200,7 +6211,7 @@ async function handleVaccTypeUpload(clientId, dogId, vaccTypeName){
           updateVaccOverlay('📂 Saving to Drive…');
           const df=await uploadVaccRecord(file,clientName);
           savedDriveLink=df.webViewLink||'';
-          showToast('✅ Saved to Drive → Client Vaccine Records / '+clientName);
+          if(state.role!=='client')showToast('✅ Saved to Drive → Client Vaccine Records / '+clientName);
         }catch(e){showToast('⚠️ Drive save failed — continuing with scan.','#F97316');console.warn(e);}
       }
       // Step 4: Parse with Gemini (pass vet name for authenticity cross-reference)
