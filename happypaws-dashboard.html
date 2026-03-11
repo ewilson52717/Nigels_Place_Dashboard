@@ -292,7 +292,9 @@ function loadMockData(){
 // ═══════════════════════════════════════════════════
 //  ⑤  HELPERS
 // ═══════════════════════════════════════════════════
-const TODAY=new Date().toISOString().split('T')[0];
+// Use local date components — toISOString() is UTC and shifts the date for US evening timezones
+const _tNow=new Date();
+const TODAY=`${_tNow.getFullYear()}-${String(_tNow.getMonth()+1).padStart(2,'0')}-${String(_tNow.getDate()).padStart(2,'0')}`;
 const booksForDate=ds=>bookings.filter(b=>{
   if(b.status==='cancelled')return false;
   const ci=b.checkIn||b.date||'',co=b.checkOut||ci;
@@ -2007,8 +2009,8 @@ function buildDashboard(){
   const monthBks=bookings.filter(b=>(b.checkIn||'').startsWith(monthPfx)&&b.status!=='cancelled').length;
   const overdue=invoices.filter(i=>i.status==='overdue').reduce((s,i)=>s+(i.amount-i.paid),0);
   const upcoming=bookings.filter(b=>b.checkIn>TODAY&&b.status==='confirmed').sort((a,b)=>a.checkIn.localeCompare(b.checkIn)).slice(0,5);
-  // Next 3 days for the mini calendar view
-  const next3=[];for(let i=1;i<=3;i++){const nd=new Date(now);nd.setDate(nd.getDate()+i);next3.push(nd.toISOString().split('T')[0]);}
+  // Next 3 days — use local date components to avoid UTC timezone shift skipping days
+  const next3=[];for(let i=1;i<=3;i++){const nd=new Date(now);nd.setDate(nd.getDate()+i);next3.push(mkDs(nd.getFullYear(),nd.getMonth(),nd.getDate()));}
   const greetHour=now.getHours();
   const greet=greetHour<12?'Good morning':greetHour<17?'Good afternoon':'Good evening';
   const todayFmt=now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
@@ -2065,21 +2067,26 @@ function buildDashboard(){
               hasGrooming?`<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">✂️ Grooming</span>`:'',
               hasBoarding?`<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">🏨 Boarding</span>`:'',
             ].filter(Boolean).join('');
-            return`<div class="rounded-xl border ${dayBks.length===0?'border-gray-100 bg-gray-50/60':'border-amber-100 bg-amber-50/40'} p-3">
+            const isClosed=cap===0;
+            return`<div class="rounded-xl border ${isClosed?'border-gray-200 bg-gray-50':dayBks.length===0?'border-gray-100 bg-gray-50/60':'border-amber-100 bg-amber-50/40'} p-3">
               <div class="flex items-center justify-between mb-1.5">
-                <span class="text-xs font-bold text-gray-700">${dayLabel}</span>
+                <span class="text-xs font-bold ${isClosed?'text-gray-400':'text-gray-700'}">${dayLabel}</span>
                 <div class="flex items-center gap-1.5">
                   ${tagHtml}
-                  <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full ${dayBks.length===0?'bg-gray-100 text-gray-400':dayBks.length>=cap?'bg-red-100 text-red-600':'bg-amber-100 text-amber-700'}">${dayBks.length}/${cap}</span>
+                  ${isClosed
+                    ?`<span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">🔒 Closed</span>`
+                    :`<span class="text-[11px] font-semibold px-2 py-0.5 rounded-full ${dayBks.length===0?'bg-gray-100 text-gray-400':dayBks.length>=cap?'bg-red-100 text-red-600':'bg-amber-100 text-amber-700'}">${dayBks.length}/${cap}</span>`}
                 </div>
               </div>
-              ${dayBks.length===0
-                ?'<p class="text-gray-300 text-xs">No bookings</p>'
-                :dayBks.map(b=>`<div class="flex items-center gap-2 py-0.5">
-                  <span class="text-xs">🐶</span>
-                  <span class="text-xs font-medium text-gray-700 flex-1 truncate">${b.dogName}</span>
-                  <span class="text-[10px] text-gray-400 truncate max-w-[80px]">${b.service}${b.addons?` · ${b.addons.split(',')[0]}`:''}${b.nights>1?` · ${b.nights}d`:''}</span>
-                </div>`).join('')}
+              ${isClosed
+                ?'<p class="text-gray-300 text-xs">🔒 No bookings accepted</p>'
+                :dayBks.length===0
+                  ?'<p class="text-gray-300 text-xs">No bookings</p>'
+                  :dayBks.map(b=>`<div class="flex items-center gap-2 py-0.5">
+                    <span class="text-xs">🐶</span>
+                    <span class="text-xs font-medium text-gray-700 flex-1 truncate">${b.dogName}</span>
+                    <span class="text-[10px] text-gray-400 truncate max-w-[80px]">${b.service}${b.addons?` · ${b.addons.split(',')[0]}`:''}${b.nights>1?` · ${b.nights}d`:''}</span>
+                  </div>`).join('')}
             </div>`;
           }).join('')}
           </div>
