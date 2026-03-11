@@ -1093,17 +1093,56 @@ function enterDemo(roleChoice){
   state.showModal=null;render();
 }
 function signOut(){
-  // Do NOT revoke the token and do NOT clear the cached access token / expiry.
-  // This lets the silent sign-in re-authenticate within the ~1-hour token lifetime
-  // without showing the Google account picker again — the user just clicks Sign In.
+  // Soft sign-out: keep the cached access token so returning within ~1 hour
+  // skips the Google account picker entirely (silent re-auth).
   if(autoRefreshTimer)clearInterval(autoRefreshTimer);
   Object.assign(state,{role:'login',mode:null,accessToken:null,userEmail:null,
-    sheetId:CONFIG.SHEET_ID||null,sheetUrl:null,showModal:null,currentClientId:null});
-  // Keep np_email so silent sign-in can use login_hint to skip the account picker.
-  // Keep np_access_token / np_token_expiry so the token can be reused within 1 hour.
+    sheetId:CONFIG.SHEET_ID||null,sheetUrl:null,showModal:null,currentClientId:null,
+    _proxyErrorMsg:null,_lastProxyError:null});
+  // Keep np_email + np_access_token + np_token_expiry for 1-hour silent re-auth.
   localStorage.removeItem('np_admin_as_client');
   localStorage.removeItem('np_admin_client_id');
   clients=[];bookings=[];invoices=[];services=[];lastSynced=null;render();
+}
+function switchAccount(){
+  // Hard sign-out: revoke the token, clear ALL cached credentials.
+  // Forces the Google account picker on next sign-in so a different account can be used.
+  try{if(state.accessToken&&typeof google!=='undefined')google.accounts.oauth2.revoke(state.accessToken,()=>{});}catch(e){}
+  if(autoRefreshTimer)clearInterval(autoRefreshTimer);
+  Object.assign(state,{role:'login',mode:null,accessToken:null,userEmail:null,
+    sheetId:CONFIG.SHEET_ID||null,sheetUrl:null,showModal:null,currentClientId:null,
+    _proxyErrorMsg:null,_lastProxyError:null});
+  // Clear everything — next sign-in MUST go through the Google account picker.
+  localStorage.removeItem('np_email');
+  localStorage.removeItem('np_access_token');
+  localStorage.removeItem('np_token_expiry');
+  localStorage.removeItem('np_admin_as_client');
+  localStorage.removeItem('np_admin_client_id');
+  clients=[];bookings=[];invoices=[];services=[];lastSynced=null;
+  // If Google Identity Services is loaded, revoke any cached session too
+  try{if(typeof google!=='undefined')google.accounts.id.disableAutoSelect();}catch(e){}
+  render();
+}
+async function retryClientLogin(){
+  // Used by the Connection Problem screen — retries the proxy without a full page reload.
+  state.role='login';state.isLoading=true;state.loadingMsg='Retrying…';render();
+  try{
+    const proxyStatus=await loadClientDataViaProxy();
+    const email=(state.userEmail||'').toLowerCase();
+    const cl=clients.find(c=>c.email.toLowerCase()===email);
+    if(cl){
+      state.role='client';state.currentClientId=cl.id;
+      try{history.replaceState({role:'client',clientView:'home'},'',' ');}catch(e){}
+    }else if(proxyStatus==='not_registered'){
+      state.role='onboarding';state.onboardingStep=1;state.onboardingData={};
+    }else{
+      state._proxyErrorMsg=state._lastProxyError||'Unknown error';
+      state.role='client_error';
+    }
+  }catch(e){
+    state._proxyErrorMsg=e.message;state.role='client_error';
+  }
+  state.isLoading=false;render();
 }
 
 // ═══════════════════════════════════════════════════
@@ -1666,21 +1705,33 @@ function buildApp(){
   return'';
 }
 function buildClientError(){
+  const errMsg=state._proxyErrorMsg||'';
+  const isUnknownAction=errMsg.toLowerCase().includes('unknown action');
+  const adminNote=isUnknownAction
+    ?`<div style="background:rgba(255,200,0,0.12);border:1px solid rgba(255,200,0,0.3);border-radius:8px;padding:.65rem .9rem;max-width:340px;margin-bottom:1rem;color:rgba(255,220,100,0.9);font-size:0.78rem;line-height:1.5;text-align:left;">
+        ⚠️ <strong>Admin action required:</strong> The Apps Script needs to be redeployed with the latest version.<br>
+        Go to <em>script.google.com</em> → open <em>NigelsPlace_ClientProxy</em> → Deploy → Manage deployments → Edit → <strong>New version</strong> → Deploy.
+      </div>`
+    :'';
   return`<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#3d1a08,#5C3317);font-family:system-ui,sans-serif;padding:2rem;text-align:center;">
     <img src="${LOGO_URL}" style="width:72px;border-radius:50%;margin-bottom:1.2rem;background:rgba(255,255,255,0.1);padding:8px;">
     <div style="color:#fff;font-size:1.25rem;font-weight:700;margin-bottom:.5rem;">Connection Problem</div>
     <div style="color:rgba(255,200,120,0.85);font-size:.9rem;max-width:320px;margin-bottom:1rem;line-height:1.5;">
-      We couldn't reach your profile. If you have an existing account, please try again or contact Nigel's Place directly.
+      We couldn't reach your profile. Please try again or use a different account.
     </div>
-    <div style="color:rgba(255,255,255,0.3);font-size:0.72rem;max-width:340px;margin-bottom:1.8rem;font-family:monospace;word-break:break-all;line-height:1.6;text-align:left;background:rgba(0,0,0,0.25);padding:.6rem .9rem;border-radius:8px;">
+    ${adminNote}
+    <div style="color:rgba(255,255,255,0.3);font-size:0.72rem;max-width:340px;margin-bottom:1.6rem;font-family:monospace;word-break:break-all;line-height:1.6;text-align:left;background:rgba(0,0,0,0.25);padding:.6rem .9rem;border-radius:8px;">
       Signed in as: ${state.userEmail||'unknown'}<br>
       Proxy: ${CONFIG.APPS_SCRIPT_URL?'configured ✓':'not configured ✗'}<br>
-      ${state._proxyErrorMsg?`Error: ${state._proxyErrorMsg}`:''}
+      ${errMsg?`Error: ${errMsg}`:''}
     </div>
-    <button onclick="location.reload()" style="background:#C4952A;color:#fff;border:none;border-radius:12px;padding:.75rem 2rem;font-size:.95rem;font-weight:600;cursor:pointer;margin-bottom:.75rem;">
+    <button onclick="retryClientLogin()" style="background:#C4952A;color:#fff;border:none;border-radius:12px;padding:.75rem 2rem;font-size:.95rem;font-weight:600;cursor:pointer;margin-bottom:.65rem;width:220px;">
       🔄 Try Again
     </button>
-    <button onclick="signOut()" style="background:none;color:rgba(255,255,255,0.45);border:none;font-size:.8rem;cursor:pointer;margin-top:.25rem;">
+    <button onclick="switchAccount()" style="background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.25);border-radius:12px;padding:.65rem 2rem;font-size:.88rem;font-weight:500;cursor:pointer;margin-bottom:.65rem;width:220px;">
+      🔀 Use a Different Account
+    </button>
+    <button onclick="signOut()" style="background:none;color:rgba(255,255,255,0.35);border:none;font-size:.78rem;cursor:pointer;margin-top:.1rem;text-decoration:underline;">
       Sign out
     </button>
   </div>`;
@@ -1763,8 +1814,15 @@ function buildLogin(){
           <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
           <path fill="none" d="M0 0h48v48H0z"/>
         </svg>
-        <span>Sign in with Google</span>
+        <span>${localStorage.getItem('np_email')?`Continue as ${localStorage.getItem('np_email').split('@')[0]}`:'Sign in with Google'}</span>
       </button>
+      ${localStorage.getItem('np_email')?`
+      <div style="text-align:center;margin-top:.6rem;">
+        <button onclick="switchAccount()" style="background:none;border:none;cursor:pointer;color:#9CA3AF;font-size:0.72rem;text-decoration:underline;font-family:inherit;">
+          Use a different account
+        </button>
+      </div>`:''}
+      <!-- ─── Demo mode ─── -->
 
       <!-- Privacy / Terms -->
       <div class="text-center" style="margin-top:1.5rem;font-size:0.68rem;color:#C4C9D4;">
