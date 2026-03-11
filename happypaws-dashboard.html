@@ -3138,7 +3138,8 @@ function buildClientHome(){
   const dogs=(cl?.dogs||[]).filter(d=>!d.deceased);
   const allDogs=cl?.dogs||[];
   // ── Onboarding milestone checklist ────────────────────────────────────────
-  const hasAnyDog=allDogs.length>0;
+  const hasAnyDog=dogs.length>0; // only counts ACTIVE (non-deceased) dogs
+  const allDeceased=allDogs.length>0&&dogs.length===0; // had dogs but all are Rainbow Bridge
   // Vaccine OK = has active dogs and ALL of them have required vaccines, non-expired
   const vaccOk=dogs.length>0&&dogs.every(d=>hasRequiredVaccines(d));
   const anyVaccExpired=dogs.some(d=>(d.vaccines||[]).some(v=>v.expiry&&v.expiry<TODAY));
@@ -3155,7 +3156,16 @@ function buildClientHome(){
   const allDone=steps.every(s=>s.done);
   const doneCt=steps.filter(s=>s.done).length;
   // ── Horizontal milestone bar HTML ─────────────────────────────────────────
-  const checklistHtml=allDone?'':`
+  // Special case: all dogs are Rainbow Bridge → skip the checklist entirely,
+  // show a warm "no active pets" banner with an Add a Dog prompt instead.
+  const noPetsBanner=allDeceased?`
+  <div class="mb-5 rounded-2xl border border-gray-200 bg-white p-5 flex flex-col items-center text-center gap-2 shadow-sm">
+    <div style="font-size:2rem;line-height:1;">🐾</div>
+    <div class="font-semibold text-gray-700 text-sm">No active pets on your profile</div>
+    <div class="text-xs text-gray-400 leading-snug max-w-xs">It looks like there are currently no dogs linked to your account. Ready to add a new furry family member?</div>
+    <button onclick="setClientView('mydog')" class="mt-2 px-5 py-2 text-white text-xs font-semibold rounded-xl" style="background:#7B4015">Add a Dog Profile →</button>
+  </div>`:'';
+  const checklistHtml=allDeceased?'':allDone?'':`
   <div class="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 pb-5">
     <div class="flex items-center justify-between mb-4">
       <span class="font-semibold text-amber-900 text-sm">Getting started</span>
@@ -3188,9 +3198,19 @@ function buildClientHome(){
     </div>`:''}
   </div>`;
   // ── Vaccine-gated calendar ─────────────────────────────────────────────────
-  // If the client has dogs but vaccine issue: show a lock banner over the calendar.
+  // If all dogs are Rainbow Bridge: show a gentle "add a pup to book" lock.
+  // If the client has active dogs but vaccine issue: show the vaccine lock.
   const showVaccLock=hasAnyDog&&anyVaccMissing;
-  const calendarSection=showVaccLock?`
+  const calendarSection=allDeceased?`
+  <div class="relative">
+    <div style="filter:blur(2px);pointer-events:none;user-select:none;opacity:0.35;">${buildCalendarView('client')}</div>
+    <div class="absolute inset-0 flex flex-col items-center justify-center rounded-2xl" style="background:rgba(255,255,255,0.85);z-index:10;">
+      <div style="font-size:2.5rem;margin-bottom:.75rem;">🐾</div>
+      <div class="text-lg font-bold text-gray-800 mb-1">Ready When You Are</div>
+      <div class="text-sm text-gray-500 text-center max-w-xs mb-4">Add a dog profile to start booking stays.</div>
+      <button onclick="setClientView('mydog')" class="px-5 py-2.5 text-white text-sm font-semibold rounded-xl" style="background:#7B4015">Add a Dog Profile →</button>
+    </div>
+  </div>`:showVaccLock?`
   <div class="relative">
     <div style="filter:blur(2px);pointer-events:none;user-select:none;opacity:0.4;">${buildCalendarView('client')}</div>
     <div class="absolute inset-0 flex flex-col items-center justify-center rounded-2xl" style="background:rgba(255,255,255,0.82);z-index:10;">
@@ -3201,11 +3221,13 @@ function buildClientHome(){
     </div>
   </div>`:buildCalendarView('client');
   // ──────────────────────────────────────────────────────────────────────────
+  const dogName=dogs[0]?.name||'your pup';
   return`<div class="slide-in">
+  ${noPetsBanner}
   ${checklistHtml}
   <div class="mb-5">
     <h1 class="text-2xl font-bold text-gray-800">Book a Stay 🐾</h1>
-    <p class="text-gray-400 text-sm mt-1">Select available days to book a stay for ${dogs[0]?.name||cl?.dogs[0]?.name||'your pup'}.</p></div>
+    <p class="text-gray-400 text-sm mt-1">${allDeceased?'Add a dog profile to get started.':`Select available days to book a stay for ${dogName}.`}</p></div>
     ${calendarSection}</div>`;
 }
 function buildClientBookings(){
