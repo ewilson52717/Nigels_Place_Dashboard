@@ -92,6 +92,14 @@ const CONFIG = {
   SHEET_ID:     '1hQEJB1tFOAk8RoQTyH2Ovkk56psVIJfLjuvlj_URTeg',
   API_BASE:     'https://sheets.googleapis.com/v4/spreadsheets',
   ADMIN_EMAILS: ['elyserwilson@gmail.com', 'kellyhendrickson1@yahoo.com'],
+  // ─── APPS SCRIPT PROXY ────────────────────────────────────────────────────
+  // REQUIRED for new client self-registration (onboarding).
+  // New clients can't read your private Google Sheet, so the proxy URL must be
+  // baked into this file. Paste your deployed Apps Script web app URL below.
+  // It must also be set in Settings → Apps Script Proxy URL (that value is used
+  // by the admin and existing clients; this CONFIG value is used by new clients
+  // who can't yet read the sheet).
+  APPS_SCRIPT_URL: '',
   // ─── KIOSK MODE ───────────────────────────────────────────────────────────
   // 1. Create a Sheets API key in Google Cloud Console → APIs & Services → Credentials
   // 2. Set your Google Sheet to "Anyone with link can view" (Share → Anyone with link → Viewer)
@@ -904,6 +912,11 @@ function toggleVaccGroup(dogId,typeName){
 }
 function initGoogleAuth(){
   if(typeof google==='undefined'){setTimeout(initGoogleAuth,300);return;}
+  // Seed CONFIG.APPS_SCRIPT_URL from localStorage if it wasn't baked into the HTML.
+  // This is written by saveSettings() every time the admin saves the proxy URL, so any
+  // browser the admin has used will have a cached copy — new clients on the same device
+  // (or who receive a link from a browser where the admin has logged in) benefit from this.
+  if(!CONFIG.APPS_SCRIPT_URL){try{const _ls=localStorage.getItem('np_apps_script_url');if(_ls)CONFIG.APPS_SCRIPT_URL=_ls;}catch(e){}}
   // Single token client — Sheets + Drive + userinfo in ONE request.
   // This means one Google sign-in permission prompt ever, and zero separate Drive popup on upload.
   tokenClient=google.accounts.oauth2.initTokenClient({
@@ -1395,8 +1408,16 @@ function verifyKioskPassword(){
 // Their own OAuth token has no write access, so we POST to an Apps Script Web App
 // that runs as Elyse (the sheet owner), verifies the token, then writes for them.
 async function proxyClientWrite(action, payload){
-  const url=(state.settings.appsScriptUrl||'').trim();
-  if(!url)throw new Error('No Apps Script proxy URL configured — ask your admin to add it in Settings.');
+  // Resolution order for the proxy URL:
+  //   1. CONFIG.APPS_SCRIPT_URL  — baked into the HTML file (works for new clients who
+  //      can't read the sheet yet, because they don't have access to the admin's sheet)
+  //   2. localStorage fallback   — saved by the admin the last time they saved Settings
+  //      on this browser (covers the case where CONFIG wasn't updated but the admin's
+  //      browser set the cached value)
+  //   3. state.settings           — loaded from sheet (works for admin + existing clients)
+  const _lsUrl=(()=>{try{return localStorage.getItem('np_apps_script_url')||'';}catch(e){return'';}})();
+  const url=(CONFIG.APPS_SCRIPT_URL||_lsUrl||state.settings.appsScriptUrl||'').trim();
+  if(!url)throw new Error('No Apps Script proxy URL configured — ask your admin to add it in Settings (and set CONFIG.APPS_SCRIPT_URL in the HTML file for new client registration).');
   const token=state.accessToken;
   if(!token)throw new Error('Not signed in.');
   // MUST use text/plain — application/json triggers a CORS preflight OPTIONS request
@@ -2745,10 +2766,11 @@ function buildSettingsView(){
       </div>
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
         <h2 class="font-semibold text-gray-800 mb-1">🔗 Client Portal Proxy</h2>
-        <p class="text-xs text-gray-400 mb-3">New clients sign in with their own Google account, which can't write directly to your private sheet. Paste your Apps Script Web App URL here to route their onboarding, vet-limit updates, and cancellations through a secure proxy that runs as you. <strong class="text-gray-500">Without this, new client registrations will fail.</strong></p>
+        <p class="text-xs text-gray-400 mb-3">New clients sign in with their own Google account, which can't read your private sheet — so the proxy URL must be available before they can reach it. This page saves it to your browser's cache automatically. <strong class="text-gray-500">For the most reliable setup, also paste the URL into <code class="bg-amber-50 text-amber-800 px-1 rounded">CONFIG.APPS_SCRIPT_URL</code> near the top of the HTML file.</strong> Without the proxy configured, new client registrations will fail.</p>
         <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Apps Script Web App URL</label>
           <input id="set-apps-script-url" type="url" placeholder="https://script.google.com/macros/s/AKfy…/exec" value="${state.settings.appsScriptUrl||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
-          <p class="text-xs text-gray-400 mt-1">Deploy your <em>NigelsPlace_ClientProxy.gs</em> script as a Web App (Execute as: Me, Who can access: Anyone) and paste the URL above.</p>
+          <p class="text-xs text-gray-400 mt-1">Deploy your <em>NigelsPlace_ClientProxy.gs</em> script as a Web App (Execute as: Me, Who can access: Anyone). Saving here caches the URL in this browser — for permanent reliability, also copy it into <code class="bg-gray-100 px-1 rounded">CONFIG.APPS_SCRIPT_URL</code> in the HTML source.</p>
+          ${CONFIG.APPS_SCRIPT_URL?`<p class="text-xs text-emerald-600 mt-1">✅ CONFIG.APPS_SCRIPT_URL is set — new clients will always be able to register.</p>`:`<p class="text-xs text-amber-600 mt-1">⚠️ CONFIG.APPS_SCRIPT_URL is not set in the HTML. Saving this field caches the URL in your browser as a fallback, but it's best to also paste it into CONFIG.APPS_SCRIPT_URL in the source.</p>`}
         </div>
       </div>
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
@@ -4835,7 +4857,7 @@ async function saveSettings(){
   const sqKey=v('set-square-api-key')?.trim();if(sqKey!==undefined)state.settings.squareApiKey=sqKey;
   const sqLoc=v('set-square-location')?.trim();if(sqLoc!==undefined)state.settings.squareLocationId=sqLoc;
   const gk=v('set-gemini')?.trim();if(gk!==undefined)state.settings.geminiApiKey=gk;
-  const asUrl=v('set-apps-script-url')?.trim();if(asUrl!==undefined)state.settings.appsScriptUrl=asUrl;
+  const asUrl=v('set-apps-script-url')?.trim();if(asUrl!==undefined){state.settings.appsScriptUrl=asUrl;CONFIG.APPS_SCRIPT_URL=asUrl;try{if(asUrl)localStorage.setItem('np_apps_script_url',asUrl);else localStorage.removeItem('np_apps_script_url');}catch(e){}}
   const kpw=v('set-kiosk-password');if(kpw!==undefined)state.settings.kioskPassword=kpw.trim();
   const dfid=v('set-drive-folder')?.trim();
   if(dfid!==undefined){
