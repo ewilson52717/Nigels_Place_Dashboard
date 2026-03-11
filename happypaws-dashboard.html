@@ -1050,19 +1050,11 @@ async function onToken(resp){
         try{history.replaceState({role:'client',clientView:'home'},'',' ');}catch(e){}
       }
       else if(proxyStatus==='error'){
-        // Proxy unreachable — could be a returning client whose data we can't reach right now.
-        // Check if we've seen this email before; if so, show a reconnect screen rather than onboarding.
-        const cachedEmail=(()=>{try{return localStorage.getItem('np_client_email')||'';}catch(e){return '';}})();
-        if(cachedEmail===email){
-          // Returning client — don't wipe their account with onboarding!
-          showToast('Having trouble reaching your profile. Check your connection and try again.','#F59E0B');
-          state.role='client_error'; // render() will show a retry screen
-        }else{
-          // First time seeing this email AND proxy is broken — could be new or returning.
-          // Show a helpful error rather than an onboarding form that could duplicate accounts.
-          showToast('Could not connect to the portal. Please check your connection.','#EF4444');
-          state.role='client_error';
-        }
+        // Proxy unreachable — show a reconnect screen rather than onboarding.
+        // Store error detail so the debug UI can show it.
+        state._proxyErrorMsg=state._lastProxyError||'Unknown error';
+        showToast('Could not reach the client portal. Please try again.','#EF4444');
+        state.role='client_error';
       }
       else{
         // Proxy responded successfully but this email has no record — genuinely new client.
@@ -1101,13 +1093,14 @@ function enterDemo(roleChoice){
   state.showModal=null;render();
 }
 function signOut(){
-  if(state.accessToken&&typeof google!=='undefined')google.accounts.oauth2.revoke(state.accessToken);
+  // Do NOT revoke the token and do NOT clear the cached access token / expiry.
+  // This lets the silent sign-in re-authenticate within the ~1-hour token lifetime
+  // without showing the Google account picker again — the user just clicks Sign In.
   if(autoRefreshTimer)clearInterval(autoRefreshTimer);
   Object.assign(state,{role:'login',mode:null,accessToken:null,userEmail:null,
     sheetId:CONFIG.SHEET_ID||null,sheetUrl:null,showModal:null,currentClientId:null});
-  localStorage.removeItem('np_email');
-  localStorage.removeItem('np_access_token');
-  localStorage.removeItem('np_token_expiry');
+  // Keep np_email so silent sign-in can use login_hint to skip the account picker.
+  // Keep np_access_token / np_token_expiry so the token can be reused within 1 hour.
   localStorage.removeItem('np_admin_as_client');
   localStorage.removeItem('np_admin_client_id');
   clients=[];bookings=[];invoices=[];services=[];lastSynced=null;render();
@@ -1590,9 +1583,21 @@ async function loadClientDataViaProxy(){
     return 'found';
 
   }catch(e){
-    // Proxy unreachable, URL not configured, or network error.
-    // Do NOT treat this as "not registered" — returning user would lose their account.
+    // proxyClientWrite throws for BOTH network failures AND Apps Script {ok:false} responses.
+    // We must distinguish them so a "no account yet" doesn't look like a broken connection.
+    const msg=(e.message||'').toLowerCase();
+    const isNotRegistered=
+      msg.includes('no client record')||
+      msg.includes('complete registration')||
+      msg.includes('not yet registered')||
+      msg.includes('no client found');
+    if(isNotRegistered){
+      console.log('loadClientDataViaProxy: email not yet registered → onboarding');
+      return 'not_registered';
+    }
+    // True error: network down, CORS, bad HTTP status, proxy URL missing, etc.
     console.warn('loadClientDataViaProxy error:',e.message);
+    state._lastProxyError=e.message; // captured for the error screen debug info
     return 'error';
   }
 }
@@ -1664,8 +1669,13 @@ function buildClientError(){
   return`<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#3d1a08,#5C3317);font-family:system-ui,sans-serif;padding:2rem;text-align:center;">
     <img src="${LOGO_URL}" style="width:72px;border-radius:50%;margin-bottom:1.2rem;background:rgba(255,255,255,0.1);padding:8px;">
     <div style="color:#fff;font-size:1.25rem;font-weight:700;margin-bottom:.5rem;">Connection Problem</div>
-    <div style="color:rgba(255,200,120,0.85);font-size:.9rem;max-width:300px;margin-bottom:1.8rem;line-height:1.5;">
-      We couldn't reach your profile right now. This is usually a temporary issue — please try again.
+    <div style="color:rgba(255,200,120,0.85);font-size:.9rem;max-width:320px;margin-bottom:1rem;line-height:1.5;">
+      We couldn't reach your profile. If you have an existing account, please try again or contact Nigel's Place directly.
+    </div>
+    <div style="color:rgba(255,255,255,0.3);font-size:0.72rem;max-width:340px;margin-bottom:1.8rem;font-family:monospace;word-break:break-all;line-height:1.6;text-align:left;background:rgba(0,0,0,0.25);padding:.6rem .9rem;border-radius:8px;">
+      Signed in as: ${state.userEmail||'unknown'}<br>
+      Proxy: ${CONFIG.APPS_SCRIPT_URL?'configured ✓':'not configured ✗'}<br>
+      ${state._proxyErrorMsg?`Error: ${state._proxyErrorMsg}`:''}
     </div>
     <button onclick="location.reload()" style="background:#C4952A;color:#fff;border:none;border-radius:12px;padding:.75rem 2rem;font-size:.95rem;font-weight:600;cursor:pointer;margin-bottom:.75rem;">
       🔄 Try Again
@@ -2212,7 +2222,7 @@ function buildClientLayout(){
           ${cl?cl.name[0]:'?'}
         </div>
         <span class="text-sm text-gray-600 font-medium hidden sm:inline max-w-[100px] truncate">${cl?.name||'Guest'}</span>
-        <button onclick="signOut()" class="text-xs text-gray-400 hover:text-gray-600 px-1">✕</button>
+        <button onclick="signOut()" class="text-xs text-gray-400 hover:text-red-500 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors hidden sm:inline-block" title="Sign out">Sign out</button>
       </div>
     </header>
     <div class="max-w-5xl mx-auto p-3 sm:p-5">
