@@ -2738,14 +2738,10 @@ function buildSettingsView(){
         <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Default Max Per Day</label>
         <input id="set-cap" type="number" value="${state.settings.dailyCapacity}" min="1" max="100" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mb-5">
 
-        <!-- Days Off moved to Calendar view -->
+        <!-- Days Off lives in Calendar view -->
         <div class="flex items-center gap-3 p-3 rounded-xl border border-amber-100 bg-amber-50 mt-1 mb-1">
           <span class="text-lg">📅</span>
-          <div class="flex-1 min-w-0">
-            <p class="text-xs font-semibold text-amber-800">Days Off &amp; Capacity Overrides have moved!</p>
-            <p class="text-xs text-amber-700 mt-0.5">Manage closed days, vacation blocks, and custom capacity right from the calendar — hit the <strong>Days Off ▾</strong> button in the Schedule view.</p>
-          </div>
-          <button onclick="setView('calendar')" class="flex-shrink-0 px-3 py-1.5 text-white rounded-xl text-xs font-semibold" style="background:#7B4015">Go →</button>
+          <p class="text-xs text-amber-800 flex-1 min-w-0">For <strong>Days Off &amp; Capacity</strong>, head to the <button onclick="setView('calendar')" class="underline font-semibold text-amber-900 hover:text-amber-700">Calendar section</button> and tap <strong>Days Off ▾</strong> at the top.</p>
         </div>
       </div>
       <div class="bg-amber-50 rounded-xl p-4 border border-amber-100 text-sm text-amber-800">
