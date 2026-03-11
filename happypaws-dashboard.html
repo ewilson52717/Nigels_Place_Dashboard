@@ -2131,10 +2131,15 @@ function buildCalendarView(role){
       </div>
     </div>
     <div class="flex items-center gap-3 sm:gap-5 mb-4 text-xs text-gray-500 flex-wrap">
-      <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#10B981;display:inline-block"></span>Available</span>
-      <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#EAB308;display:inline-block"></span>Filling Up</span>
-      <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#F97316;display:inline-block"></span>Almost Full</span>
-      <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#EF4444;display:inline-block"></span>Full 🚫</span>
+      ${isClient?`
+        <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:3px;background:white;border:1px solid #E5E7EB;display:inline-block"></span>Available — tap to book</span>
+        <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:3px;background:#F3F4F6;border:1px solid #D1D5DB;display:inline-block"></span>Unavailable</span>
+      `:`
+        <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#10B981;display:inline-block"></span>Available</span>
+        <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#EAB308;display:inline-block"></span>Filling Up</span>
+        <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#F97316;display:inline-block"></span>Almost Full</span>
+        <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#EF4444;display:inline-block"></span>Full 🚫</span>
+      `}
     </div>
 
     <!-- ── Days Off / Capacity Management panel (admin only) ──────── -->
@@ -3048,7 +3053,11 @@ function buildAddInvoiceModal(){
 function buildDayModal(ds){
   const bks=booksForDate(ds),cap=getEffectiveCap(ds),c=capColor(bks.length,cap);
   const isClosed=cap===0;
-  const full=isClosed||bks.length>=cap,isPast=ds<TODAY,isAdm=state.role==='admin';
+  const full=isClosed||bks.length>=cap,isPast=ds<TODAY;
+  // isAdm: true only for real admin view — NOT during admin-as-client preview or real client session
+  const isAdm=state.role==='admin'&&!state.adminViewAsClient;
+  // Bookings visible to client: only their own
+  const visibleBks=isAdm?bks:bks.filter(b=>b.clientId===state.currentClientId);
   return`
   <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 slide-in">
@@ -3058,25 +3067,31 @@ function buildDayModal(ds){
       </div>
       <div class="flex items-center gap-3 p-3 rounded-xl mb-4" style="background:${c.bg}">
         <div class="text-2xl">${isClosed?'🔒':full?'🚫':'🐾'}</div>
-        <div>
-          <div class="font-semibold text-sm" style="color:${c.txt}">${isClosed?'Closed — no bookings this day':bks.length+'/'+cap+' dogs · '+c.label}</div>
-          ${isClosed?`<div class="text-xs mt-1 text-gray-400">Set in Settings → Vacation &amp; Blocked Days</div>`:`<div class="cap-bar mt-1 w-48"><div class="cap-fill" style="width:${Math.min(100,bks.length/cap*100)}%;background:${c.bar}"></div></div>`}
+        <div class="flex-1 min-w-0">
+          <div class="font-semibold text-sm" style="color:${c.txt}">
+            ${isClosed?'Closed — no bookings this day':isAdm?(bks.length+'/'+cap+' dogs · '+c.label):c.label}
+          </div>
+          ${isClosed
+            ?`<div class="text-xs mt-1 text-gray-400">${isAdm?'Use Calendar → Days Off ▾ or the ⚙ on any cell to unblock.':''}</div>`
+            :isAdm?`<div class="cap-bar mt-1 w-48"><div class="cap-fill" style="width:${Math.min(100,bks.length/cap*100)}%;background:${c.bar}"></div></div>`:''}
         </div>
       </div>
-      ${bks.length>0?`<div class="space-y-1.5 mb-4 max-h-52 overflow-y-auto">
-        ${bks.map(b=>`<div class="flex items-start gap-2.5 p-2.5 bg-gray-50 rounded-xl">
+      ${visibleBks.length>0?`<div class="space-y-1.5 mb-4 max-h-52 overflow-y-auto">
+        ${visibleBks.map(b=>`<div class="flex items-start gap-2.5 p-2.5 bg-gray-50 rounded-xl">
           <span class="text-lg mt-0.5">🐶</span>
           <div class="flex-1 min-w-0">
             <span class="text-sm font-semibold text-gray-700">${b.dogName}</span>
-            <span class="text-xs text-gray-400 ml-1.5">${b.clientName} · ${b.service}</span>
+            ${isAdm?`<span class="text-xs text-gray-400 ml-1.5">${b.clientName} · ${b.service}</span>`:''}
             ${b.checkIn!==b.checkOut?`<div class="text-xs text-amber-700 mt-0.5">📅 ${fmtDateShort(b.checkIn)} → ${fmtDateShort(b.checkOut)} (${b.nights} days)</div>`:''}
             ${b.addons?`<div class="text-xs text-gray-400">✨ ${b.addons}</div>`:''}
           </div>
           <div class="flex flex-col items-end gap-1">
-            <span class="text-sm text-gray-600 font-medium whitespace-nowrap">$${b.price}</span>
-            ${state.role==='admin'?`<button onclick="cancelBooking(${b.id})" class="text-xs text-red-400 hover:text-red-600 whitespace-nowrap" title="Cancel booking">✕ Cancel</button>`:''}
+            ${isAdm?`<span class="text-sm text-gray-600 font-medium whitespace-nowrap">$${b.price}</span>`:''}
+            ${isAdm?`<button onclick="cancelBooking(${b.id})" class="text-xs text-red-400 hover:text-red-600 whitespace-nowrap" title="Cancel booking">✕ Cancel</button>`:''}
           </div>
-        </div>`).join('')}</div>`:`<p class="text-gray-300 text-sm text-center py-4 mb-4">No bookings yet.</p>`}
+        </div>`).join('')}</div>`
+        :!isAdm&&!isClosed&&!full?''  /* client: no own bookings — just fall through to book button */
+        :`<p class="text-gray-300 text-sm text-center py-4 mb-4">No bookings yet.</p>`}
       ${!isPast?`<div class="flex gap-2">
         ${isClosed
           ?`<div class="flex-1 py-2.5 bg-gray-100 text-gray-400 rounded-xl text-sm text-center font-medium">🔒 Day Closed${isAdm?` — <button onclick="removeCapOverride('${ds}');closeModal()" class="underline text-gray-500 hover:text-gray-700">Unblock</button>`:''}
