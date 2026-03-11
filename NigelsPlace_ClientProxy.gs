@@ -177,8 +177,9 @@ function registerClient(ss, req, callerEmail) {
     dog.emergencyVetLimit || '',
     'FALSE',              // deceased
     '',                   // vaccOverride
-    dog.vetName || '',    // vetName
-    dog.vetPhone || '',   // vetPhone
+    dog.vetName || '',    // vetName  (col 18)
+    dog.vetPhone || '',   // vetPhone (col 19)
+    dog.vetWebsite || '', // vetWebsite (col 20)
   ]);
 
   // Return the server-assigned IDs so the browser can sync local state
@@ -238,8 +239,9 @@ function addDog(ss, req, callerEmail) {
     String(dog.emergencyVetLimit || ''),
     'FALSE',                       // deceased
     '',                            // vaccOverride
-    String(dog.vetName || ''),     // vetName
-    String(dog.vetPhone || ''),    // vetPhone
+    String(dog.vetName || ''),     // vetName    (col 18)
+    String(dog.vetPhone || ''),    // vetPhone   (col 19)
+    String(dog.vetWebsite || ''),  // vetWebsite (col 20)
   ]);
 
   return respond({ ok: true, message: 'Dog added successfully.', dogId: newDogId });
@@ -396,10 +398,10 @@ function updateProfile(ss, req, callerEmail) {
 }
 
 // ─── ACTION: updateDog ────────────────────────────────────────────────────────
-// Updates a dog's breed, age, birthday, notes, emergencyVetLimit, vetName, and vetPhone.
+// Updates a dog's breed, age, birthday, notes, emergencyVetLimit, vetName, vetPhone, vetWebsite.
 // Only the client who owns the dog (matched by callerEmail) can update it.
 function updateDog(ss, req, callerEmail) {
-  const { dogId, breed, age, birthday, notes, emergencyVetLimit, vetName, vetPhone } = req;
+  const { dogId, breed, age, birthday, notes, emergencyVetLimit, vetName, vetPhone, vetWebsite } = req;
   if (!dogId) return respond({ ok: false, error: 'dogId is required.' });
 
   const clientsSheet = ss.getSheetByName('Clients');
@@ -431,6 +433,7 @@ function updateDog(ss, req, callerEmail) {
       dogsSheet.getRange(row, 15).setValue(String(emergencyVetLimit || ''));
       dogsSheet.getRange(row, 18).setValue(String(vetName || ''));
       dogsSheet.getRange(row, 19).setValue(String(vetPhone || ''));
+      dogsSheet.getRange(row, 20).setValue(String(vetWebsite || ''));
       return respond({ ok: true, message: 'Dog updated.' });
     }
   }

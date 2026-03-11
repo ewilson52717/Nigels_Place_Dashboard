@@ -634,10 +634,14 @@ async function initVetAutocomplete(nameInputId, phoneInputId, websiteDisplayId){
           ph.value=fmtPhone(place.formatted_phone_number.replace(/\D/g,''));
         }
       }
-      // Show website if we have a display element
+      // Fill website input / display element if we have one
       if(websiteDisplayId){
         const ws=document.getElementById(websiteDisplayId);
-        if(ws)ws.textContent=place.website||'';
+        if(ws){
+          // Works for both <input> and display elements
+          if(ws.tagName==='INPUT'||ws.tagName==='TEXTAREA'){ws.value=place.website||'';}
+          else{ws.textContent=place.website||'';}
+        }
       }
       // Show a brief confirmation toast
       showToast(`🏥 ${place.name} found — details auto-filled!`);
@@ -705,7 +709,7 @@ Clinic to look up: "${vetName.replace(/"/g,'\\"')}"`;
 // AI Lookup button handler — tries Places API first, then Gemini fallback
 // btnId is optional: defaults to 'emydog-vet-lookup-btn' for the edit modal,
 // pass 'ob-vet-lookup-btn' (or any id) when calling from other contexts.
-async function lookupVetFromModal(nameInputId, phoneInputId, btnId){
+async function lookupVetFromModal(nameInputId, phoneInputId, btnId, websiteInputId){
   const nameEl=document.getElementById(nameInputId);
   const vetName=(nameEl?.value||'').trim();
   if(!vetName){showToast('Type the clinic name first, then click AI Lookup.','#F97316');return;}
@@ -728,6 +732,11 @@ async function lookupVetFromModal(nameInputId, phoneInputId, btnId){
       if(nameEl&&info.name)nameEl.value=info.name;
       const phoneEl=document.getElementById(phoneInputId);
       if(phoneEl&&info.phone)phoneEl.value=fmtPhone(info.phone.replace(/\D/g,''));
+      // Fill website if a website input id was provided
+      if(websiteInputId){
+        const wsEl=document.getElementById(websiteInputId);
+        if(wsEl&&info.website)wsEl.value=info.website;
+      }
       showToast(`🏥 Found: ${info.name}${info.city?' — '+info.city.split(',').slice(-2).join(','):''}${info.phone?' · '+info.phone:''}!`);
     }else{
       showToast(mapsKey
@@ -1462,7 +1471,7 @@ async function ensureServicesSheet(){
 async function initSheetHeaders(){
   await Promise.all([
     writeRange('Clients!A1:E1', [['id','name','email','phone','photoConsent']]),
-    writeRange('Dogs!A1:S1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit','deceased','vaccOverride','vetName','vetPhone']]),
+    writeRange('Dogs!A1:T1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit','deceased','vaccOverride','vetName','vetPhone','vetWebsite']]),
     writeRange('Bookings!A1:L1',[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price']]),
     writeRange('Invoices!A1:K1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items','externalPaid','paymentNote']]),
     writeRange('Settings!A1:B15',[
@@ -1487,7 +1496,7 @@ async function ensurePackagesSheet(){
 }
 async function loadAllData(){
   const[cR,dR,bR,iR,sR]=await Promise.all([
-    readRangeSafe('Clients!A2:E'),readRangeSafe('Dogs!A2:S'),readRangeSafe('Bookings!A2:L'),
+    readRangeSafe('Clients!A2:E'),readRangeSafe('Dogs!A2:T'),readRangeSafe('Bookings!A2:L'),
     readRangeSafe('Invoices!A2:K'),readRangeSafe('Settings!A2:B'),
   ]);
   const svR=await readRangeSafe('Services!A2:F');
@@ -1517,7 +1526,8 @@ async function loadAllData(){
     const vaccOverride=String(r[16]||'');
     const vetName=String(r[17]||'');
     const vetPhone=String(r[18]||'');
-    const dog={id:+r[0],name:String(r[2]||''),breed:String(r[3]||''),age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',notes:String(r[6]||''),birthday,vaccExpiry,vaccines,driveFileLink:String(r[10]||''),photoLink:String(r[11]||''),playPhotos,photoOffset,emergencyVetLimit,deceased,vaccOverride,vetName,vetPhone};
+    const vetWebsite=String(r[19]||'');
+    const dog={id:+r[0],name:String(r[2]||''),breed:String(r[3]||''),age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',notes:String(r[6]||''),birthday,vaccExpiry,vaccines,driveFileLink:String(r[10]||''),photoLink:String(r[11]||''),playPhotos,photoOffset,emergencyVetLimit,deceased,vaccOverride,vetName,vetPhone,vetWebsite};
     const cl=clients.find(c=>c.id===+r[1]);if(cl)cl.dogs.push(dog);
   });
   bookings.length=0;
@@ -1605,14 +1615,14 @@ async function persistBookings(){
 async function persistClients(){
   if(state.mode!=='live')return;
   const cRows=[['id','name','email','phone','photoConsent'],...clients.map(c=>[c.id,c.name,c.email,c.phone,c.photoConsent?'true':'false'])];
-  const dRows=[['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit','deceased','vaccOverride','vetName','vetPhone'],
-    ...clients.flatMap(c=>c.dogs.map(d=>{const off=d.photoOffset||{x:50,y:50};return[d.id,c.id,d.name,d.breed,d.age,d.vaccinated,d.notes,d.birthday||'',d.vaccExpiry||'',JSON.stringify(d.vaccines||[]),d.driveFileLink||'',d.photoLink||'',JSON.stringify(d.playPhotos||[]),`${off.x},${off.y}`,d.emergencyVetLimit||'',d.deceased?'true':'false',d.vaccOverride||'',d.vetName||'',d.vetPhone||''];}))];
+  const dRows=[['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit','deceased','vaccOverride','vetName','vetPhone','vetWebsite'],
+    ...clients.flatMap(c=>c.dogs.map(d=>{const off=d.photoOffset||{x:50,y:50};return[d.id,c.id,d.name,d.breed,d.age,d.vaccinated,d.notes,d.birthday||'',d.vaccExpiry||'',JSON.stringify(d.vaccines||[]),d.driveFileLink||'',d.photoLink||'',JSON.stringify(d.playPhotos||[]),`${off.x},${off.y}`,d.emergencyVetLimit||'',d.deceased?'true':'false',d.vaccOverride||'',d.vetName||'',d.vetPhone||'',d.vetWebsite||''];}))];
   // Write first (data always present), then clear any leftover rows below.
   // NEVER clear before writing — a failed write after a clear = permanent data loss.
   await writeRange(`Clients!A1:E${cRows.length}`,cRows);
   if(cRows.length<9999)await clearRange(`Clients!A${cRows.length+1}:E9999`);
-  await writeRange(`Dogs!A1:S${dRows.length}`,dRows);
-  if(dRows.length<9999)await clearRange(`Dogs!A${dRows.length+1}:S9999`);
+  await writeRange(`Dogs!A1:T${dRows.length}`,dRows);
+  if(dRows.length<9999)await clearRange(`Dogs!A${dRows.length+1}:T9999`);
 }
 async function persistInvoices(){
   if(state.mode!=='live')return;
@@ -1831,6 +1841,33 @@ function verifyKioskPassword(){
 // Used when a client/onboarding user needs to write to the sheet.
 // Their own OAuth token has no write access, so we POST to an Apps Script Web App
 // that runs as Elyse (the sheet owner), verifies the token, then writes for them.
+// Silently refreshes the OAuth2 token if it's expired or within 2 minutes of expiry.
+// Called before every proxy write so clients never see a stale-token error mid-session.
+async function ensureValidToken(){
+  // Token still good (with a 2-minute safety buffer)
+  if(state.accessToken&&state.tokenExpiry&&state.tokenExpiry>Date.now()+120000)return;
+  if(!tokenClient)throw new Error('Auth not initialized — please reload the page.');
+  const savedEmail=localStorage.getItem('np_email')||state.userEmail||'';
+  return new Promise((resolve,reject)=>{
+    const prev=tokenClient.callback;
+    tokenClient.callback=(resp)=>{
+      tokenClient.callback=prev; // restore
+      if(resp.error){
+        reject(new Error('Your session expired — please sign out and sign back in.'));
+        return;
+      }
+      state.accessToken=resp.access_token;
+      driveToken=resp.access_token;
+      state.tokenExpiry=Date.now()+(resp.expires_in*1000);
+      try{
+        localStorage.setItem('np_access_token',resp.access_token);
+        localStorage.setItem('np_token_expiry',String(state.tokenExpiry-30000));
+      }catch(e){}
+      resolve();
+    };
+    tokenClient.requestAccessToken({prompt:'',login_hint:savedEmail});
+  });
+}
 async function proxyClientWrite(action, payload){
   // Resolution order for the proxy URL:
   //   1. CONFIG.APPS_SCRIPT_URL  — baked into the HTML file (works for new clients who
@@ -1842,6 +1879,9 @@ async function proxyClientWrite(action, payload){
   const _lsUrl=(()=>{try{return localStorage.getItem('np_apps_script_url')||'';}catch(e){return'';}})();
   const url=(CONFIG.APPS_SCRIPT_URL||_lsUrl||state.settings.appsScriptUrl||'').trim();
   if(!url)throw new Error('No Apps Script proxy URL configured — ask your admin to add it in Settings (and set CONFIG.APPS_SCRIPT_URL in the HTML file for new client registration).');
+  // Auto-refresh the token if it has expired — prevents "Invalid or expired token" errors
+  // after a client has been on the page for more than ~1 hour.
+  try{await ensureValidToken();}catch(e){throw new Error('Session expired — please sign out and sign back in.');}
   const token=state.accessToken;
   if(!token)throw new Error('Not signed in.');
   // MUST use text/plain — application/json triggers a CORS preflight OPTIONS request
@@ -1892,7 +1932,7 @@ async function loadClientDataViaProxy(){
         playPhotos,photoOffset,emergencyVetLimit:String(r[14]||''),
         deceased:String(r[15]).toLowerCase()==='true',
         vaccOverride:String(r[16]||''),
-        vetName:String(r[17]||''),vetPhone:String(r[18]||''),
+        vetName:String(r[17]||''),vetPhone:String(r[18]||''),vetWebsite:String(r[19]||''),
       };
     });
 
@@ -3792,11 +3832,15 @@ function buildClientAccount(){
           <div class="font-semibold text-gray-800">${dog.name}</div>
           <div class="text-xs text-gray-400">${dog.breed||'Mixed Breed'} · ${dog.age||0} yr${dog.age===1?'':'s'}</div>
         </div>
-        <button onclick="showEditMyDogModal(${dog.id})" class="ml-auto text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 font-medium">✏️ Edit</button>
+        <div class="ml-auto flex items-center gap-2">
+          <button onclick="setClientView('mydog')" class="text-xs px-3 py-1.5 rounded-lg border font-medium" style="border-color:#D4A96B;color:#7B4015;background:#FFFBF0;">🐾 Full Profile</button>
+          <button onclick="showEditMyDogModal(${dog.id})" class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 font-medium">✏️ Edit</button>
+        </div>
       </div>
       <div class="grid grid-cols-2 gap-2 text-xs text-gray-500">
         ${dog.birthday?`<div><span class="text-gray-400">Birthday</span><br><span class="font-medium text-gray-700">${fmtDate(dog.birthday)}</span></div>`:''}
         <div><span class="text-gray-400">Emergency Vet Auth</span><br><span class="font-medium text-gray-700">${VET_LABELS[dog.emergencyVetLimit||'']||'Contact me first'}</span></div>
+        ${dog.vetName?`<div class="col-span-2"><span class="text-gray-400">Vet Clinic</span><br><span class="font-medium text-gray-700">${dog.vetName}${dog.vetPhone?' · '+fmtPhone(dog.vetPhone):''}</span>${dog.vetWebsite?`<br><a href="${dog.vetWebsite}" target="_blank" rel="noopener" class="text-blue-500 hover:underline text-xs">${dog.vetWebsite.replace(/^https?:\/\//,'').split('/')[0]}</a>`:''}</div>`:''}
         ${dog.notes?`<div class="col-span-2"><span class="text-gray-400">Care Notes</span><br><span class="font-medium text-gray-700">${dog.notes}</span></div>`:''}
       </div>
     </div>`).join('');
@@ -3898,6 +3942,8 @@ function buildEditMyDogModal(){
       <button onclick="state.showModal=null;render()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
     </div>
     <form onsubmit="submitEditMyDog(event,${dog.id})" class="space-y-3">
+
+      <!-- About: breed + age + birthday -->
       <div class="modal-field-group">
         <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">About</label>
         <div class="grid grid-cols-2 gap-3">
@@ -3907,45 +3953,95 @@ function buildEditMyDogModal(){
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1">Age (years)</label>
-            <input id="emydog-age" type="number" min="0" max="30" value="${dog.age||0}" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none">
+            <input id="emydog-age" type="number" min="0" max="30" value="${dog.age||0}"
+              class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none"
+              placeholder="e.g. 3">
+            <p class="text-xs text-gray-400 mt-0.5">Auto-filled if birthday is set</p>
           </div>
         </div>
         <div class="mt-2">
-          <label class="block text-xs text-gray-500 mb-1">Birthday (optional)</label>
-          <input id="emydog-birthday" type="date" value="${dog.birthday||''}" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none">
+          <label class="block text-xs text-gray-500 mb-1">Birthday <span class="text-gray-400 font-normal">(optional — age auto-calculates)</span></label>
+          <input id="emydog-birthday" type="date" value="${dog.birthday||''}"
+            class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none"
+            onchange="
+              const bd=this.value;
+              if(bd){
+                const yrs=Math.max(0,Math.floor((Date.now()-new Date(bd+'T00:00:00'))/(365.25*864e5)));
+                const ageEl=document.getElementById('emydog-age');
+                if(ageEl){ageEl.value=yrs;ageEl.style.background='#FFFBEB';ageEl.title='Calculated from birthday';}
+              }
+            ">
         </div>
       </div>
-      <div class="modal-field-group">
-        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Care Notes</label>
-        <textarea id="emydog-notes" rows="2" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none">${dog.notes||''}</textarea>
-      </div>
+
+      <!-- Vet clinic — required to unlock booking -->
       <div class="modal-field-group" style="${!dog.vetName?'background:#FEF2F2;border-color:#FECACA;':'background:#F0F9FF;border-color:#BAE6FD;'}">
-        <div class="flex items-center justify-between mb-1.5">
-          <label class="block text-xs font-bold" style="color:${!dog.vetName?'#DC2626':'#0369A1'};">🏥 Veterinary Information${!dog.vetName?' <span style="font-size:.65rem;background:#DC2626;color:white;padding:1px 6px;border-radius:999px;margin-left:4px;">Required</span>':''}</label>
-          <button type="button" id="emydog-vet-lookup-btn" onclick="lookupVetFromModal('emydog-vet-name','emydog-vet-phone')" style="font-size:.7rem;padding:2px 8px;border-radius:8px;border:1px solid #BAE6FD;background:#EFF6FF;color:#0369A1;cursor:pointer;">🔍 AI Lookup</button>
+        <div class="flex items-center justify-between mb-1">
+          <label class="block text-xs font-bold" style="color:${!dog.vetName?'#DC2626':'#0369A1'};">
+            🏥 Vet Clinic${!dog.vetName?` <span style="font-size:.6rem;background:#DC2626;color:white;padding:1px 6px;border-radius:999px;margin-left:3px;">Required</span>`:''}
+          </label>
+          <button type="button" id="emydog-vet-lookup-btn"
+            onclick="lookupVetFromModal('emydog-vet-name','emydog-vet-phone','emydog-vet-lookup-btn','emydog-vet-website')"
+            style="font-size:.7rem;padding:3px 10px;border-radius:8px;border:1px solid ${!dog.vetName?'#FECACA':'#BAE6FD'};background:${!dog.vetName?'#FFF5F5':'#EFF6FF'};color:${!dog.vetName?'#DC2626':'#0369A1'};cursor:pointer;font-weight:600;">
+            🔍 Auto-Fill
+          </button>
         </div>
-        ${!dog.vetName?`<p class="text-xs mb-2" style="color:#DC2626;">⚠️ Vet clinic is required to unlock booking. Type the clinic name and use AI Lookup, or start typing to search.</p>`:''}
+        <p class="text-xs mb-2" style="color:${!dog.vetName?'#991B1B':'#0369A1'};">
+          ${!dog.vetName
+            ?'⚠️ Required to unlock booking. Type the clinic name and tap <b>Auto-Fill</b> to search, or enter details manually.'
+            :'Type to search or change clinic · tap <b>Auto-Fill</b> to auto-complete phone &amp; website.'}
+        </p>
         <div class="space-y-2">
           <div>
             <label class="block text-xs mb-1" style="color:#0369A1;">Clinic Name</label>
-            <input id="emydog-vet-name" type="text" placeholder="Type clinic name to search…" value="${(dog.vetName||'').replace(/"/g,'&quot;')}"
-              class="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style="border-color:${!dog.vetName?'#FECACA':'#BAE6FD'};background:#fff;"
-              onfocus="setTimeout(()=>initVetAutocomplete('emydog-vet-name','emydog-vet-phone'),100)">
+            <input id="emydog-vet-name" type="text" placeholder="e.g. Richmond Animal Hospital"
+              value="${(dog.vetName||'').replace(/"/g,'&quot;')}"
+              class="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none"
+              style="border-color:${!dog.vetName?'#FECACA':'#BAE6FD'};background:#fff;"
+              onfocus="setTimeout(()=>initVetAutocomplete('emydog-vet-name','emydog-vet-phone','emydog-vet-website'),100)">
           </div>
-          <div>
-            <label class="block text-xs mb-1" style="color:#0369A1;">Clinic Phone <span style="font-weight:400;">(auto-fills on search)</span></label>
-            <input id="emydog-vet-phone" type="tel" placeholder="Auto-fills from search or enter manually" value="${(dog.vetPhone||'')}"
-              oninput="phoneInputHandler(this)"
-              class="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none" style="border-color:#BAE6FD;background:#fff;">
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-xs mb-1" style="color:#0369A1;">Phone</label>
+              <input id="emydog-vet-phone" type="tel" placeholder="Auto-fills or enter manually"
+                value="${(dog.vetPhone||'')}" oninput="phoneInputHandler(this)"
+                class="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none"
+                style="border-color:#BAE6FD;background:#fff;">
+            </div>
+            <div>
+              <label class="block text-xs mb-1" style="color:#0369A1;">Website</label>
+              <input id="emydog-vet-website" type="url" placeholder="Auto-fills or enter manually"
+                value="${(dog.vetWebsite||'')}"
+                class="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none"
+                style="border-color:#BAE6FD;background:#fff;">
+            </div>
           </div>
         </div>
       </div>
+
+      <!-- Emergency authorization -->
       <div class="modal-field-group">
-        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">🏥 Emergency Vet Authorization</label>
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">🚨 Emergency Vet Authorization</label>
+        <p class="text-xs text-gray-400 mb-2">How much can Nigel's Place authorize in a vet emergency without calling you first?</p>
         <select id="emydog-vet" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none">
           ${VET_OPTS.map((v,i)=>`<option value="${v}"${(dog.emergencyVetLimit||'')=== v?' selected':''}>${VET_LABELS[i]}</option>`).join('')}
         </select>
       </div>
+
+      <!-- Care Notes — collapsible, at bottom -->
+      <details class="modal-field-group" ${dog.notes?'open':''}>
+        <summary class="text-xs font-bold text-gray-500 uppercase tracking-wide cursor-pointer select-none flex items-center gap-1.5 list-none">
+          <span>📝 Care Notes</span>
+          <span class="text-gray-300 font-normal text-xs">(tap to expand)</span>
+        </summary>
+        <div class="mt-2">
+          <p class="text-xs text-gray-400 mb-1.5">Special instructions, allergies, behavioral notes, feeding preferences, etc.</p>
+          <textarea id="emydog-notes" rows="3"
+            class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none"
+            placeholder="e.g. Allergic to chicken. Needs medication at noon. Anxious around large dogs.">${dog.notes||''}</textarea>
+        </div>
+      </details>
+
       <div class="flex gap-3 pt-1">
         <button type="button" onclick="state.showModal=null;render()" class="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50">Cancel</button>
         <button id="emydog-submit" type="submit" class="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style="background:#7B4015;">Save Changes</button>
@@ -3959,19 +4055,26 @@ async function submitEditMyDog(e,dogId){
   const cl=clients.find(c=>c.id===state.currentClientId);if(!cl)return;
   const dog=cl.dogs.find(d=>d.id===dogId);if(!dog)return;
   const breed=getBreedValue('emydog-breed','emydog-breed-other')||dog.breed||'Mixed Breed';
-  const age=parseInt(document.getElementById('emydog-age')?.value)||0;
   const birthday=(document.getElementById('emydog-birthday')?.value||'').trim();
+  // Auto-calculate age from birthday when one is set; fall back to manual entry
+  let age;
+  if(birthday){
+    age=Math.max(0,Math.floor((Date.now()-new Date(birthday+'T00:00:00'))/(365.25*864e5)));
+  }else{
+    age=parseInt(document.getElementById('emydog-age')?.value)||0;
+  }
   const notes=(document.getElementById('emydog-notes')?.value||'').trim();
   const emergencyVetLimit=document.getElementById('emydog-vet')?.value||'';
   const vetName=(document.getElementById('emydog-vet-name')?.value||'').trim();
   const vetPhone=(document.getElementById('emydog-vet-phone')?.value||'').trim();
+  const vetWebsite=(document.getElementById('emydog-vet-website')?.value||'').trim();
   const btn=document.getElementById('emydog-submit');
   if(btn){btn.disabled=true;btn.textContent='Saving…';}
   try{
-    const result=await proxyClientWrite('updateDog',{dogId,breed,age,birthday,notes,emergencyVetLimit,vetName,vetPhone});
+    const result=await proxyClientWrite('updateDog',{dogId,breed,age,birthday,notes,emergencyVetLimit,vetName,vetPhone,vetWebsite});
     if(!result.ok)throw new Error(result.error||'Could not save.');
     dog.breed=breed;dog.age=age;dog.birthday=birthday;dog.notes=notes;dog.emergencyVetLimit=emergencyVetLimit;
-    dog.vetName=vetName;dog.vetPhone=vetPhone;
+    dog.vetName=vetName;dog.vetPhone=vetPhone;dog.vetWebsite=vetWebsite;
     state.showModal=null;render();showToast(`${dog.name} updated! ✓`);
   }catch(err){
     showToast('Error: '+err.message,'#EF4444');
@@ -4068,6 +4171,7 @@ function buildClientDog(){
           <div>
             <div class="text-sm font-semibold text-gray-800 leading-snug">${dog.vetName||''}</div>
             ${dog.vetPhone?`<div class="text-xs text-gray-500 mt-0.5">${fmtPhone(dog.vetPhone)}</div>`:''}
+            ${dog.vetWebsite?`<a href="${dog.vetWebsite}" target="_blank" rel="noopener" class="text-xs mt-0.5 block" style="color:#0369A1;">🔗 ${dog.vetWebsite.replace(/^https?:\/\//,'').replace(/\/$/,'').split('/')[0]}</a>`:''}
           </div>`:`
           <div class="text-xs leading-snug" style="color:#991B1B;">Add your vet clinic to unlock booking.</div>
           <button onclick="showEditMyDogModal(${dog.id})" class="text-xs px-2.5 py-1.5 rounded-lg text-white font-semibold mt-auto" style="background:#DC2626;">Add Vet →</button>`}
