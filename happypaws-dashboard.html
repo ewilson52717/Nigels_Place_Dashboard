@@ -1399,9 +1399,12 @@ async function proxyClientWrite(action, payload){
   if(!url)throw new Error('No Apps Script proxy URL configured — ask your admin to add it in Settings.');
   const token=state.accessToken;
   if(!token)throw new Error('Not signed in.');
+  // MUST use text/plain — application/json triggers a CORS preflight OPTIONS request
+  // that Google Apps Script silently ignores, causing "Failed to fetch" before the
+  // POST even leaves the browser. Body is still JSON; Apps Script parses it fine.
   const resp=await fetch(url,{
     method:'POST',
-    headers:{'Content-Type':'application/json'},
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
     body:JSON.stringify({action,token,...payload}),
   });
   if(!resp.ok)throw new Error(`Proxy HTTP ${resp.status}`);
