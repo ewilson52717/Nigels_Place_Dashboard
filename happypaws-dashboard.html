@@ -353,8 +353,10 @@ function vaccStatus(dog){
   return worst;
 }
 // Returns effective daily capacity for a specific date (allows per-date overrides)
+// NOTE: must use !== undefined check, NOT ||, because 0 (blocked/closed) is a valid override value
 function getEffectiveCap(ds){
-  return state.settings.capacityOverrides?.[ds]||state.settings.dailyCapacity;
+  const v=state.settings.capacityOverrides?.[ds];
+  return v!==undefined?v:state.settings.dailyCapacity;
 }
 function vaccBadge(dog){
   const s=vaccStatus(dog);
@@ -2061,8 +2063,24 @@ function buildCalendarView(role){
           if(!day)return`<div class="border-b border-r border-gray-50 min-h-[88px] bg-gray-50/40"></div>`;
           const ds=mkDs(yr,mo,day),bks=booksForDate(ds),n=bks.length;
           const cap=getEffectiveCap(ds);
-          const c=capColor(n,cap),full=n>=cap,isToday=ds===TODAY;
+          const c=capColor(n,cap),full=n>=cap||cap===0,isToday=ds===TODAY;
           const isPast=ds<TODAY,dow=new Date(yr,mo,day).getDay(),wknd=dow===0||dow===6;
+
+          // ── CLIENT VIEW: simplified — gray = unavailable, no capacity numbers ──
+          if(isClient){
+            const unavailable=!isPast&&(cap===0||full);
+            const canBook=!isPast&&!unavailable;
+            return`
+            <div class="day-cell border-b border-r p-2 relative ${wknd?'weekend-day':''} ${isPast&&!isToday?'past-day':''}"
+                 style="${!isPast&&unavailable?'background:#F3F4F6;border-color:#E5E7EB;cursor:default;':''}${isToday&&!unavailable?'border-top:3px solid #7B4015;':''}"
+                 onclick="${canBook?'openDayModal(\''+ds+'\')':''}">
+              <div class="flex items-start justify-between mb-1">
+                <span class="${isToday&&!unavailable?'text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style="background:#7B4015"':!isPast&&unavailable?'text-sm font-medium text-gray-300':'text-sm font-medium text-gray-600'}">${day}</span>
+              </div>
+              ${!isPast?unavailable?'<div class="text-xs text-gray-300 mt-1 select-none">—</div>':'<div class="text-xs mt-1" style="color:#7B4015">Open</div>':''}
+            </div>`;}
+
+          // ── ADMIN VIEW: full detail ──
           return`
           <div class="day-cell border-b border-r border-gray-100 p-2 relative ${wknd?'weekend-day':''} ${isPast&&!isToday?'past-day':''} ${cap===0?'opacity-60':''}"
                style="border-top:3px solid ${cap===0?'#9CA3AF':n>0?c.bar:'transparent'}${cap===0?';background:#F9FAFB':''}"
@@ -2082,8 +2100,20 @@ function buildCalendarView(role){
     </div>
     </div><!-- /min-width -->
     </div><!-- /overflow-x-auto -->
-    ${isClient?`<div class="mt-4 p-4 rounded-xl border text-sm text-amber-800" style="background:#FEF3C7;border-color:#FCD34D">
-      💡 Tap any <strong>available day</strong> to book a spot for your pup. Swipe the calendar left/right to see more days!</div>`:''}
+    ${isClient?`
+      <div class="mt-3 flex items-center gap-5 px-1 text-xs text-gray-400">
+        <div class="flex items-center gap-1.5">
+          <div class="w-3.5 h-3.5 rounded-sm border border-gray-300" style="background:#F3F4F6"></div>
+          <span>Unavailable</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <div class="w-3.5 h-3.5 rounded-sm border border-gray-200 bg-white"></div>
+          <span>Available — tap to book</span>
+        </div>
+      </div>
+      <div class="mt-3 p-4 rounded-xl border text-sm text-amber-800" style="background:#FEF3C7;border-color:#FCD34D">
+        💡 Tap any <strong>available day</strong> to request a booking for your pup. Swipe left/right to see more months.
+      </div>`:''}
   </div>`;
 }
 function buildClientsView(){
