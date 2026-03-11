@@ -200,7 +200,8 @@ const state={
   adminViewAsClient:false,  // admin toggling to client-perspective view
   mode:null,accessToken:null,tokenExpiry:null,userEmail:null,kioskDogs:[],kioskUpcoming:[],
   kioskPasswordVerified:false, // set true once correct kiosk password entered this session
-  selectedOverrideDates:new Set(), // tracks multi-select for batch delete in Settings
+  selectedOverrideDates:new Set(), // tracks multi-select for batch delete
+  showCalendarSettings:false, // toggle for Days Off panel in Calendar view
   isLoading:false,loadingMsg:'',
   sheetId:CONFIG.SHEET_ID||null,sheetUrl:null,
   onboardingStep:1,onboardingData:{},  // client self-registration wizard
@@ -1195,6 +1196,82 @@ async function persistInvoices(){
     ...invoices.map(i=>[i.id,i.clientId,i.clientName,i.amount,i.paid,i.status,i.dueDate,i.issueDate,i.items,i.externalPaid||0,i.paymentNote||''])];
   await writeRange(`Invoices!A1:K${rows.length}`,rows);
 }
+// ─── Calendar Settings panel toggle ──────────────────────────────────────────
+function toggleCalendarSettings(){
+  state.showCalendarSettings=!state.showCalendarSettings;
+  // lightweight DOM toggle — avoids full re-render so inputs keep their values
+  const panel=document.getElementById('cal-settings-panel');
+  const btn=document.getElementById('cal-settings-btn');
+  if(panel)panel.style.display=state.showCalendarSettings?'block':'none';
+  if(btn)btn.innerHTML=`📅 Days Off${state.showCalendarSettings?' ▲':' ▾'}`;
+  if(btn)btn.className=`px-3 py-1.5 rounded-xl border text-sm transition-colors ${state.showCalendarSettings?'text-amber-700 bg-amber-50 border-amber-200':'border-gray-200 text-gray-500 hover:bg-gray-50'}`;
+}
+
+// ─── Per-cell quick-edit popover ──────────────────────────────────────────────
+function showDayQuickMenu(ds,event){
+  event.stopPropagation();
+  const existing=document.getElementById('day-quick-menu');
+  if(existing){existing.remove();return;}
+  const cap=getEffectiveCap(ds);
+  const hasOverride=state.settings.capacityOverrides?.[ds]!==undefined;
+  const menu=document.createElement('div');
+  menu.id='day-quick-menu';
+  const cell=event.target.closest('.day-cell');
+  const rect=cell?cell.getBoundingClientRect():{top:event.clientY,bottom:event.clientY+4,left:event.clientX};
+  const menuTop=Math.min(rect.bottom+4,window.innerHeight-200);
+  const menuLeft=Math.min(rect.left,window.innerWidth-192);
+  menu.style.cssText=`position:fixed;top:${menuTop}px;left:${menuLeft}px;background:white;border:1px solid #E5E7EB;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.13);padding:6px;z-index:9999;min-width:176px;`;
+  menu.innerHTML=`
+    <div style="font-size:11px;font-weight:600;color:#6B7280;padding:4px 10px 6px;border-bottom:1px solid #F3F4F6;margin-bottom:4px;">${fmtDate(ds)}</div>
+    <button onclick="setDayStatus('${ds}','open');document.getElementById('day-quick-menu')?.remove()"
+      style="width:100%;text-align:left;padding:7px 10px;border-radius:9px;background:none;border:none;cursor:pointer;font-size:13px;color:${!hasOverride?'#059669':'#374151'};font-weight:${!hasOverride?'700':'400'}"
+      onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background='none'">
+      ✅ Open (default${!hasOverride?' ✓':''})
+    </button>
+    <button onclick="setDayStatus('${ds}','closed');document.getElementById('day-quick-menu')?.remove()"
+      style="width:100%;text-align:left;padding:7px 10px;border-radius:9px;background:none;border:none;cursor:pointer;font-size:13px;color:${cap===0?'#374151':'#374151'};font-weight:${cap===0?'700':'400'}"
+      onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background='none'">
+      🔒 Closed${cap===0?' ✓':''}
+    </button>
+    <div style="border-top:1px solid #F3F4F6;margin:4px 0;padding-top:6px;">
+      <div style="font-size:11px;color:#9CA3AF;padding:0 10px 4px;">Custom max dogs:</div>
+      <div style="display:flex;align-items:center;gap:6px;padding:0 8px 4px;">
+        <input type="number" id="dqm-cap" value="${cap!==state.settings.dailyCapacity&&cap!==0?cap:''}" min="1" max="100"
+          placeholder="${state.settings.dailyCapacity}"
+          style="width:60px;border:1px solid #E5E7EB;border-radius:8px;padding:5px 8px;font-size:13px;"
+          onclick="event.stopPropagation()">
+        <button onclick="setDayStatus('${ds}','custom');document.getElementById('day-quick-menu')?.remove()"
+          style="flex:1;padding:5px 8px;background:#7B4015;color:white;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">Set</button>
+      </div>
+    </div>`;
+  document.body.appendChild(menu);
+  // close on next outside click
+  setTimeout(()=>{
+    document.addEventListener('click',function _close(){
+      document.getElementById('day-quick-menu')?.remove();
+      document.removeEventListener('click',_close);
+    },{once:true});
+  },10);
+}
+function setDayStatus(ds,status){
+  if(!state.settings.capacityOverrides)state.settings.capacityOverrides={};
+  if(status==='open'){
+    delete state.settings.capacityOverrides[ds];
+    if(state.selectedOverrideDates)state.selectedOverrideDates.delete(ds);
+    showToast(`${fmtDate(ds)} — Open (override removed)`);
+  }else if(status==='closed'){
+    state.settings.capacityOverrides[ds]=0;
+    showToast(`${fmtDate(ds)} blocked 🔒`,'#7B4015');
+  }else if(status==='custom'){
+    const v=parseInt(document.getElementById('dqm-cap')?.value);
+    if(!v||v<1){showToast('Enter a valid number of dogs.','#EF4444');return;}
+    state.settings.capacityOverrides[ds]=v;
+    showToast(`${fmtDate(ds)} — max ${v} dogs set 📊`);
+  }
+  render();
+  try{persistSettings();}catch(e){}
+}
+
 // ─── Vacation / Blocked Days ─────────────────────────────────────────────────
 function blockDateRange(){
   const start=document.getElementById('block-start')?.value;
@@ -2041,7 +2118,8 @@ function buildCalendarView(role){
         <button onclick="prevMonth()" class="px-3 py-1.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-100 text-sm">← Prev</button>
         <span class="font-semibold text-gray-700 min-w-[120px] text-center text-sm sm:text-base">${MONTHS[mo]} ${yr}</span>
         <button onclick="nextMonth()" class="px-3 py-1.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-100 text-sm">Next →</button>
-        ${!isClient?`<button onclick="openBookingModal(null)" class="px-3 py-1.5 text-white rounded-xl text-sm shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ Book</button>`:''}
+        ${!isClient?`<button onclick="openBookingModal(null)" class="px-3 py-1.5 text-white rounded-xl text-sm shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ Book</button>
+        <button id="cal-settings-btn" onclick="toggleCalendarSettings()" class="px-3 py-1.5 rounded-xl border text-sm transition-colors ${state.showCalendarSettings?'text-amber-700 bg-amber-50 border-amber-200':'border-gray-200 text-gray-500 hover:bg-gray-50'}">📅 Days Off${state.showCalendarSettings?' ▲':' ▾'}</button>`:''}
         <button class="fs-btn" data-fs-btn title="Go fullscreen" onclick="toggleFullscreen()">${_FS_ENTER}</button>
       </div>
     </div>
@@ -2051,6 +2129,98 @@ function buildCalendarView(role){
       <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#F97316;display:inline-block"></span>Almost Full</span>
       <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#EF4444;display:inline-block"></span>Full 🚫</span>
     </div>
+
+    <!-- ── Days Off / Capacity Management panel (admin only) ──────── -->
+    ${!isClient?`
+    <div id="cal-settings-panel" style="${state.showCalendarSettings?'':'display:none'}" class="mb-5 bg-white rounded-2xl shadow-sm border border-amber-100 overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-50 flex items-center gap-2" style="background:#FFFBF5">
+        <span class="text-base">📅</span>
+        <span class="font-semibold text-gray-700 text-sm">Days Off &amp; Capacity</span>
+        <span class="text-xs text-gray-400 ml-1">— block dates, describe to AI, or click any day cell ⚙ to edit it inline</span>
+      </div>
+      <div class="p-4 grid sm:grid-cols-2 gap-4">
+
+        <!-- Left col: date range + AI -->
+        <div class="space-y-4">
+          <div>
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">🔒 Block a Date Range</label>
+            <div class="flex gap-2 flex-wrap">
+              <div class="flex-1 min-w-[110px]">
+                <label class="text-xs text-gray-400 block mb-1">From</label>
+                <input type="date" id="block-start" min="${TODAY}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+              </div>
+              <div class="flex-1 min-w-[110px]">
+                <label class="text-xs text-gray-400 block mb-1">To</label>
+                <input type="date" id="block-end" min="${TODAY}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+              </div>
+              <div class="flex items-end">
+                <button type="button" onclick="blockDateRange()" class="px-4 py-2 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">🔒 Block</button>
+              </div>
+            </div>
+          </div>
+          <div class="border-t border-gray-100 pt-3">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">✨ Describe to AI</span>
+              ${state.settings.geminiApiKey?'':`<span class="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">(add Gemini key in Settings first)</span>`}
+            </div>
+            <p class="text-xs text-gray-400 mb-2">e.g. <em>"I'm off March 15–20"</em> or <em>"block the 4th of July week"</em></p>
+            <div class="flex gap-2">
+              <input id="block-ai-text" type="text" placeholder="Type dates to block…"
+                class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();parseBlockDatesAI();}">
+              <button type="button" id="block-mic-btn" onclick="toggleVoiceDateInput()" title="Speak dates" class="px-3 py-2 rounded-xl border border-gray-200 text-lg hover:bg-gray-50" style="line-height:1">🎤</button>
+              <button type="button" onclick="parseBlockDatesAI()" class="px-3 py-2 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" ${state.settings.geminiApiKey?'':'disabled title="Add Gemini key in Settings first"'}>✨ Parse</button>
+            </div>
+            <div id="block-ai-status" class="text-xs text-gray-400 mt-1 min-h-[16px]"></div>
+          </div>
+          <div class="border-t border-gray-100 pt-3">
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">📊 Custom Capacity (single date)</label>
+            <div class="flex gap-2">
+              <input type="date" id="cap-override-date" min="${TODAY}" class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm">
+              <input type="number" id="cap-override-val" placeholder="Max dogs" min="1" max="100" class="w-24 border border-gray-200 rounded-xl px-3 py-2 text-sm">
+              <button type="button" onclick="addCapOverride()" class="px-3 py-2 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">+ Set</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right col: blocked dates list -->
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">All Closed / Custom Days</label>
+          ${(()=>{
+            const entries=Object.entries(state.settings.capacityOverrides||{}).sort();
+            if(entries.length===0)return '<p class="text-xs text-gray-300 py-2">No blocked or custom days yet.</p>';
+            const sel=state.selectedOverrideDates||new Set();
+            const allSel=entries.length>0&&entries.every(([d])=>sel.has(d));
+            const anySel=sel.size>0;
+            return `
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="flex items-center gap-2 text-xs text-gray-500 cursor-pointer select-none">
+                  <input type="checkbox" id="override-select-all" ${allSel?'checked':''} onchange="toggleAllOverrides(this.checked)" class="w-3.5 h-3.5 rounded accent-amber-700">Select all
+                </label>
+                <div id="override-bulk-toolbar" style="display:${anySel?'flex':'none'}" class="items-center gap-2">
+                  <span id="override-sel-count" class="text-xs text-gray-400">${sel.size} selected</span>
+                  <button onclick="deleteSelectedOverrides()" class="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-white bg-red-400 hover:bg-red-500">🗑 Delete selected</button>
+                </div>
+              </div>
+              <div class="space-y-1 max-h-64 overflow-y-auto">${entries.map(([d,v])=>`
+                <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg border ${+v===0?'bg-gray-50 border-gray-200':'bg-amber-50 border-amber-100'}">
+                  <input type="checkbox" id="ocb-${d}" ${sel.has(d)?'checked':''} onchange="toggleOverrideSelection('${d}')" class="w-3.5 h-3.5 rounded flex-shrink-0 accent-amber-700">
+                  <div class="flex items-center gap-2 flex-1 min-w-0">
+                    <span class="text-sm">${+v===0?'🔒':'📊'}</span>
+                    <span class="text-xs font-medium ${+v===0?'text-gray-600':'text-amber-900'}">${fmtDate(d)}</span>
+                  </div>
+                  <div class="flex items-center gap-2 flex-shrink-0">
+                    <span class="text-xs font-bold ${+v===0?'text-gray-500':'text-amber-700'}">${+v===0?'Closed':v+' dogs max'}</span>
+                    <button onclick="removeCapOverride('${d}')" class="text-gray-300 hover:text-red-400 text-sm leading-none">×</button>
+                  </div>
+                </div>`).join('')}
+              </div>`;
+          })()}
+        </div>
+
+      </div>
+    </div>
+    `:''}
     <!-- Horizontal scroll on mobile so the 7-col grid stays usable -->
     <div class="overflow-x-auto -mx-1 pb-1">
     <div style="min-width:420px">
@@ -2082,18 +2252,22 @@ function buildCalendarView(role){
 
           // ── ADMIN VIEW: full detail ──
           return`
-          <div class="day-cell border-b border-r border-gray-100 p-2 relative ${wknd?'weekend-day':''} ${isPast&&!isToday?'past-day':''} ${cap===0?'opacity-60':''}"
+          <div class="day-cell border-b border-r border-gray-100 p-2 relative ${wknd?'weekend-day':''} ${isPast&&!isToday?'past-day':''}"
                style="border-top:3px solid ${cap===0?'#9CA3AF':n>0?c.bar:'transparent'}${cap===0?';background:#F9FAFB':''}"
                onclick="${isPast&&!isToday?'':'openDayModal(\''+ds+'\')'}">
             <div class="flex items-start justify-between mb-1">
               <span class="${isToday?'text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style="background:#7B4015"':'text-sm font-medium text-gray-600'}">${day}</span>
-              ${cap===0?`<span class="text-xs font-bold text-gray-400">🔒</span>`:n>0?`<span class="text-xs font-bold" style="color:${c.txt}">${n}/${cap}</span>`:''}
+              ${n>0&&cap!==0?`<span class="text-xs font-bold" style="color:${c.txt}">${n}/${cap}</span>`:''}
             </div>
             ${cap===0
-              ?`<div class="text-xs text-gray-400 mt-1">Closed</div>`
+              ?`<div class="flex flex-col items-center justify-center py-1.5">
+                  <span style="font-size:20px;line-height:1.1" title="Closed">🔒</span>
+                  <span class="text-xs font-semibold text-gray-400 mt-1">Closed</span>
+                </div>`
               :n>0?`<div class="cap-bar mt-1"><div class="cap-fill" style="width:${Math.min(100,n/cap*100)}%;background:${c.bar}"></div></div>
               <div class="text-xs mt-1" style="color:${c.txt}">${full?'🚫 Full':`${cap-n} left`}</div>`
             :`<div class="text-xs text-gray-200 mt-1">${isPast&&!isToday?'—':'Open'}</div>`}
+            ${!isPast?`<button class="absolute bottom-1 right-1 text-gray-200 hover:text-amber-600 transition-colors" style="font-size:11px;line-height:1;padding:1px 3px;background:none;border:none;cursor:pointer;" onclick="showDayQuickMenu('${ds}',event)" title="Quick edit">⚙</button>`:''}
           </div>`;
         }).join('')}
       </div>
@@ -2564,95 +2738,15 @@ function buildSettingsView(){
         <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Default Max Per Day</label>
         <input id="set-cap" type="number" value="${state.settings.dailyCapacity}" min="1" max="100" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mb-5">
 
-        <!-- ── Vacation / Block Days ──────────────────────────────── -->
-        <div class="border border-gray-100 rounded-xl p-4 mb-4 bg-gray-50">
-          <div class="flex items-center gap-2 mb-2">
-            <span class="text-base">🔒</span>
-            <span class="text-sm font-semibold text-gray-700">Block Days (Vacation / Closed)</span>
+        <!-- Days Off moved to Calendar view -->
+        <div class="flex items-center gap-3 p-3 rounded-xl border border-amber-100 bg-amber-50 mt-1 mb-1">
+          <span class="text-lg">📅</span>
+          <div class="flex-1 min-w-0">
+            <p class="text-xs font-semibold text-amber-800">Days Off &amp; Capacity Overrides have moved!</p>
+            <p class="text-xs text-amber-700 mt-0.5">Manage closed days, vacation blocks, and custom capacity right from the calendar — hit the <strong>Days Off ▾</strong> button in the Schedule view.</p>
           </div>
-          <p class="text-xs text-gray-400 mb-3">Block a single day or an entire range — no bookings will be accepted on blocked days.</p>
-
-          <!-- Date range -->
-          <div class="flex gap-2 mb-3 flex-wrap">
-            <div class="flex-1 min-w-[120px]">
-              <label class="text-xs text-gray-400 block mb-1">From</label>
-              <input type="date" id="block-start" min="${TODAY}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white">
-            </div>
-            <div class="flex-1 min-w-[120px]">
-              <label class="text-xs text-gray-400 block mb-1">To</label>
-              <input type="date" id="block-end" min="${TODAY}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white">
-            </div>
-            <div class="flex items-end">
-              <button type="button" onclick="blockDateRange()" class="px-4 py-2 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">🔒 Block</button>
-            </div>
-          </div>
-
-          <!-- AI voice / text input -->
-          <div class="border-t border-gray-200 pt-3">
-            <div class="flex items-center gap-2 mb-2">
-              <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">✨ Or describe it to AI</span>
-              ${state.settings.geminiApiKey?'':`<span class="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">(add Gemini key above first)</span>`}
-            </div>
-            <p class="text-xs text-gray-400 mb-2">Say or type something like <em>"I'm off March 15–20"</em> or <em>"block the week of the 4th of July"</em></p>
-            <div class="flex gap-2">
-              <input id="block-ai-text" type="text" placeholder="Type dates to block…"
-                class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white"
-                onkeydown="if(event.key==='Enter'){event.preventDefault();parseBlockDatesAI();}">
-              <button type="button" id="block-mic-btn" onclick="toggleVoiceDateInput()"
-                title="Speak dates to block"
-                class="px-3 py-2 rounded-xl border border-gray-200 text-lg bg-white hover:bg-gray-50" style="line-height:1">🎤</button>
-              <button type="button" onclick="parseBlockDatesAI()"
-                class="px-3 py-2 text-white rounded-xl text-sm font-semibold" style="background:#7B4015"
-                ${state.settings.geminiApiKey?'':'disabled title="Add Gemini API key first"'}>✨ Parse</button>
-            </div>
-            <div id="block-ai-status" class="text-xs text-gray-400 mt-1 min-h-[16px]"></div>
-          </div>
+          <button onclick="setView('calendar')" class="flex-shrink-0 px-3 py-1.5 text-white rounded-xl text-xs font-semibold" style="background:#7B4015">Go →</button>
         </div>
-
-        <!-- ── Date-Specific Capacity Overrides ───────────────────── -->
-        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Custom Capacity (add extra spots for specific dates)</label>
-        <div class="flex gap-2 mb-3">
-          <input type="date" id="cap-override-date" min="${TODAY}" class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm">
-          <input type="number" id="cap-override-val" placeholder="Max" min="1" max="100" class="w-20 border border-gray-200 rounded-xl px-3 py-2 text-sm">
-          <button type="button" onclick="addCapOverride()" class="px-3 py-2 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">+ Set</button>
-        </div>
-
-        <!-- Combined list: blocked days + capacity overrides -->
-        ${(()=>{
-          const entries=Object.entries(state.settings.capacityOverrides||{}).sort();
-          if(entries.length===0)return '<p class="text-xs text-gray-300">No date overrides or blocked days yet.</p>';
-          const sel=state.selectedOverrideDates||new Set();
-          const allSelected=entries.length>0&&entries.every(([d])=>sel.has(d));
-          const anySelected=sel.size>0;
-          return `
-            <div class="flex items-center justify-between mb-1.5">
-              <label class="flex items-center gap-2 text-xs text-gray-500 cursor-pointer select-none">
-                <input type="checkbox" id="override-select-all" ${allSelected?'checked':''} onchange="toggleAllOverrides(this.checked)"
-                  class="w-3.5 h-3.5 rounded accent-amber-700">
-                Select all
-              </label>
-              <div id="override-bulk-toolbar" style="display:${anySelected?'flex':'none'}" class="items-center gap-2">
-                <span id="override-sel-count" class="text-xs text-gray-400">${sel.size} selected</span>
-                <button onclick="deleteSelectedOverrides()" class="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-white bg-red-400 hover:bg-red-500 transition-colors">
-                  🗑 Delete selected
-                </button>
-              </div>
-            </div>
-            <div class="space-y-1 max-h-48 overflow-y-auto">${entries.map(([d,v])=>`
-              <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg border ${+v===0?'bg-gray-100 border-gray-200':'bg-amber-50 border-amber-100'}">
-                <input type="checkbox" id="ocb-${d}" ${sel.has(d)?'checked':''} onchange="toggleOverrideSelection('${d}')"
-                  class="w-3.5 h-3.5 rounded flex-shrink-0 accent-amber-700">
-                <div class="flex items-center gap-2 flex-1 min-w-0">
-                  <span class="text-sm">${+v===0?'🔒':'📊'}</span>
-                  <span class="text-xs font-medium ${+v===0?'text-gray-600':'text-amber-900'}">${fmtDate(d)}</span>
-                </div>
-                <div class="flex items-center gap-2 flex-shrink-0">
-                  <span class="text-xs font-bold ${+v===0?'text-gray-500':'text-amber-700'}">${+v===0?'Closed':''+v+' dogs max'}</span>
-                  <button onclick="removeCapOverride('${d}')" class="text-gray-300 hover:text-red-400 text-sm leading-none">×</button>
-                </div>
-              </div>`).join('')}
-            </div>`;
-        })()}
       </div>
       <div class="bg-amber-50 rounded-xl p-4 border border-amber-100 text-sm text-amber-800">
         🛎️ Service rates are managed in the <button onclick="setView('services')" class="underline font-semibold">Services</button> section.
