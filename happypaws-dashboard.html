@@ -2322,6 +2322,7 @@ function buildClientLayout(){
           <span class="font-bold text-gray-800 text-sm hidden sm:inline">Nigel's Place</span>
         </button>
         ${state.mode==='demo'?'<span class="badge bg-amber-100 text-amber-600">Demo</span>':''}
+        <span style="display:inline-flex;align-items:center;gap:4px;background:#EFF6FF;color:#3B82F6;border:1px solid #BFDBFE;border-radius:999px;font-size:10px;font-weight:700;padding:2px 8px;letter-spacing:0.04em;line-height:1.4;">β Private Beta</span>
       </div>
       <!-- Nav tabs centred on mobile -->
       <div class="flex items-center gap-1">
@@ -3295,7 +3296,19 @@ function buildClientHome(){
   </div>`:buildCalendarView('client');
   // ──────────────────────────────────────────────────────────────────────────
   const dogName=dogs[0]?.name||'your pup';
+  // Private beta banner — shown once per browser, dismissed via localStorage
+  const betaDismissed=(()=>{try{return localStorage.getItem('np_beta_dismissed')==='1';}catch(e){return false;}})();
+  const betaBanner=betaDismissed?'':`
+  <div id="beta-banner" class="mb-4 rounded-2xl p-4 flex gap-3 items-start" style="background:#EFF6FF;border:1px solid #BFDBFE;">
+    <div style="font-size:1.4rem;line-height:1;flex-shrink:0;">🧪</div>
+    <div class="flex-1 min-w-0">
+      <div class="font-semibold text-blue-800 text-sm mb-0.5">You're using a Private Beta</div>
+      <div class="text-xs text-blue-600 leading-relaxed">This booking portal is brand new and still being refined. Things should work smoothly, but you may occasionally run into a quirk or two — we appreciate your patience! If anything looks off, just reach out to Nigel's Place directly.</div>
+    </div>
+    <button onclick="(function(){try{localStorage.setItem('np_beta_dismissed','1');}catch(e){}document.getElementById('beta-banner')?.remove();})()" style="background:none;border:none;cursor:pointer;color:#93C5FD;font-size:1.1rem;line-height:1;padding:0;flex-shrink:0;" title="Dismiss">×</button>
+  </div>`;
   return`<div class="slide-in">
+  ${betaBanner}
   ${noPetsBanner}
   ${checklistHtml}
   <div class="mb-5">
