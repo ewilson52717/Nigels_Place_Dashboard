@@ -659,6 +659,11 @@ let _dailySchedule={}; // { 'YYYY-MM-DD': service_name }
 let _bookingMain='daycare';  // 'daycare' | 'boarding'
 let _daycareMode='schedule'; // 'schedule' | 'package'
 let _sessionQty=1;           // number of daycare sessions being purchased
+// Mini-calendar state for booking modal date picker
+let _miniCalYear=new Date().getFullYear();
+let _miniCalMonth=new Date().getMonth(); // 0-based
+let _miniCalStart=''; // YYYY-MM-DD — first click
+let _miniCalEnd='';   // YYYY-MM-DD — second click (or same as start)
 try{_folderIdCache=JSON.parse(localStorage.getItem('np_folder_cache')||'{}');}catch(e){}
 // Cache Drive image blob URLs by fileId — avoids re-fetching on every render()
 const _driveImgCache={};
@@ -3773,18 +3778,13 @@ function buildBookingModal(selectedDate){
                 })()}
               </div>
             </div>
-            <!-- Date range -->
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Start Date</label>
-                <input type="date" id="bk-checkin" value="${selectedDate&&selectedDate>=minBookDate?selectedDate:''}" min="${minBookDate}"
-                  class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="syncCheckout()">
-              </div>
-              <div>
-                <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">End Date</label>
-                <input type="date" id="bk-checkout" value="${selectedDate&&selectedDate>=minBookDate?selectedDate:''}" min="${minBookDate}"
-                  class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="syncCheckout()">
-              </div>
+            <!-- Hidden inputs keep existing JS wiring intact -->
+            <input type="hidden" id="bk-checkin" value="${selectedDate&&selectedDate>=minBookDate?selectedDate:''}">
+            <input type="hidden" id="bk-checkout" value="${selectedDate&&selectedDate>=minBookDate?selectedDate:''}">
+            <!-- Mini calendar picker -->
+            <div>
+              <div id="bk-mini-cal" class="rounded-xl border border-gray-200 bg-white overflow-hidden"></div>
+              <p class="text-xs text-gray-400 mt-1.5 text-center">Click a start date, then an end date · hatched days are fully booked</p>
             </div>
             <!-- Per-day grid -->
             <div>
@@ -4196,12 +4196,26 @@ function openBookingModal(ds) {
   _bookingMain='daycare';
   _daycareMode='schedule';
   _sessionQty=1;
+  // Seed mini-cal to the month containing the clicked date (or current month)
+  const seedDate=ds&&ds>=MIN_BOOKING_DATE?ds:MIN_BOOKING_DATE;
+  _miniCalYear=parseInt(seedDate.slice(0,4));
+  _miniCalMonth=parseInt(seedDate.slice(5,7))-1;
+  _miniCalStart=ds&&ds>=MIN_BOOKING_DATE?ds:'';
+  _miniCalEnd=ds&&ds>=MIN_BOOKING_DATE?ds:'';
   state.showModal={type:'booking',date:ds};
   render();
   setTimeout(()=>{
     if(state.role!=='client')updateDogSelect();
     checkDogVaccWarning();
-    rebuildDailySchedule();
+    renderMiniCal();
+    // Seed the hidden inputs and daily grid if we have a pre-selected date
+    if(_miniCalStart){
+      const ci=document.getElementById('bk-checkin');
+      const co=document.getElementById('bk-checkout');
+      if(ci)ci.value=_miniCalStart;
+      if(co)co.value=_miniCalEnd||_miniCalStart;
+      rebuildDailySchedule();
+    }
   },0);
 }
 function openAddClientModal() {state.showModal={type:'addClient'};render();}
@@ -4314,6 +4328,126 @@ function renderDailyScheduleGrid(){
 }
 // Legacy stub — kept so any remaining callers don't throw
 function onBkTypeChange(){rebuildDailySchedule();}
+
+// ─── MINI CALENDAR PICKER (booking modal) ────────────────────────────────────
+function renderMiniCal(){
+  const el=document.getElementById('bk-mini-cal');
+  if(!el)return;
+  const isClient=state.role==='client'||state.adminViewAsClient;
+  const minDate=isClient?MIN_BOOKING_DATE:TODAY;
+  const yr=_miniCalYear,mo=_miniCalMonth;
+  const monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const dayNames=['Su','Mo','Tu','We','Th','Fr','Sa'];
+  const firstDow=new Date(yr,mo,1).getDay();
+  const daysInMonth=new Date(yr,mo+1,0).getDate();
+  const mkDs=(d)=>`${yr}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+
+  const cells=[];
+  // Empty cells before first day
+  for(let i=0;i<firstDow;i++)cells.push('<div></div>');
+
+  for(let d=1;d<=daysInMonth;d++){
+    const ds=mkDs(d);
+    const isPast=ds<minDate;
+    const n=booksForDate(ds).length;
+    const cap=getEffectiveCap(ds);
+    const full=(n>=cap||cap===0)&&!isPast;
+    const inRange=_miniCalStart&&_miniCalEnd&&ds>=_miniCalStart&&ds<=_miniCalEnd;
+    const isStart=ds===_miniCalStart;
+    const isEnd=ds===_miniCalEnd;
+    const isToday=ds===TODAY;
+
+    // Visual states
+    let bg='transparent',color='#374151',cursor='pointer',border='none',borderRadius='8px';
+    let stripeOverlay='';
+    let label='';
+
+    if(isPast){
+      bg='transparent';color='#D1D5DB';cursor='default';
+    } else if(isStart||isEnd){
+      bg='#7B4015';color='#fff';
+    } else if(inRange){
+      bg='#FEF3C7';color='#92400E';
+    } else if(full){
+      // diagonal stripe for fully booked
+      stripeOverlay=`background-image:repeating-linear-gradient(135deg,transparent,transparent 5px,rgba(160,160,170,0.45) 5px,rgba(160,160,170,0.45) 6px);`;
+      bg='#F3F4F6';color='#C4C9D4';cursor='default';
+      label='<div style="font-size:9px;color:#C4C9D4;line-height:1;margin-top:1px;">Full</div>';
+    }
+
+    const todayRing=isToday&&!isStart&&!isEnd?'box-shadow:0 0 0 2px #7B4015;':'';
+    const clickable=!isPast&&!full;
+
+    cells.push(`
+      <div onclick="${clickable?`miniCalClickDay('${ds}')`:''}"
+        style="position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;
+               height:36px;border-radius:${borderRadius};cursor:${cursor};
+               background:${bg};${stripeOverlay}${todayRing}
+               transition:background 0.1s;user-select:none;"
+        ${clickable?`onmouseover="if(this.style.background==='transparent')this.style.background='#FEF9F0'" onmouseout="if(this.style.background==='#FEF9F0')this.style.background='transparent'"`:''}>
+        <span style="font-size:13px;font-weight:${isStart||isEnd?'700':'500'};color:${color};line-height:1;">${d}</span>
+        ${label}
+      </div>`);
+  }
+
+  // Range display pill above the grid
+  const rangePill=_miniCalStart?`
+    <div style="text-align:center;padding:.35rem .5rem;background:#FEF3C7;border-bottom:1px solid #FDE68A;font-size:.75rem;color:#92400E;font-weight:600;">
+      ${_miniCalStart===_miniCalEnd||!_miniCalEnd
+        ?`📅 ${fmtDateShort(_miniCalStart)}`
+        :`📅 ${fmtDateShort(_miniCalStart)} → ${fmtDateShort(_miniCalEnd)} · ${getDatesInRange(_miniCalStart,_miniCalEnd).length} day${getDatesInRange(_miniCalStart,_miniCalEnd).length===1?'':'s'}`}
+    </div>`:
+    `<div style="text-align:center;padding:.35rem .5rem;background:#F9FAFB;border-bottom:1px solid #F3F4F6;font-size:.75rem;color:#9CA3AF;">
+      Click a day to set start date
+    </div>`;
+
+  el.innerHTML=`
+    <!-- Month navigation -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:.5rem .75rem;background:#FAFAFA;border-bottom:1px solid #F3F4F6;">
+      <button type="button" onclick="miniCalNav(-1)" style="background:none;border:none;cursor:pointer;color:#6B7280;font-size:1.1rem;padding:2px 6px;border-radius:6px;" onmouseover="this.style.background='#F3F4F6'" onmouseout="this.style.background='none'">‹</button>
+      <span style="font-size:.85rem;font-weight:600;color:#374151;">${monthNames[mo]} ${yr}</span>
+      <button type="button" onclick="miniCalNav(1)" style="background:none;border:none;cursor:pointer;color:#6B7280;font-size:1.1rem;padding:2px 6px;border-radius:6px;" onmouseover="this.style.background='#F3F4F6'" onmouseout="this.style.background='none'">›</button>
+    </div>
+    ${rangePill}
+    <!-- Day-of-week headers -->
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;padding:.4rem .5rem .2rem;">
+      ${dayNames.map(n=>`<div style="text-align:center;font-size:11px;font-weight:600;color:#9CA3AF;">${n}</div>`).join('')}
+    </div>
+    <!-- Day grid -->
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;padding:.2rem .5rem .5rem;">
+      ${cells.join('')}
+    </div>`;
+}
+
+function miniCalNav(delta){
+  _miniCalMonth+=delta;
+  if(_miniCalMonth>11){_miniCalMonth=0;_miniCalYear++;}
+  if(_miniCalMonth<0){_miniCalMonth=11;_miniCalYear--;}
+  renderMiniCal();
+}
+
+function miniCalClickDay(ds){
+  if(!_miniCalStart||(_miniCalStart&&_miniCalEnd&&_miniCalEnd!==_miniCalStart)){
+    // No selection yet, OR range already complete → start fresh
+    _miniCalStart=ds;_miniCalEnd=ds;
+  } else if(ds<_miniCalStart){
+    // Clicked before start → make it the new start
+    _miniCalStart=ds;_miniCalEnd=_miniCalStart;
+  } else {
+    // Extend end
+    _miniCalEnd=ds;
+  }
+  // Update hidden inputs and trigger rebuild
+  const ci=document.getElementById('bk-checkin');
+  const co=document.getElementById('bk-checkout');
+  if(ci)ci.value=_miniCalStart;
+  if(co)co.value=_miniCalEnd||_miniCalStart;
+  renderMiniCal();
+  checkDateCapacity();
+  rebuildDailySchedule();
+  checkDogVaccWarning();
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function syncCheckout(){
   const ci=document.getElementById('bk-checkin')?.value;
