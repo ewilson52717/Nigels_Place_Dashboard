@@ -19,6 +19,7 @@
  *   registerClient  — add a new client + dog row (onboarding step 3)
  *                     IDs are assigned server-side to avoid collisions
  *   getClientData   — return client's own record, dogs, bookings + safe settings
+ *   addDog          — add an additional dog to an existing client profile
  *   updateVetLimit  — update a dog's emergency vet spending limit
  *   cancelBooking   — mark a booking as 'cancelled'
  *
@@ -85,6 +86,7 @@ function doPost(e) {
 
     if (action === 'registerClient') return registerClient(ss, req, email);
     if (action === 'getClientData')  return getClientData(ss, req, email);
+    if (action === 'addDog')         return addDog(ss, req, email);
     if (action === 'updateVetLimit') return updateVetLimit(ss, req, email);
     if (action === 'cancelBooking')  return cancelBooking(ss, req, email);
 
@@ -174,6 +176,64 @@ function registerClient(ss, req, callerEmail) {
 
   // Return the server-assigned IDs so the browser can sync local state
   return respond({ ok: true, message: 'Client registered successfully.', clientId: newClientId, dogId: newDogId });
+}
+
+// ─── ACTION: addDog ───────────────────────────────────────────────────────────
+// Adds a new dog to an existing client's profile. The caller must already have
+// a client record (i.e. have completed registration). Dog ID is assigned
+// server-side. Returns { ok, dogId } on success.
+function addDog(ss, req, callerEmail) {
+  const { dog } = req;
+  if (!dog || !dog.name) return respond({ ok: false, error: 'Dog name is required.' });
+
+  const clientsSheet = ss.getSheetByName('Clients');
+  const dogsSheet    = ss.getSheetByName('Dogs');
+  if (!clientsSheet) return respond({ ok: false, error: 'Clients sheet not found' });
+  if (!dogsSheet)    return respond({ ok: false, error: 'Dogs sheet not found' });
+
+  // Find the verified caller's client record
+  const clientRows = clientsSheet.getDataRange().getValues();
+  let callerClientId = null;
+  for (let i = 1; i < clientRows.length; i++) {
+    if (String(clientRows[i][2]).toLowerCase() === callerEmail.toLowerCase()) {
+      callerClientId = clientRows[i][0];
+      break;
+    }
+  }
+  if (!callerClientId) {
+    return respond({ ok: false, error: 'No client record found for this account. Please complete registration first.' });
+  }
+
+  // Assign new dog ID server-side
+  const dogData = dogsSheet.getDataRange().getValues();
+  let maxDogId = 0;
+  for (let i = 1; i < dogData.length; i++) {
+    const id = parseInt(dogData[i][0]) || 0;
+    if (id > maxDogId) maxDogId = id;
+  }
+  const newDogId = maxDogId + 1;
+
+  dogsSheet.appendRow([
+    newDogId,
+    callerClientId,
+    String(dog.name || ''),
+    String(dog.breed || 'Mixed Breed'),
+    Number(dog.age) || 0,
+    'FALSE',                       // vaccinated — admin verifies
+    String(dog.notes || ''),
+    String(dog.birthday || ''),
+    '',                            // vaccExpiry
+    '[]',                          // vaccines
+    '',                            // driveFileLink
+    '',                            // photoLink
+    '[]',                          // playPhotos
+    '{"x":50,"y":50}',             // photoOffset
+    String(dog.emergencyVetLimit || ''),
+    'FALSE',                       // deceased
+    '',                            // vaccOverride
+  ]);
+
+  return respond({ ok: true, message: 'Dog added successfully.', dogId: newDogId });
 }
 
 // ─── ACTION: getClientData ────────────────────────────────────────────────────

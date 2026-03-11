@@ -391,6 +391,16 @@ function vaccBadge(dog){
 // Returns true if dog has current (non-expired) records for ALL required vaccines.
 // If requiredVaccines list is empty, falls back to the generic vaccStatus check.
 function hasRequiredVaccines(dog){
+  // Admin vaccine override: if set and not yet expired, bypass all vaccine checks.
+  if(dog.vaccOverride){
+    try{
+      const ov=JSON.parse(dog.vaccOverride);
+      if(ov&&ov.until){
+        if(ov.until==='indefinite')return true;
+        if(String(ov.until)>=TODAY)return true; // extended until a future date
+      }
+    }catch(e){}
+  }
   const required=state.settings.requiredVaccines||[];
   if(!required.length)return vaccStatus(dog)==='ok';
   const latest=getLatestVaccsByType(dog);
@@ -1187,7 +1197,7 @@ async function ensureServicesSheet(){
 async function initSheetHeaders(){
   await Promise.all([
     writeRange('Clients!A1:E1', [['id','name','email','phone','photoConsent']]),
-    writeRange('Dogs!A1:P1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit','deceased']]),
+    writeRange('Dogs!A1:Q1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit','deceased','vaccOverride']]),
     writeRange('Bookings!A1:L1',[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price']]),
     writeRange('Invoices!A1:K1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items','externalPaid','paymentNote']]),
     writeRange('Settings!A1:B15',[
@@ -1239,7 +1249,8 @@ async function loadAllData(){
     let photoOffset={x:50,y:50};try{if(r[13]){const p=String(r[13]).split(',');if(p.length===2)photoOffset={x:+p[0]||50,y:+p[1]||50};}}catch(e){}
     const emergencyVetLimit=String(r[14]||'');
     const deceased=String(r[15]||'').toLowerCase()==='true';
-    const dog={id:+r[0],name:String(r[2]||''),breed:String(r[3]||''),age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',notes:String(r[6]||''),birthday,vaccExpiry,vaccines,driveFileLink:String(r[10]||''),photoLink:String(r[11]||''),playPhotos,photoOffset,emergencyVetLimit,deceased};
+    const vaccOverride=String(r[16]||'');
+    const dog={id:+r[0],name:String(r[2]||''),breed:String(r[3]||''),age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',notes:String(r[6]||''),birthday,vaccExpiry,vaccines,driveFileLink:String(r[10]||''),photoLink:String(r[11]||''),playPhotos,photoOffset,emergencyVetLimit,deceased,vaccOverride};
     const cl=clients.find(c=>c.id===+r[1]);if(cl)cl.dogs.push(dog);
   });
   bookings.length=0;
@@ -1307,10 +1318,10 @@ async function persistBookings(){
 async function persistClients(){
   if(state.mode!=='live')return;
   const cRows=[['id','name','email','phone','photoConsent'],...clients.map(c=>[c.id,c.name,c.email,c.phone,c.photoConsent?'true':'false'])];
-  const dRows=[['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit','deceased'],
-    ...clients.flatMap(c=>c.dogs.map(d=>{const off=d.photoOffset||{x:50,y:50};return[d.id,c.id,d.name,d.breed,d.age,d.vaccinated,d.notes,d.birthday||'',d.vaccExpiry||'',JSON.stringify(d.vaccines||[]),d.driveFileLink||'',d.photoLink||'',JSON.stringify(d.playPhotos||[]),`${off.x},${off.y}`,d.emergencyVetLimit||'',d.deceased?'true':'false'];}))];
+  const dRows=[['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit','deceased','vaccOverride'],
+    ...clients.flatMap(c=>c.dogs.map(d=>{const off=d.photoOffset||{x:50,y:50};return[d.id,c.id,d.name,d.breed,d.age,d.vaccinated,d.notes,d.birthday||'',d.vaccExpiry||'',JSON.stringify(d.vaccines||[]),d.driveFileLink||'',d.photoLink||'',JSON.stringify(d.playPhotos||[]),`${off.x},${off.y}`,d.emergencyVetLimit||'',d.deceased?'true':'false',d.vaccOverride||''];}))];
   await writeRange(`Clients!A1:E${cRows.length}`,cRows);
-  await writeRange(`Dogs!A1:P${dRows.length}`,dRows);
+  await writeRange(`Dogs!A1:Q${dRows.length}`,dRows);
 }
 async function persistInvoices(){
   if(state.mode!=='live')return;
@@ -1572,6 +1583,7 @@ async function loadClientDataViaProxy(){
         vaccines,driveFileLink:String(r[10]||''),photoLink:String(r[11]||''),
         playPhotos,photoOffset,emergencyVetLimit:String(r[14]||''),
         deceased:String(r[15]).toLowerCase()==='true',
+        vaccOverride:String(r[16]||''),
       };
     });
 
@@ -2756,7 +2768,7 @@ function buildDogsView(){
                 onmouseover="this.style.background='#F3F4F6'" onmouseout="this.style.background='#F9FAFB'">
                 ${dog.deceased?'↩ Mark as Active':'🌈 Rainbow Bridge'}
               </button>
-              ${!dog.deceased?`<button onclick="deleteDog(${dog.clientId},${dog.id})" class="text-xs px-3 py-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 border border-red-200">🗑️</button>`:''}
+              <button onclick="deleteDog(${dog.clientId},${dog.id})" class="text-xs px-3 py-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 border border-red-200" title="Delete dog profile">🗑️</button>
             </div>
           </div>
           <!-- Owner card -->
@@ -2781,13 +2793,20 @@ function buildDogsView(){
         <div class="md:col-span-2 space-y-4">
           <!-- Vaccination Records -->
           <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-            <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
               <h3 class="font-semibold text-gray-700">💉 Vaccination Records</h3>
-              <button id="vbtn-${dog.id}" onclick="handleVaccUpload(${dog.clientId},${dog.id})"
-                class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
-                📄 Upload Record
-              </button>
+              <div class="flex gap-2 flex-wrap">
+                <button id="vbtn-${dog.id}" onclick="handleVaccUpload(${dog.clientId},${dog.id})"
+                  class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
+                  📄 Upload Record
+                </button>
+                <button onclick="showVaccOverrideModal(${dog.clientId},${dog.id})"
+                  class="text-xs px-3 py-1.5 rounded-lg border font-medium ${(()=>{try{const ov=dog.vaccOverride?JSON.parse(dog.vaccOverride):null;return ov&&ov.until?'border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100':'border-gray-200 text-gray-500 hover:bg-gray-50';}catch(e){return 'border-gray-200 text-gray-500 hover:bg-gray-50';}})()}">
+                  ${(()=>{try{const ov=dog.vaccOverride?JSON.parse(dog.vaccOverride):null;if(ov&&ov.until)return ov.until==='indefinite'?'🔓 Waived':'🔓 Extended';return '🛡️ Override';}catch(e){return '🛡️ Override';}})()}
+                </button>
+              </div>
             </div>
+            ${(()=>{try{const ov=dog.vaccOverride?JSON.parse(dog.vaccOverride):null;if(ov&&ov.until){const label=ov.until==='indefinite'?'Indefinitely waived by admin':`Extended until ${ov.until}`;const by=ov.by?` · by ${ov.by}`:'';return `<div class="mb-3 flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium" style="background:#FFF7ED;border:1px solid #FED7AA;color:#C2410C;">🔓 Vaccine requirement overridden — ${label}${by}</div>`;}return'';}catch(e){return'';}})()}
             ${buildVaccineRecordsHTML(dog)}
             ${dog.driveFileLink?`<a href="${dog.driveFileLink}" target="_blank" class="mt-3 inline-flex items-center gap-1.5 text-xs text-blue-600 hover:underline">📂 View original record in Drive →</a>`:''}
           </div>
@@ -3379,9 +3398,13 @@ function buildClientDog(){
     <h1 class="text-2xl font-bold text-gray-800 mb-1">My Dog 🐾</h1>
     <p class="text-gray-400 text-sm mb-5">View your dog's profile and manage emergency care preferences.</p>
     ${dogsHtml}
-    <p class="text-xs text-center text-gray-300 mt-2">To update your dog's name or breed — contact Nigel's Place directly. Vaccine records can be uploaded above.</p>
+    <div class="mt-4 flex flex-col items-center gap-2">
+      <button onclick="showAddDogModal()" class="flex items-center gap-2 px-5 py-2.5 text-white text-sm font-semibold rounded-xl shadow-sm hover:opacity-90 transition-opacity" style="background:#7B4015;">
+        + Add Another Dog
+      </button>
+      <p class="text-xs text-center text-gray-300 mt-1">To update a dog's name or breed — contact Nigel's Place directly. Vaccine records can be uploaded above.</p>
+    </div>
   </div>`;
-  // Note: deceased dogs show with memorial styling but no booking/vet controls
 }
 
 async function updateClientVetLimit(clientId,dogId,value){
@@ -3415,6 +3438,7 @@ function buildModal(){
   if(m.type==='editClient')   return buildEditClientModal(m.clientId);
   if(m.type==='editDog')      return buildEditDogModal(m.clientId,m.dogId);
   if(m.type==='editInvoice')  return buildEditInvoiceModal(m.invoiceId);
+  if(m.type==='addDog')       return buildAddDogModal();
   return'';
 }
 function buildAddInvoiceModal(){
@@ -5216,6 +5240,156 @@ async function deleteVaccEntry(clientId,dogId,typeName){
   dog.vaccines=(dog.vaccines||[]).filter(v=>(v.name||'').trim()!==typeName.trim());
   render();showToast(`${typeName} records deleted.`);
   try{await persistClients();}catch(e){showToast('Sheet sync failed.','#F97316');}
+}
+// ─── VACCINE OVERRIDE (ADMIN) ─────────────────────────────────────────────────
+function showVaccOverrideModal(clientId,dogId){
+  const cl=clients.find(c=>c.id===clientId);
+  const dog=cl?.dogs.find(d=>d.id===dogId);
+  if(!dog)return;
+  let current=null;
+  try{if(dog.vaccOverride)current=JSON.parse(dog.vaccOverride);}catch(e){}
+  const hasOverride=current&&current.until;
+  const overlay=document.createElement('div');
+  overlay.id='vacc-override-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  overlay.innerHTML=`
+  <div style="background:#fff;border-radius:20px;padding:1.5rem;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.2);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <h3 style="margin:0;font-size:1rem;font-weight:700;color:#1f2937;">🛡️ Vaccine Override — ${dog.name}</h3>
+      <button onclick="document.getElementById('vacc-override-overlay').remove()" style="background:none;border:none;color:#9ca3af;font-size:1.5rem;cursor:pointer;line-height:1;">×</button>
+    </div>
+    <p style="font-size:.8rem;color:#6b7280;margin-bottom:1rem;line-height:1.5;">Override temporarily unlocks booking for this dog, bypassing all vaccine requirements. Use when a client is actively getting records updated, or as a goodwill gesture.</p>
+    ${hasOverride?`<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:.6rem .9rem;font-size:.8rem;color:#C2410C;margin-bottom:1rem;">
+      🔓 Current override: ${current.until==='indefinite'?'Waived indefinitely':`Extended until ${current.until}`}${current.by?` · by ${current.by}`:''}
+    </div>`:''}
+    <div style="margin-bottom:.75rem;">
+      <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:.35rem;">Extend until date</label>
+      <input type="date" id="vacc-override-date" min="${TODAY}" value="${hasOverride&&current.until!=='indefinite'?current.until:''}"
+        style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:.45rem .6rem;font-size:.85rem;box-sizing:border-box;">
+    </div>
+    <div style="margin-bottom:1.1rem;display:flex;align-items:center;gap:.5rem;">
+      <input type="checkbox" id="vacc-override-indefinite" ${hasOverride&&current.until==='indefinite'?'checked':''}
+        onchange="document.getElementById('vacc-override-date').disabled=this.checked">
+      <label for="vacc-override-indefinite" style="font-size:.82rem;color:#374151;cursor:pointer;">Waive indefinitely (until manually removed)</label>
+    </div>
+    <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
+      <button onclick="saveVaccOverride(${clientId},${dogId})"
+        style="flex:1;background:#7B4015;color:#fff;border:none;border-radius:10px;padding:.55rem;font-size:.85rem;font-weight:600;cursor:pointer;">
+        🔓 Apply Override
+      </button>
+      ${hasOverride?`<button onclick="clearVaccOverride(${clientId},${dogId})"
+        style="flex:1;background:#FEE2E2;color:#DC2626;border:1px solid #FECACA;border-radius:10px;padding:.55rem;font-size:.85rem;font-weight:600;cursor:pointer;">
+        ✕ Remove Override
+      </button>`:''}
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  // If indefinite is already checked, disable the date field
+  if(hasOverride&&current.until==='indefinite'){
+    const dateInput=document.getElementById('vacc-override-date');
+    if(dateInput)dateInput.disabled=true;
+  }
+}
+async function saveVaccOverride(clientId,dogId){
+  const cl=clients.find(c=>c.id===clientId);
+  const dog=cl?.dogs.find(d=>d.id===dogId);
+  if(!dog)return;
+  const indefinite=document.getElementById('vacc-override-indefinite')?.checked;
+  const dateVal=document.getElementById('vacc-override-date')?.value;
+  if(!indefinite&&!dateVal){showToast('Pick a date or choose indefinite.','#EF4444');return;}
+  const until=indefinite?'indefinite':dateVal;
+  dog.vaccOverride=JSON.stringify({until,by:state.userEmail||'admin',set:TODAY});
+  document.getElementById('vacc-override-overlay')?.remove();
+  render();showToast(`Vaccine override set for ${dog.name} ✓`);
+  try{await persistClients();}catch(e){showToast('Sheet sync failed.','#F97316');}
+}
+async function clearVaccOverride(clientId,dogId){
+  const cl=clients.find(c=>c.id===clientId);
+  const dog=cl?.dogs.find(d=>d.id===dogId);
+  if(!dog)return;
+  dog.vaccOverride='';
+  document.getElementById('vacc-override-overlay')?.remove();
+  render();showToast(`Vaccine override removed for ${dog.name}.`);
+  try{await persistClients();}catch(e){showToast('Sheet sync failed.','#F97316');}
+}
+// ─── ADD DOG (CLIENT POST-ONBOARDING) ────────────────────────────────────────
+function showAddDogModal(){
+  state.showModal={type:'addDog'};render();
+}
+async function submitAddDog(e){
+  e.preventDefault();
+  const name=(document.getElementById('add-dog-name')?.value||'').trim();
+  if(!name){showToast('Dog name is required.','#EF4444');return;}
+  const breed=(document.getElementById('add-dog-breed')?.value||'').trim()||'Mixed Breed';
+  const age=parseInt(document.getElementById('add-dog-age')?.value)||0;
+  const birthday=(document.getElementById('add-dog-birthday')?.value||'').trim();
+  const notes=(document.getElementById('add-dog-notes')?.value||'').trim();
+  const vetLimit=document.getElementById('add-dog-vet')?.value||'';
+  const btn=document.getElementById('add-dog-submit');
+  if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{
+    const result=await proxyClientWrite('addDog',{dog:{name,breed,age,birthday,notes,emergencyVetLimit:vetLimit}});
+    if(!result.ok)throw new Error(result.error||'Could not add dog.');
+    // Refresh client data from proxy so the new dog appears
+    await loadClientDataViaProxy();
+    state.showModal=null;
+    render();
+    showToast(`${name} added to your profile! 🐾`);
+  }catch(err){
+    showToast('Error: '+err.message,'#EF4444');
+    if(btn){btn.disabled=false;btn.textContent='Add Dog';}
+  }
+}
+function buildAddDogModal(){
+  return`<div class="modal-overlay" onclick="if(event.target===this){state.showModal=null;render();}">
+  <div class="modal-box" style="max-width:440px;">
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-lg font-bold text-gray-800">🐾 Add a Dog</h2>
+      <button onclick="state.showModal=null;render()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+    </div>
+    <form onsubmit="submitAddDog(event)" class="space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Dog's Name <span class="text-red-400">*</span></label>
+        <input id="add-dog-name" required placeholder="e.g. Biscuit" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Breed</label>
+          <input id="add-dog-breed" placeholder="Mixed Breed" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Age (years)</label>
+          <input id="add-dog-age" type="number" min="0" max="30" placeholder="0" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300">
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Birthday (optional)</label>
+        <input id="add-dog-birthday" type="date" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Care Notes</label>
+        <textarea id="add-dog-notes" rows="2" placeholder="Any special needs, quirks, or things we should know…" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-300"></textarea>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">🏥 Emergency Vet Authorization</label>
+        <select id="add-dog-vet" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300">
+          <option value="">Contact me first — no treatment without my approval</option>
+          <option value="office-only">Office visit &amp; basic diagnostics only (~$200–$400)</option>
+          <option value="500">Up to $500</option>
+          <option value="1000">Up to $1,000</option>
+          <option value="2500">Up to $2,500</option>
+          <option value="5000">Up to $5,000</option>
+          <option value="unlimited">No limit — do whatever is needed</option>
+        </select>
+      </div>
+      <p class="text-xs text-gray-400">After adding, bring a copy of your dog's vaccine records to your first visit — or upload them here once your profile is saved.</p>
+      <div class="flex gap-3 pt-1">
+        <button type="button" onclick="state.showModal=null;render()" class="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50">Cancel</button>
+        <button id="add-dog-submit" type="submit" class="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style="background:#7B4015;">Add Dog</button>
+      </div>
+    </form>
+  </div>
+</div>`;
 }
 // ─── EDIT CLIENT SUBMIT ───────────────────────────────────────────────────────
 async function submitEditClient(e,clientId){
