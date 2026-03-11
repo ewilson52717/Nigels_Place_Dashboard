@@ -4645,39 +4645,64 @@ function buildDayModal(ds){
 }
 function getDaycareTier(qty){
   if(qty>=20)return{price:35,label:'20+ sessions',badge:'Best Value 🏆'};
-  if(qty>=15)return{price:40,label:'15-pack',badge:'Great Value ⭐'};
-  if(qty>=10)return{price:45,label:'10-pack',badge:'Save More 💛'};
-  if(qty>=5) return{price:45,label:'5-pack',badge:'Save $10/session'};
-  return{price:55,label:'Single session',badge:'Pay as you go'};
+  if(qty>=15)return{price:40,label:'15–19 sessions',badge:'Great Value ⭐'};
+  if(qty>=5) return{price:45,label:'5–14 sessions',badge:'Save $10/session 💛'};
+  return{price:55,label:'1–4 sessions',badge:'Drop-in rate'};
 }
 function setBkMain(type){
   _bookingMain=type;
-  const active='border-color:#7B4015;background:#FFF7ED;color:#7B4015';
-  const idle='border-color:#E5E7EB;background:#F9FAFB;color:#6B7280';
-  ['boarding','daycare'].forEach(t=>{
+  // Update type button styles
+  ['boarding','daycare','combo'].forEach(t=>{
     const btn=document.getElementById(`bk-type-${t}`);
-    if(btn)btn.setAttribute('style',`${t===type?active:idle};border-width:2px;border-style:solid;border-radius:0.75rem;padding:0.625rem;text-align:center;cursor:pointer;transition:all 0.15s;`);
+    if(!btn)return;
+    const a=t===type;
+    btn.style.background=a?'#7B4015':'#F9FAFB';
+    btn.style.color=a?'#fff':'#6B7280';
+    btn.style.borderColor=a?'#7B4015':'#E5E7EB';
   });
   const bSec=document.getElementById('bk-boarding-section');
   const dSec=document.getElementById('bk-daycare-section');
-  if(bSec)bSec.style.display=type==='boarding'?'':'none';
-  if(dSec)dSec.style.display=type==='daycare'?'':'none';
+  const pkgRow=document.getElementById('bk-pkg-mode-row');
+  const pkgPicker=document.getElementById('bk-session-picker');
+  const datesSec=document.getElementById('bk-daycare-dates');
+  // Boarding section: visible for boarding or combo
+  if(bSec)bSec.style.display=(type==='boarding'||type==='combo')?'':'none';
+  // Daycare section: visible for daycare or combo
+  if(dSec)dSec.style.display=(type==='daycare'||type==='combo')?'':'none';
+  // Package mode toggle only available for pure daycare
+  if(pkgRow)pkgRow.style.display=type==='daycare'?'':'none';
+  // Combo always uses schedule mode (package can't be combined with boarding)
+  if(type==='combo'){
+    if(_daycareMode==='package'){_daycareMode='schedule';}
+    if(pkgPicker)pkgPicker.style.display='none';
+    if(datesSec)datesSec.style.display='';
+  }
+  // Update section header labels
+  const bLabel=document.getElementById('bk-boarding-label');
+  if(bLabel)bLabel.textContent=type==='combo'?'Boarding Nights':'Boarding Dates';
+  const dLabel=document.getElementById('bk-daycare-label');
+  if(dLabel)dLabel.textContent=type==='combo'?'Daycare Days':'Daycare Sessions';
+  // For pure boarding: also keep _dailySchedule in sync (legacy)
   if(type==='boarding'){
     const ci=document.getElementById('bk-board-checkin')?.value;
     const co=document.getElementById('bk-board-checkout')?.value||ci;
-    if(ci){getDatesInRange(ci,co).forEach(ds=>{_dailySchedule[ds]='Boarding';});}
+    if(ci){getDatesInRange(ci,co||ci).forEach(ds=>{_dailySchedule[ds]='Boarding';});}
   }
   updateBookingPrice();
 }
 function setDaycareMode(mode){
   _daycareMode=mode;
-  const active='border-color:#7B4015;background:#FFF7ED;color:#7B4015';
-  const idle='border-color:#E5E7EB;background:#F9FAFB;color:#6B7280';
   ['schedule','package'].forEach(m=>{
     const btn=document.getElementById(`bk-mode-${m}`);
-    if(btn)btn.setAttribute('style',`${m===mode?active:idle};border-width:2px;border-style:solid;border-radius:0.75rem;padding:0.5rem 0.75rem;text-align:center;cursor:pointer;transition:all 0.15s;`);
+    if(!btn)return;
+    const a=m===mode;
+    btn.style.background=a?'#7B4015':'#F9FAFB';
+    btn.style.color=a?'#fff':'#6B7280';
+    btn.style.borderColor=a?'#7B4015':'#E5E7EB';
   });
+  const pkgPicker=document.getElementById('bk-session-picker');
   const datesSec=document.getElementById('bk-daycare-dates');
+  if(pkgPicker)pkgPicker.style.display=mode==='package'?'':'none';
   if(datesSec)datesSec.style.display=mode==='schedule'?'':'none';
   updateBookingPrice();
 }
@@ -4686,237 +4711,268 @@ function stepSessions(delta){
   const el=document.getElementById('bk-session-qty');if(el)el.textContent=_sessionQty;
   const tier=getDaycareTier(_sessionQty);
   const tierEl=document.getElementById('bk-tier-label');
-  if(tierEl)tierEl.innerHTML=`<span class="font-semibold text-amber-800">$${tier.price}/session</span> <span class="text-gray-400">·</span> <span class="text-amber-600">${tier.badge}</span>`;
+  if(tierEl)tierEl.innerHTML=`<span class="font-bold text-amber-800 text-sm">$${tier.price}/session</span><span class="text-gray-300 mx-1">·</span><span class="text-amber-600 text-xs">${tier.badge}</span>`;
+  // Refresh tier pill highlights
+  [[1,4],[5,14],[15,19],[20,999]].forEach(([lo,hi],i)=>{
+    const pill=document.getElementById(`bk-tier-pill-${i}`);
+    if(!pill)return;
+    const a=_sessionQty>=lo&&_sessionQty<=hi;
+    pill.style.background=a?'#FDE68A':'#F3F4F6';
+    pill.style.color=a?'#78350F':'#9CA3AF';
+  });
   updateBookingPrice();
 }
 function buildBookingModal(selectedDate){
   const isClient=state.role==='client'||state.adminViewAsClient;
-  const minBookDate=isClient?MIN_BOOKING_DATE:TODAY; // clients cannot book same-day (or next day after 5 PM Pacific)
+  const minBookDate=isClient?MIN_BOOKING_DATE:TODAY;
   const cl=isClient?clients.find(c=>c.id===state.currentClientId):null;
   const activeAddons=services.filter(s=>s.type==='addon'&&s.active);
-  // Boarding service lookup
-  const boardingSvc=services.find(s=>s.type==='base'&&s.active&&s.name.toLowerCase().includes('board'));
-  const boardingRate=boardingSvc?.price||state.settings.fullDayRate||55;
-  // Daycare tier for current qty
   const tier=getDaycareTier(_sessionQty);
-  // Client package balance for quick display
   const clientId=isClient?state.currentClientId:null;
   const pkgBalance=clientId?packages.filter(p=>p.clientId===clientId&&p.remaining>0).reduce((s,p)=>s+p.remaining,0):0;
+  // Type button builder
+  const typeBtn=(type,icon,label,sub)=>{
+    const a=_bookingMain===type;
+    return`<button type="button" id="bk-type-${type}" onclick="setBkMain('${type}')"
+      style="flex:1;padding:0.55rem 0.3rem;border-radius:0.75rem;border:2px solid ${a?'#7B4015':'#E5E7EB'};
+             background:${a?'#7B4015':'#F9FAFB'};color:${a?'#fff':'#6B7280'};cursor:pointer;
+             transition:all 0.15s;text-align:center;min-width:0;">
+      <div style="font-size:1.2rem;line-height:1.3;">${icon}</div>
+      <div style="font-size:0.78rem;font-weight:700;margin-top:2px;white-space:nowrap;">${label}</div>
+      <div style="font-size:0.62rem;opacity:0.72;margin-top:1px;white-space:nowrap;">${sub}</div>
+    </button>`;
+  };
+  // Tier pill builder
+  const tierPills=[[1,4,55,'1–4'],[5,14,45,'5–14'],[15,19,40,'15–19'],[20,999,35,'20+']].map(([lo,hi,p,lbl],i)=>{
+    const a=_sessionQty>=lo&&_sessionQty<=hi;
+    return`<span id="bk-tier-pill-${i}" class="px-2 py-0.5 rounded-full text-xs font-semibold"
+      style="background:${a?'#FDE68A':'#F3F4F6'};color:${a?'#78350F':'#9CA3AF'};white-space:nowrap;">${lbl}× = $${p}</span>`;
+  }).join('');
 
   return`
   <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 slide-in max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between mb-5">
-        <h2 class="text-lg font-bold text-gray-800">New Booking</h2>
-        <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md slide-in" style="max-height:92vh;overflow-y:auto;">
+
+      <!-- Header -->
+      <div class="sticky top-0 bg-white flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-100 z-10 rounded-t-2xl">
+        <h2 class="text-lg font-bold text-gray-800">📋 New Booking</h2>
+        <button onclick="closeModal()" class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 text-xl leading-none">×</button>
       </div>
-      <form onsubmit="submitBooking(event)" class="space-y-4">
 
-        <!-- ── CLIENT / DOG ──────────────────────────────────── -->
+      <form onsubmit="submitBooking(event)" class="px-5 pt-4 pb-5 space-y-4">
+
+        <!-- ① PET ─────────────────────────────────────────────── -->
         ${!isClient?`
-        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Client</label>
-          <select id="bk-client" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="updateDogSelect();checkDogVaccWarning()">
-            <option value="">Select client...</option>
-            ${clients.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
-          </select></div>
-        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Pet</label>
-          <select id="bk-dog" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="checkDogVaccWarning()"><option>Select client first...</option></select></div>`
-        :`<div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Pet</label>
-          <select id="bk-dog" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="checkDogVaccWarning()">
-            ${(cl?.dogs||[]).filter(d=>!d.deceased).map(d=>`<option value="${d.id}">${d.name} (${d.breed})</option>`).join('')||'<option>No active pets on file</option>'}
-          </select></div>
-        ${pkgBalance>0?`<div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-          🎫 <span>You have <strong>${pkgBalance} session${pkgBalance===1?'':'s'}</strong> in your package — they'll be used automatically when scheduling.</span>
-        </div>`:''}`}
-
-        <!-- ── STEP 1: BOOKING TYPE ───────────────────────────── -->
-        <div>
-          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">What kind of booking?</label>
-          <div class="grid grid-cols-2 gap-3">
-            <div id="bk-type-boarding" onclick="setBkMain('boarding')"
-              style="border-color:${_bookingMain==='boarding'?'#7B4015':'#E5E7EB'};background:${_bookingMain==='boarding'?'#FFF7ED':'#F9FAFB'};color:${_bookingMain==='boarding'?'#7B4015':'#6B7280'};border-width:2px;border-style:solid;border-radius:0.75rem;padding:0.625rem;text-align:center;cursor:pointer;transition:all 0.15s;">
-              <div class="text-2xl mb-0.5">🏡</div>
-              <div class="text-sm font-semibold">Boarding</div>
-              <div class="text-xs opacity-70">Overnight stays</div>
-            </div>
-            <div id="bk-type-daycare" onclick="setBkMain('daycare')"
-              style="border-color:${_bookingMain==='daycare'?'#7B4015':'#E5E7EB'};background:${_bookingMain==='daycare'?'#FFF7ED':'#F9FAFB'};color:${_bookingMain==='daycare'?'#7B4015':'#6B7280'};border-width:2px;border-style:solid;border-radius:0.75rem;padding:0.625rem;text-align:center;cursor:pointer;transition:all 0.15s;">
-              <div class="text-2xl mb-0.5">☀️</div>
-              <div class="text-sm font-semibold">Daycare</div>
-              <div class="text-xs opacity-70">Day sessions</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ── BOARDING SECTION ──────────────────────────────── -->
-        <div id="bk-boarding-section" style="display:${_bookingMain==='boarding'?'':'none'}">
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Check-In</label>
-              <input type="date" id="bk-board-checkin" value="${selectedDate||''}" min="${TODAY}"
-                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="syncBoardingDates()">
-            </div>
-            <div>
-              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Check-Out</label>
-              <input type="date" id="bk-board-checkout" value="${selectedDate||''}" min="${TODAY}"
-                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" onchange="syncBoardingDates()">
-            </div>
-          </div>
-        </div>
-
-        <!-- ── DAYCARE SECTION ───────────────────────────────── -->
-        <div id="bk-daycare-section" style="display:${_bookingMain==='daycare'?'':'none'}">
-
-          <!-- Session quantity + tier pricing -->
-          <div class="p-3 rounded-xl border border-amber-100 bg-amber-50/60">
-            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">How many sessions?</label>
-            <div class="flex items-center gap-3 mb-2">
-              <button type="button" onclick="stepSessions(-1)"
-                class="w-9 h-9 rounded-full border-2 border-gray-300 text-gray-500 text-lg font-bold hover:bg-gray-100 flex items-center justify-center">−</button>
-              <span id="bk-session-qty" class="text-2xl font-bold text-amber-900 min-w-[2rem] text-center">${_sessionQty}</span>
-              <button type="button" onclick="stepSessions(1)"
-                class="w-9 h-9 rounded-full border-2 border-gray-300 text-gray-500 text-lg font-bold hover:bg-gray-100 flex items-center justify-center">+</button>
-              <div id="bk-tier-label" class="text-sm ml-1">
-                <span class="font-semibold text-amber-800">$${tier.price}/session</span>
-                <span class="text-gray-400"> · </span>
-                <span class="text-amber-600">${tier.badge}</span>
-              </div>
-            </div>
-            <!-- Tier reference -->
-            <div class="grid grid-cols-5 gap-1 mt-1">
-              ${[[1,4,55,'Pay as you go'],[5,9,45,'5-pack'],[10,14,45,'10-pack'],[15,19,40,'15-pack']].map(([lo,hi,p,lbl])=>{
-                const active=_sessionQty>=lo&&_sessionQty<=hi;
-                return`<div class="text-center px-1 py-1.5 rounded-lg text-xs ${active?'bg-amber-200 text-amber-900 font-bold':'bg-white/70 text-gray-400'}">
-                  <div>${lo}${hi?'-'+hi:'+'}×</div><div class="font-semibold">$${p}</div></div>`;
-              }).join('')}
-              <div class="text-center px-1 py-1.5 rounded-lg text-xs ${_sessionQty>=20?'bg-amber-200 text-amber-900 font-bold':'bg-white/70 text-gray-400'}">
-                <div>20+×</div><div class="font-semibold">$35</div></div>
-            </div>
-          </div>
-
-          <!-- Schedule mode: dates now vs package only -->
+        <div class="space-y-3">
           <div>
-            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">When to use these sessions?</label>
-            <div class="grid grid-cols-2 gap-2">
-              <div id="bk-mode-schedule" onclick="setDaycareMode('schedule')"
-                style="border-color:${_daycareMode==='schedule'?'#7B4015':'#E5E7EB'};background:${_daycareMode==='schedule'?'#FFF7ED':'#F9FAFB'};color:${_daycareMode==='schedule'?'#7B4015':'#6B7280'};border-width:2px;border-style:solid;border-radius:0.75rem;padding:0.5rem 0.75rem;text-align:center;cursor:pointer;transition:all 0.15s;">
-                <div class="text-lg">📅</div>
-                <div class="text-xs font-semibold">Schedule Now</div>
-                <div class="text-xs opacity-70">Pick specific dates</div>
-              </div>
-              <div id="bk-mode-package" onclick="setDaycareMode('package')"
-                style="border-color:${_daycareMode==='package'?'#7B4015':'#E5E7EB'};background:${_daycareMode==='package'?'#FFF7ED':'#F9FAFB'};color:${_daycareMode==='package'?'#7B4015':'#6B7280'};border-width:2px;border-style:solid;border-radius:0.75rem;padding:0.5rem 0.75rem;text-align:center;cursor:pointer;transition:all 0.15s;">
-                <div class="text-lg">🎫</div>
-                <div class="text-xs font-semibold">Add to Package</div>
-                <div class="text-xs opacity-70">Schedule later · never expire</div>
-              </div>
-            </div>
+            <label class="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Client</label>
+            <select id="bk-client" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white" onchange="updateDogSelect();checkDogVaccWarning()">
+              <option value="">Select client…</option>
+              ${clients.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
+            </select>
           </div>
+          <div>
+            <label class="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Pet</label>
+            <select id="bk-dog" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white" onchange="checkDogVaccWarning()"><option>Select client first…</option></select>
+          </div>
+        </div>`
+        :`<div>
+          <label class="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Pet</label>
+          <select id="bk-dog" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white" onchange="checkDogVaccWarning()">
+            ${(cl?.dogs||[]).filter(d=>!d.deceased).map(d=>`<option value="${d.id}">${d.name} (${d.breed})</option>`).join('')||'<option>No active pets on file</option>'}
+          </select>
+          ${pkgBalance>0?`<div class="flex items-center gap-2 mt-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+            🎫 You have <strong class="mx-1">${pkgBalance} session${pkgBalance===1?'':'s'}</strong> in your package.
+          </div>`:''}
+        </div>`}
 
-          <!-- Date scheduling (only shown in 'schedule' mode) -->
-          <div id="bk-daycare-dates" style="display:${_daycareMode==='schedule'?'':'none'}">
-            <!-- Quick Set -->
-            <div>
-              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Quick Set — Apply to All Days</label>
-              <div class="flex gap-2">
-                ${(()=>{
-                  const baseSvcs=services.filter(s=>s.type==='base'&&s.active);
-                  const btns=baseSvcs.length>0?baseSvcs:[{name:'Full Day',price:state.settings.fullDayRate},{name:'Half Day',price:state.settings.halfDayRate}];
-                  return btns.map((s,i)=>`<button type="button" id="qs-svc-${i}" onclick="applyQuickSet('${s.name}')"
-                    class="flex-1 py-2 rounded-xl text-xs font-semibold transition-all border-2"
-                    style="border-color:#E5E7EB;background:#F9FAFB;color:#6B7280">${s.name}</button>`).join('');
-                })()}
+        <!-- ② TYPE OF STAY ──────────────────────────────────────── -->
+        <div>
+          <label class="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">Type of stay</label>
+          <div style="display:flex;gap:8px;">
+            ${typeBtn('boarding','🏡','Boarding','Overnight')}
+            ${typeBtn('daycare','☀️','Daycare','Day sessions')}
+            ${typeBtn('combo','🏡☀️','Stay & Play','Board + Daycare')}
+          </div>
+        </div>
+
+        <!-- ③ BOARDING DATES (boarding or combo) ─────────────────── -->
+        <div id="bk-boarding-section" style="display:${_bookingMain==='boarding'||_bookingMain==='combo'?'':'none'}">
+          <div class="rounded-xl border border-gray-200 overflow-hidden">
+            <div class="px-3 py-2 flex items-center gap-2" style="background:#F8F4F0;border-bottom:1px solid #E5E7EB;">
+              <span class="text-sm">🏡</span>
+              <span id="bk-boarding-label" class="text-xs font-bold text-amber-900 uppercase tracking-wider">${_bookingMain==='combo'?'Boarding nights':'Boarding dates'}</span>
+            </div>
+            <div class="p-3 grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1.5">Check-In</label>
+                <input type="date" id="bk-board-checkin" value="${selectedDate||''}" min="${TODAY}"
+                  class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white" onchange="syncBoardingDates()">
               </div>
-            </div>
-            <!-- Hidden inputs keep existing JS wiring intact -->
-            <input type="hidden" id="bk-checkin" value="${selectedDate&&selectedDate>=minBookDate?selectedDate:''}">
-            <input type="hidden" id="bk-checkout" value="${selectedDate&&selectedDate>=minBookDate?selectedDate:''}">
-            <!-- Mini calendar picker -->
-            <div>
-              <div id="bk-mini-cal" class="rounded-xl border border-gray-200 bg-white overflow-hidden"></div>
-              <p class="text-xs text-gray-400 mt-1.5 text-center">Click a start date, then an end date · hatched days are fully booked</p>
-            </div>
-            <!-- Per-day grid -->
-            <div>
-              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Daily Schedule</label>
-              <div id="daily-sched-grid" class="rounded-xl border border-gray-100 bg-gray-50/60 px-3 py-2">
-                <div class="text-xs text-gray-400 text-center py-2">Select dates above to build your schedule</div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1.5">Check-Out</label>
+                <input type="date" id="bk-board-checkout" value="${selectedDate||''}" min="${TODAY}"
+                  class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white" onchange="syncBoardingDates()">
               </div>
             </div>
           </div>
         </div>
 
-        <!-- ── SHARED: VACC / CAPACITY WARNINGS ──────────────── -->
+        <!-- ④ DAYCARE SECTION (daycare or combo) ─────────────────── -->
+        <div id="bk-daycare-section" style="display:${_bookingMain==='daycare'||_bookingMain==='combo'?'':'none'}">
+          <div class="rounded-xl border border-gray-200 overflow-hidden">
+            <div class="px-3 py-2 flex items-center gap-2" style="background:#F8F4F0;border-bottom:1px solid #E5E7EB;">
+              <span class="text-sm">☀️</span>
+              <span id="bk-daycare-label" class="text-xs font-bold text-amber-900 uppercase tracking-wider">${_bookingMain==='combo'?'Daycare days':'Daycare sessions'}</span>
+            </div>
+            <div class="p-3 space-y-3">
+
+              <!-- Schedule vs Package toggle (daycare-only) -->
+              <div id="bk-pkg-mode-row" style="display:${_bookingMain==='daycare'?'':'none'}">
+                <div class="flex gap-2">
+                  <button type="button" id="bk-mode-schedule" onclick="setDaycareMode('schedule')"
+                    style="flex:1;padding:0.5rem;border-radius:0.65rem;border:2px solid ${_daycareMode==='schedule'?'#7B4015':'#E5E7EB'};background:${_daycareMode==='schedule'?'#7B4015':'#F9FAFB'};color:${_daycareMode==='schedule'?'#fff':'#6B7280'};cursor:pointer;text-align:center;transition:all 0.15s;">
+                    <div style="font-size:0.85rem;">📅</div>
+                    <div style="font-size:0.72rem;font-weight:700;">Schedule Now</div>
+                    <div style="font-size:0.62rem;opacity:0.75;">Pick dates</div>
+                  </button>
+                  <button type="button" id="bk-mode-package" onclick="setDaycareMode('package')"
+                    style="flex:1;padding:0.5rem;border-radius:0.65rem;border:2px solid ${_daycareMode==='package'?'#7B4015':'#E5E7EB'};background:${_daycareMode==='package'?'#7B4015':'#F9FAFB'};color:${_daycareMode==='package'?'#fff':'#6B7280'};cursor:pointer;text-align:center;transition:all 0.15s;">
+                    <div style="font-size:0.85rem;">🎫</div>
+                    <div style="font-size:0.72rem;font-weight:700;">Add to Package</div>
+                    <div style="font-size:0.62rem;opacity:0.75;">Schedule later</div>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Session quantity picker (package mode only) -->
+              <div id="bk-session-picker" style="display:${_daycareMode==='package'?'':'none'}">
+                <div class="rounded-xl p-3" style="background:#FFFBEB;border:1px solid #FDE68A;">
+                  <div class="flex items-center gap-3 mb-2.5">
+                    <button type="button" onclick="stepSessions(-1)"
+                      class="w-9 h-9 rounded-full flex items-center justify-center text-lg font-bold flex-shrink-0"
+                      style="border:2px solid #D4A96B;color:#92400E;background:#fff;">−</button>
+                    <span id="bk-session-qty" class="text-2xl font-bold text-amber-900 min-w-[2.5rem] text-center">${_sessionQty}</span>
+                    <button type="button" onclick="stepSessions(1)"
+                      class="w-9 h-9 rounded-full flex items-center justify-center text-lg font-bold flex-shrink-0"
+                      style="border:2px solid #D4A96B;color:#92400E;background:#fff;">+</button>
+                    <div id="bk-tier-label" class="flex-1 min-w-0">
+                      <span class="font-bold text-amber-800 text-sm">$${tier.price}/session</span>
+                      <span class="text-gray-300 mx-1">·</span>
+                      <span class="text-amber-600 text-xs">${tier.badge}</span>
+                    </div>
+                  </div>
+                  <div class="flex gap-1.5 flex-wrap">${tierPills}</div>
+                </div>
+              </div>
+
+              <!-- Date scheduling (schedule now / combo) -->
+              <div id="bk-daycare-dates" style="display:${_daycareMode==='schedule'||_bookingMain==='combo'?'':'none'}">
+
+                <!-- Quick Set -->
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="text-xs text-gray-400 flex-shrink-0">Apply all days:</span>
+                  ${(()=>{
+                    const baseSvcs=services.filter(s=>s.type==='base'&&s.active&&!s.name.toLowerCase().includes('board'));
+                    const btns=baseSvcs.length>0?baseSvcs:[{name:'Full Day',price:state.settings.fullDayRate},{name:'Half Day',price:state.settings.halfDayRate}];
+                    return btns.map((s,i)=>`<button type="button" id="qs-svc-${i}" onclick="applyQuickSet('${s.name}')"
+                      class="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                      style="border:1.5px solid #E5E7EB;background:#F9FAFB;color:#6B7280;">${s.name} <span style="opacity:0.6;">$${s.price}</span></button>`).join('');
+                  })()}
+                </div>
+
+                <!-- Hidden range inputs keep existing wiring intact -->
+                <input type="hidden" id="bk-checkin" value="${selectedDate&&selectedDate>=minBookDate?selectedDate:''}">
+                <input type="hidden" id="bk-checkout" value="${selectedDate&&selectedDate>=minBookDate?selectedDate:''}">
+
+                <!-- Mini calendar -->
+                <div id="bk-mini-cal" class="rounded-xl overflow-hidden mb-1" style="border:1px solid #E5E7EB;"></div>
+                <p class="text-xs text-gray-400 text-center mb-2">Tap start date then end date · hatched = fully booked</p>
+
+                <!-- Per-day grid -->
+                <div id="daily-sched-grid" class="rounded-xl px-3 py-2" style="border:1px solid #F3F4F6;background:#FAFAFA;">
+                  <div class="text-xs text-gray-400 text-center py-2">Select dates above to build your schedule</div>
+                </div>
+              </div>
+
+            </div><!-- /inner p-3 -->
+          </div><!-- /daycare card -->
+        </div>
+
+        <!-- ⑤ WARNINGS ──────────────────────────────────────────── -->
         <div id="vacc-warning" class="text-xs hidden p-2.5 rounded-xl"></div>
-        <div id="vacc-override-row" class="hidden mt-1.5">
-          <label class="flex items-center gap-2 text-xs text-amber-800 cursor-pointer p-2 bg-amber-50 rounded-lg border border-amber-200">
-            <input type="checkbox" id="vacc-override-cb" class="accent-amber-700">
+        <div id="vacc-override-row" class="hidden">
+          <label class="flex items-center gap-2 text-xs text-amber-800 cursor-pointer px-3 py-2 rounded-xl" style="background:#FFF7ED;border:1px solid #FDE68A;">
+            <input type="checkbox" id="vacc-override-cb" class="accent-amber-700 flex-shrink-0">
             <span><strong>Admin override</strong> — proceed despite expired vaccines</span>
           </label>
         </div>
         <div id="cap-warning" class="text-xs text-red-500 hidden">⚠️ One or more days in this range is fully booked!</div>
 
-        <!-- ── ADD-ONS ─────────────────────────────────────────── -->
+        <!-- ⑥ ADD-ONS ─────────────────────────────────────────────── -->
         ${activeAddons.length>0?`
-        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Add-Ons</label>
+        <div>
+          <label class="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">Add-Ons</label>
           <div class="space-y-1.5">
             ${activeAddons.map(s=>{
               if(s.frequency==='qty'){
-                return`
-                <div class="flex items-center gap-3 p-2.5 rounded-xl border border-gray-100 bg-gray-50">
-                  <div class="flex-1">
-                    <div class="text-sm text-gray-700 font-medium">${s.name}</div>
-                    <div class="text-xs text-gray-400">$${s.price} per session · choose how many</div>
+                return`<div class="flex items-center gap-3 px-3 py-2.5 rounded-xl" style="border:1px solid #F3F4F6;background:#FAFAFA;">
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-semibold text-gray-700">${s.name}</div>
+                    <div class="text-xs text-gray-400">$${s.price} per session</div>
                   </div>
                   <div class="flex items-center gap-1.5">
                     <button type="button" onclick="stepAddon('aqty-${s.id}',-1)"
-                      class="w-7 h-7 rounded-full border border-gray-300 text-gray-500 text-base leading-none hover:bg-gray-200 flex items-center justify-center">−</button>
+                      class="w-7 h-7 rounded-full border border-gray-200 text-gray-500 flex items-center justify-center hover:bg-gray-100">−</button>
                     <input type="number" id="aqty-${s.id}" name="addon-qty" data-svcid="${s.id}" data-price="${s.price}" data-svcname="${s.name}"
-                      value="0" min="0" max="60"
-                      class="w-10 text-center text-sm border border-gray-200 rounded-lg py-1 font-semibold text-gray-700"
-                      oninput="updateBookingPrice()">
+                      value="0" min="0" max="60" class="w-10 text-center text-sm border border-gray-200 rounded-lg py-1 font-semibold text-gray-700" oninput="updateBookingPrice()">
                     <button type="button" onclick="stepAddon('aqty-${s.id}',1)"
-                      class="w-7 h-7 rounded-full border border-gray-300 text-gray-500 text-base leading-none hover:bg-gray-200 flex items-center justify-center">+</button>
+                      class="w-7 h-7 rounded-full border border-gray-200 text-gray-500 flex items-center justify-center hover:bg-gray-100">+</button>
                   </div>
                   <span id="aqty-lbl-${s.id}" class="text-xs font-semibold text-amber-700 w-10 text-right hidden"></span>
                 </div>`;
               }
-              return`
-              <label class="flex items-center gap-3 p-2.5 rounded-xl cursor-pointer hover:bg-gray-50 border border-gray-100 transition-colors">
-                <input type="checkbox" name="addon" value="${s.name}" data-price="${s.price}" class="accent-amber-700 w-4 h-4" onchange="updateBookingPrice()">
+              return`<label class="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-colors hover:bg-gray-50" style="border:1px solid #F3F4F6;">
+                <input type="checkbox" name="addon" value="${s.name}" data-price="${s.price}" class="accent-amber-700 w-4 h-4 flex-shrink-0" onchange="updateBookingPrice()">
                 <span class="flex-1 text-sm text-gray-700">${s.name}</span>
-                <span class="text-xs text-gray-400">once per stay</span>
-                <span class="text-xs font-medium text-gray-500">+$${s.price}</span>
+                <span class="text-xs font-semibold text-gray-400">+$${s.price}</span>
               </label>`;
             }).join('')}
-          </div></div>`:''}
+          </div>
+        </div>`:''}
 
-        <!-- ── PRICE SUMMARY ──────────────────────────────────── -->
-        <div id="price-preview" class="hidden rounded-xl p-3 border border-amber-100 text-sm" style="background:#FFFBEB">
-          <div class="font-semibold text-amber-900 mb-1">💰 Booking Summary</div>
-          <div id="price-lines" class="text-amber-800 space-y-0.5 text-xs"></div>
-          <div id="price-total" class="font-bold text-amber-900 text-base mt-2"></div>
+        <!-- ⑦ PRICE SUMMARY ─────────────────────────────────────── -->
+        <div id="price-preview" class="hidden rounded-xl p-3.5" style="background:#FFFBEB;border:1px solid #FDE68A;">
+          <div class="font-semibold text-amber-900 mb-1.5 text-sm flex items-center gap-1.5">💰 Booking Summary</div>
+          <div id="price-lines" class="text-amber-800 space-y-0.5 text-xs leading-relaxed"></div>
+          <div id="price-total" class="font-bold text-amber-900 text-base mt-2 pt-2" style="border-top:1px solid #FDE68A;"></div>
         </div>
 
-        <!-- ── NOTES ──────────────────────────────────────────── -->
-        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Notes (optional)</label>
-          <textarea id="bk-notes" rows="2" placeholder="Any special requests..."
-            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none"></textarea></div>
+        <!-- ⑧ NOTES ─────────────────────────────────────────────── -->
+        <div>
+          <label class="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Notes (optional)</label>
+          <textarea id="bk-notes" rows="2" placeholder="Any special requests…"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none bg-white"></textarea>
+        </div>
 
         ${isClient?`
-        <div class="p-3.5 rounded-xl border border-blue-100" style="background:#EFF6FF">
+        <div class="px-3 py-2.5 rounded-xl" style="background:#EFF6FF;border:1px solid #BFDBFE;">
           <label class="flex items-start gap-3 cursor-pointer">
-            <input type="checkbox" id="bk-photo" class="mt-0.5 accent-amber-700 w-4 h-4" ${cl?.photoConsent?'checked':''}>
-            <span class="text-xs text-blue-800 leading-relaxed">I consent to photos and videos of my pet being taken at Nigel's Place and posted to social media (Instagram, Facebook, etc.).</span>
+            <input type="checkbox" id="bk-photo" class="mt-0.5 accent-amber-700 w-4 h-4 flex-shrink-0" ${cl?.photoConsent?'checked':''}>
+            <span class="text-xs leading-relaxed" style="color:#1E40AF;">I consent to photos and videos of my pet being taken at Nigel's Place and shared on social media.</span>
           </label>
         </div>`:''}
 
+        <!-- ⑨ SUBMIT ─────────────────────────────────────────────── -->
         <div class="flex gap-2 pt-1">
-          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">
-            ${_daycareMode==='package'?'Purchase Package':'Confirm Booking'}
+          <button type="submit" class="flex-1 py-3 text-white rounded-xl text-sm font-bold tracking-wide shadow-sm"
+            style="background:#7B4015;" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">
+            ${_daycareMode==='package'&&_bookingMain==='daycare'?'🎫 Purchase Package':'✓ Confirm Booking'}
           </button>
-          <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+          <button type="button" onclick="closeModal()"
+            class="px-5 py-3 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
         </div>
+
       </form>
     </div>
   </div>`;
@@ -5558,7 +5614,10 @@ function syncBoardingDates(){
     if(coEl&&co&&co<ci)coEl.value=ci;
     checkDateCapacity();
     checkDogVaccWarning();
-    getDatesInRange(ci,co||ci).forEach(ds=>{_dailySchedule[ds]='Boarding';});
+    // Only populate _dailySchedule for pure boarding mode; combo tracks boarding via date inputs
+    if(_bookingMain==='boarding'){
+      getDatesInRange(ci,co||ci).forEach(ds=>{_dailySchedule[ds]='Boarding';});
+    }
   }
   updateBookingPrice();
 }
@@ -5781,8 +5840,36 @@ function updateBookingPrice(){
     const a=new Date(ci+'T00:00:00'),b=new Date(co+'T00:00:00');
     const nights=Math.max(0,Math.round((b-a)/864e5));
     const baseTotal=nights*boardingRate;
-    html+=`<div>🏡 ${nights} ${nights===1?'night':'nights'} · $${boardingRate}/night = $${baseTotal}</div>`;
+    html+=`<div>🏡 ${nights} ${nights===1?'night':'nights'} boarding · $${boardingRate}/night = $${baseTotal}</div>`;
     total=baseTotal;
+  } else if(_bookingMain==='combo'){
+    // Combo: boarding portion + daycare portion
+    const ci=document.getElementById('bk-board-checkin')?.value;
+    const co=document.getElementById('bk-board-checkout')?.value||ci;
+    let hasContent=false;
+    if(ci&&co&&co>ci){
+      const boardingSvc=services.find(s=>s.type==='base'&&s.active&&s.name.toLowerCase().includes('board'));
+      const boardingRate=boardingSvc?.price||state.settings.fullDayRate||55;
+      const nights=Math.max(0,Math.round((new Date(co+'T00:00:00')-new Date(ci+'T00:00:00'))/864e5));
+      if(nights>0){
+        html+=`<div>🏡 ${nights} ${nights===1?'night':'nights'} boarding · $${boardingRate}/night = $${nights*boardingRate}</div>`;
+        total+=nights*boardingRate;
+        hasContent=true;
+      }
+    }
+    const dcEntries=Object.entries(_dailySchedule);
+    if(dcEntries.length>0){
+      const counts={};
+      dcEntries.forEach(([,svc])=>{counts[svc]=(counts[svc]||0)+1;});
+      Object.entries(counts).forEach(([svcName,cnt])=>{
+        const price=getServicePrice(svcName);
+        const em=svcName.toLowerCase().includes('half')?'½':'☀️';
+        html+=`<div>${em} ${cnt} ${svcName} ${cnt===1?'day':'days'} · $${price}/day = $${cnt*price}</div>`;
+        total+=cnt*price;
+      });
+      hasContent=true;
+    }
+    if(!hasContent){preview.classList.add('hidden');return;}
   } else if(_daycareMode==='package'){
     // Package purchase — no dates needed
     const tier=getDaycareTier(_sessionQty);
@@ -6555,6 +6642,60 @@ async function submitBooking(e){
       await persistBookings();
       if(state.role==='client')await persistClients();
     }catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+    return;
+  }
+
+  // ── COMBO MODE (Boarding + Daycare) ────────────────────────────────────
+  if(_bookingMain==='combo'){
+    const bCi=document.getElementById('bk-board-checkin')?.value;
+    const bCo=document.getElementById('bk-board-checkout')?.value||bCi;
+    let boardingBooked=false;
+    if(bCi&&bCo&&bCo>bCi){
+      const boardingSvc=services.find(s=>s.type==='base'&&s.active&&s.name.toLowerCase().includes('board'));
+      const boardingRate=boardingSvc?.price||state.settings.fullDayRate||55;
+      const a=new Date(bCi+'T00:00:00'),b=new Date(bCo+'T00:00:00');
+      const nights=Math.max(0,Math.round((b-a)/864e5));
+      if(nights===0){showToast('Boarding check-out must be after check-in.','#EF4444');return;}
+      // Capacity check for boarding nights
+      for(let d=new Date(a);d<b;d.setDate(d.getDate()+1)){
+        const ds=d.toISOString().split('T')[0];
+        if(booksForDate(ds).length>=getEffectiveCap(ds)){showToast(`${fmtDate(ds)} is fully booked!`,'#EF4444');return;}
+      }
+      const bTotal=nights*boardingRate;
+      bookings.push({id:nextId(bookings),clientId,dogId,dogName,clientName,
+        checkIn:bCi,checkOut:bCo,nights,status:'confirmed',service:boardingSvc?.name||'Boarding',
+        addons:'',price:bTotal});
+      boardingBooked=true;
+    }
+    // Daycare portion: all entries in _dailySchedule
+    const dcEntries=Object.entries(_dailySchedule);
+    if(dcEntries.length>0){
+      const dcDates=dcEntries.map(([ds])=>ds).sort();
+      const dcFirst=dcDates[0],dcLast=dcDates[dcDates.length-1];
+      // Capacity check for daycare days
+      for(const ds of dcDates){
+        if(booksForDate(ds).length>=getEffectiveCap(ds)){showToast(`${fmtDate(ds)} is fully booked!`,'#EF4444');return;}
+      }
+      let dcTotal=0;
+      dcEntries.forEach(([,svcName])=>{dcTotal+=getServicePrice(svcName);});
+      const dcSched=Object.fromEntries(dcEntries);
+      const typeSet=[...new Set(Object.values(dcSched))];
+      const dcSvc=typeSet.length===1?typeSet[0]:'Mixed';
+      bookings.push({id:nextId(bookings),clientId,dogId,dogName,clientName,
+        checkIn:dcFirst,checkOut:dcLast,nights:dcDates.length,status:'confirmed',
+        service:dcSvc,dailySchedule:dcSched,addons:addonNames.join(','),price:dcTotal+addonTotal});
+    } else if(boardingBooked){
+      // No daycare days — attach add-ons to the boarding booking
+      const lastBk=bookings[bookings.length-1];
+      if(lastBk){lastBk.price+=addonTotal;lastBk.addons=addonNames.join(',');}
+    }
+    if(!boardingBooked&&dcEntries.length===0){showToast('Please add boarding dates and/or daycare days.','#EF4444');return;}
+    state.showModal=null;render();
+    const brdStr=boardingBooked?`boarding ${fmtDateShort(bCi)}–${fmtDateShort(bCo)}`:'';
+    const dcStr=dcEntries.length>0?`+ ${dcEntries.length} daycare day${dcEntries.length===1?'':'s'}`:'';
+    showToast(`🏡☀️ ${dogName} booked · ${[brdStr,dcStr].filter(Boolean).join(' ')}`);
+    try{await persistBookings();if(state.role==='client')await persistClients();}
+    catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
     return;
   }
 
