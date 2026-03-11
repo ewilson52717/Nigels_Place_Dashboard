@@ -2146,9 +2146,9 @@ function buildAdminAsClientLayout(){
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <span style="font-size:1rem;">🔁</span>
       <span style="white-space:nowrap"><strong>Client Preview</strong></span>
-      ${clients.length>0?`<select onchange="adminSwitchViewAsClient(this.value)" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.35);color:#fff;border-radius:6px;padding:3px 8px;font-size:0.75rem;cursor:pointer;max-width:180px;">
-        <option value="">— View as… —</option>
-        ${clients.map(c=>`<option value="${c.id}" ${state.currentClientId===c.id?'selected':''}>${c.name}</option>`).join('')}
+      ${clients.length>0?`<select onchange="adminSwitchViewAsClient(this.value)" style="background:#1a1a1a;border:1px solid rgba(255,255,255,0.5);color:#fff;border-radius:6px;padding:3px 8px;font-size:0.75rem;cursor:pointer;max-width:180px;">
+        <option value="" style="background:#1a1a1a;color:#fff;">— View as… —</option>
+        ${clients.map(c=>`<option value="${c.id}" style="background:#1a1a1a;color:#fff;" ${state.currentClientId===c.id?'selected':''}>${c.name}</option>`).join('')}
       </select>`:'<span style="opacity:0.7;font-size:0.7rem;">No clients yet</span>'}
       ${curClient?`<span style="opacity:0.75;font-size:0.7rem;white-space:nowrap;">Viewing as ${curClient.name}</span>`:''}
     </div>
@@ -3494,7 +3494,8 @@ async function deleteManualVetClinic(id){
   if(!confirm('Remove this partner clinic from your directory?'))return;
   state.settings.manualVetClinics=(state.settings.manualVetClinics||[]).filter(c=>c.id!==id);
   render();
-  try{await persistSettings();}catch(e){showToast('Removed locally — sheet sync failed.','#F97316');}
+  try{await persistSettings();showToast('✅ Partner clinic removed and directory updated.');}
+  catch(e){showToast('Removed locally — sheet sync failed.','#F97316');}
 }
 
 function buildServicesView(){
@@ -4414,6 +4415,7 @@ function buildClientDog(){
             </div>
           </div>
           <div>${vBadge}</div>
+          ${(()=>{try{const ov=dog.vaccOverride?JSON.parse(dog.vaccOverride):null;if(!ov||!ov.until)return'';if(ov.until!=='indefinite'&&ov.until<TODAY)return'';const msg=ov.until==='indefinite'?`Your vaccination requirement has been waived by Nigel's Place — contact us for details.`:`Your vaccination requirement has been extended until ${fmtDate(ov.until)} — approved by Nigel's Place.`;return`<div class="rounded-xl px-2.5 py-2 text-xs font-medium flex items-start gap-1.5" style="background:#FFF7ED;border:1px solid #FED7AA;color:#C2410C;line-height:1.4;">🔓 ${msg}</div>`;}catch(e){return'';}})()}
           ${(dog.vaccines||[]).length>0
             ?`<div class="space-y-1 text-xs">${buildVaccineRecordsHTML(dog)}</div>`
             :`<div class="text-xs text-amber-700 bg-amber-50 rounded-xl px-2.5 py-2 border border-amber-100">
@@ -6478,7 +6480,8 @@ async function submitBooking(e){
     dogId=parseInt(document.getElementById('bk-dog')?.value);
     const cl=clients.find(c=>c.id===clientId),dg=cl?.dogs.find(d=>d.id===dogId);
     dogName=dg?.name||'Pet';clientName=cl?.name||'Client';
-    if(dg&&vaccStatus(dg)==='expired'){
+    const _vaccOvActive=(()=>{if(!dg?.vaccOverride)return false;try{const ov=JSON.parse(dg.vaccOverride);if(!ov||!ov.until)return false;if(ov.until==='indefinite')return true;return ov.until>=TODAY;}catch(e){return false;}})();
+    if(!_vaccOvActive&&dg&&vaccStatus(dg)==='expired'){
       showToast(`🚩 ${dg.name}'s vaccines are expired. Please contact ${state.settings.businessName||"Nigel's Place"} to update records before booking.`,'#EF4444');
       return;
     }
