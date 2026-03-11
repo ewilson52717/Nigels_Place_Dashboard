@@ -17,7 +17,9 @@
     .slide-in { animation: fadeUp 0.25s ease; }
     @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
     @keyframes pillDrop { from { opacity:0; transform:translateX(-50%) translateY(-14px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
-    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:50; display:flex; align-items:center; justify-content:center; padding:1rem; }
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px); z-index:50; display:flex; align-items:center; justify-content:center; padding:1rem; }
+    .modal-box { background:white; border-radius:20px; width:100%; padding:1.5rem; box-shadow:0 24px 64px rgba(0,0,0,0.22); max-height:90vh; overflow-y:auto; animation:fadeUp 0.22s ease; }
+    .modal-field-group { background:#FAFAF8; border:1px solid #F0EDE8; border-radius:12px; padding:0.85rem 1rem; }
     .day-cell { cursor:pointer; transition:transform 0.15s, box-shadow 0.15s; min-height:88px; }
     .day-cell:hover { transform:scale(1.03); box-shadow:0 4px 16px rgba(0,0,0,0.12); z-index:2; position:relative; }
     .badge { display:inline-flex; align-items:center; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:600; }
@@ -303,6 +305,18 @@ function loadMockData(){
 // Use local date components — toISOString() is UTC and shifts the date for US evening timezones
 const _tNow=new Date();
 const TODAY=`${_tNow.getFullYear()}-${String(_tNow.getMonth()+1).padStart(2,'0')}-${String(_tNow.getDate()).padStart(2,'0')}`;
+// Convert a Google Sheets date value to a YYYY-MM-DD string.
+// UNFORMATTED_VALUE returns dates as serial numbers (days since Dec 30 1899).
+// If v is already a string that looks like a date, return it as-is.
+function sheetDateStr(v){
+  if(v===null||v===undefined||v==='')return'';
+  if(typeof v==='number'){
+    // Sheets serial: days since Dec 30, 1899; convert to YYYY-MM-DD
+    const d=new Date(Math.round((v-25569)*864e5));
+    return d.toISOString().split('T')[0];
+  }
+  return String(v);
+}
 const _tTom=new Date(_tNow);_tTom.setDate(_tTom.getDate()+1);
 const TOMORROW=`${_tTom.getFullYear()}-${String(_tTom.getMonth()+1).padStart(2,'0')}-${String(_tTom.getDate()).padStart(2,'0')}`;
 const _tDayAfter=new Date(_tNow);_tDayAfter.setDate(_tDayAfter.getDate()+2);
@@ -1264,13 +1278,15 @@ async function loadAllData(){
     if(!r[0])return;
     const isOld=statusWords.includes(String(r[6]).toLowerCase());
     if(isOld){
-      bookings.push({id:+r[0],clientId:+r[1],dogId:+r[2],dogName:r[3]||'',clientName:r[4]||'',
-        checkIn:r[5]||'',checkOut:r[5]||'',nights:1,status:r[6]||'confirmed',
-        service:r[7]||'Full Day',addons:'',price:+r[8]||0});
+      const ci5=sheetDateStr(r[5]);
+      bookings.push({id:+r[0],clientId:+r[1],dogId:+r[2],dogName:String(r[3]||''),clientName:String(r[4]||''),
+        checkIn:ci5,checkOut:ci5,nights:1,status:String(r[6]||'confirmed'),
+        service:String(r[7]||'Full Day'),addons:'',price:+r[8]||0});
     }else{
-      bookings.push({id:+r[0],clientId:+r[1],dogId:+r[2],dogName:r[3]||'',clientName:r[4]||'',
-        checkIn:r[5]||'',checkOut:r[6]||r[5]||'',nights:+r[7]||1,status:r[8]||'confirmed',
-        service:r[9]||'Full Day',addons:r[10]||'',price:+r[11]||0});
+      const ci5=sheetDateStr(r[5]);
+      bookings.push({id:+r[0],clientId:+r[1],dogId:+r[2],dogName:String(r[3]||''),clientName:String(r[4]||''),
+        checkIn:ci5,checkOut:sheetDateStr(r[6])||ci5,nights:+r[7]||1,status:String(r[8]||'confirmed'),
+        service:String(r[9]||'Full Day'),addons:String(r[10]||''),price:+r[11]||0});
     }
   });
   invoices.length=0;
@@ -2322,7 +2338,7 @@ function buildDashboard(){
   const weekRev=bookings.filter(b=>b.checkIn>=TODAY&&b.checkIn<=weekEndStr&&b.status==='confirmed').reduce((s,b)=>s+b.price,0);
   const monthBks=bookings.filter(b=>(b.checkIn||'').startsWith(monthPfx)&&b.status!=='cancelled').length;
   const overdue=invoices.filter(i=>i.status==='overdue').reduce((s,i)=>s+(i.amount-i.paid),0);
-  const upcoming=bookings.filter(b=>b.checkIn>TODAY&&b.status==='confirmed').sort((a,b)=>a.checkIn.localeCompare(b.checkIn)).slice(0,5);
+  const upcoming=bookings.filter(b=>String(b.checkIn||'')>TODAY&&b.status==='confirmed').sort((a,b)=>String(a.checkIn||'').localeCompare(String(b.checkIn||''))).slice(0,5);
   // Next 3 days — use local date components to avoid UTC timezone shift skipping days
   const next3=[];for(let i=1;i<=3;i++){const nd=new Date(now);nd.setDate(nd.getDate()+i);next3.push(mkDs(nd.getFullYear(),nd.getMonth(),nd.getDate()));}
   const greetHour=now.getHours();
@@ -5488,35 +5504,45 @@ function buildAddDogModal(){
   return`<div class="modal-overlay" onclick="if(event.target===this){state.showModal=null;render();}">
   <div class="modal-box" style="max-width:440px;">
     <div class="flex items-center justify-between mb-5">
-      <h2 class="text-lg font-bold text-gray-800">🐾 Add a Dog</h2>
-      <button onclick="state.showModal=null;render()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+      <div>
+        <h2 class="text-lg font-bold text-gray-800">🐾 Add a Dog</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Tell us about your new furry family member</p>
+      </div>
+      <button onclick="state.showModal=null;render()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
     </div>
-    <form onsubmit="submitAddDog(event)" class="space-y-4">
-      <div>
-        <label class="block text-xs font-semibold text-gray-600 mb-1">Dog's Name <span class="text-red-400">*</span></label>
-        <input id="add-dog-name" required placeholder="e.g. Biscuit" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300">
+    <form onsubmit="submitAddDog(event)" class="space-y-3">
+      <!-- Dog name — full width, prominent -->
+      <div class="modal-field-group">
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Dog's Name <span class="text-red-400">*</span></label>
+        <input id="add-dog-name" required placeholder="e.g. Biscuit" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium focus:outline-none" style="color:#1F2937;">
       </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Breed</label>
-          <input id="add-dog-breed" placeholder="Mixed Breed" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300">
+      <!-- Breed + Age side by side -->
+      <div class="modal-field-group">
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">About</label>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Breed</label>
+            <input id="add-dog-breed" placeholder="Mixed Breed" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Age (years)</label>
+            <input id="add-dog-age" type="number" min="0" max="30" placeholder="0" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none">
+          </div>
         </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1">Age (years)</label>
-          <input id="add-dog-age" type="number" min="0" max="30" placeholder="0" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300">
+        <div class="mt-2">
+          <label class="block text-xs text-gray-500 mb-1">Birthday (optional)</label>
+          <input id="add-dog-birthday" type="date" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none">
         </div>
       </div>
-      <div>
-        <label class="block text-xs font-semibold text-gray-600 mb-1">Birthday (optional)</label>
-        <input id="add-dog-birthday" type="date" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300">
+      <!-- Care notes -->
+      <div class="modal-field-group">
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Care Notes</label>
+        <textarea id="add-dog-notes" rows="2" placeholder="Any special needs, quirks, or things we should know…" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none"></textarea>
       </div>
-      <div>
-        <label class="block text-xs font-semibold text-gray-600 mb-1">Care Notes</label>
-        <textarea id="add-dog-notes" rows="2" placeholder="Any special needs, quirks, or things we should know…" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-300"></textarea>
-      </div>
-      <div>
-        <label class="block text-xs font-semibold text-gray-600 mb-1">🏥 Emergency Vet Authorization</label>
-        <select id="add-dog-vet" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300">
+      <!-- Vet auth -->
+      <div class="modal-field-group">
+        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">🏥 Emergency Vet Authorization</label>
+        <select id="add-dog-vet" class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none">
           <option value="">Contact me first — no treatment without my approval</option>
           <option value="office-only">Office visit &amp; basic diagnostics only (~$200–$400)</option>
           <option value="500">Up to $500</option>
@@ -5526,7 +5552,7 @@ function buildAddDogModal(){
           <option value="unlimited">No limit — do whatever is needed</option>
         </select>
       </div>
-      <p class="text-xs text-gray-400">After adding, bring a copy of your dog's vaccine records to your first visit — or upload them here once your profile is saved.</p>
+      <p class="text-xs text-gray-400 px-1">After adding, bring vaccine records to your first visit — or upload them here once your profile is saved.</p>
       <div class="flex gap-3 pt-1">
         <button type="button" onclick="state.showModal=null;render()" class="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50">Cancel</button>
         <button id="add-dog-submit" type="submit" class="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style="background:#7B4015;">Add Dog</button>
@@ -6027,7 +6053,7 @@ async function loadKioskData(){
     }).map(r=>({
       dogId:+r[2],dogName:r[3]||(dogMap[+r[2]]?.name)||'Unknown',
       breed:dogMap[+r[2]]?.breed||'',clientName:r[4]||(clientMap[+r[1]])||'',
-      checkIn:r[5],checkOut:r[6],
+      checkIn:sheetDateStr(r[5]),checkOut:sheetDateStr(r[6]),
     }));
     // De-duplicate today's dogs (same dog may have multiple bookings)
     const seen=new Set();state.kioskDogs=state.kioskDogs.filter(d=>{if(seen.has(d.dogId))return false;seen.add(d.dogId);return true;});
@@ -6036,12 +6062,12 @@ async function loadKioskData(){
     const sevenStr=next7.toISOString().split('T')[0];
     state.kioskUpcoming=(bR||[]).filter(r=>{
       if(!r[0])return false;
-      const ci=r[5]||'',co=r[6]||ci,status=(r[8]||'').toLowerCase();
+      const ci=sheetDateStr(r[5])||'',co=sheetDateStr(r[6])||ci,status=(r[8]||'').toLowerCase();
       return status!=='cancelled'&&ci&&((ci>today&&ci<=sevenStr)||(co>today&&co<=sevenStr));
     }).map(r=>({
       dogId:+r[2],dogName:r[3]||(dogMap[+r[2]]?.name)||'Unknown',
       breed:dogMap[+r[2]]?.breed||'',clientName:r[4]||(clientMap[+r[1]])||'',
-      checkIn:r[5],checkOut:r[6]||r[5],
+      checkIn:sheetDateStr(r[5]),checkOut:sheetDateStr(r[6])||sheetDateStr(r[5]),
     }));
     lastSynced=Date.now();
     render();
