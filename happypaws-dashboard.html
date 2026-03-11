@@ -574,7 +574,7 @@ async function silentRefresh(){
       const fp=dataFingerprint();
       if(fp===_lastDataFingerprint)return;
       _lastDataFingerprint=fp;
-      showUpdatePill();
+      render(); // silently apply — clients don't need a countdown pill
       return;
     }
     await loadAllData();
