@@ -2582,12 +2582,12 @@ function buildCalendarView(role){
             const canBook=!unavailable;
             return`
             <div class="day-cell border-b border-r p-2 relative ${wknd?'weekend-day':''} ${clientPast?'past-day':''}"
-                 style="${!clientPast&&unavailable?'background:#F3F4F6;border-color:#E5E7EB;cursor:default;':''}"
+                 style="${!clientPast&&unavailable?'background:#F3F4F6;border-color:#E5E7EB;cursor:default;background-image:repeating-linear-gradient(135deg,transparent,transparent 6px,rgba(180,180,190,0.35) 6px,rgba(180,180,190,0.35) 7px);':''}"
                  onclick="${canBook?'openDayModal(\''+ds+'\')':''}">
               <div class="flex items-start justify-between mb-1">
                 <span class="${!clientPast&&unavailable?'text-sm font-medium text-gray-300':'text-sm font-medium text-gray-600'}">${day}</span>
               </div>
-              ${!clientPast?unavailable?'<div class="text-xs text-gray-300 mt-1 select-none">—</div>':'<div class="text-xs mt-1" style="color:#7B4015">Open</div>':''}
+              ${!clientPast?unavailable?'<div class="text-xs text-gray-300 mt-1 select-none">Full</div>':'<div class="text-xs mt-1" style="color:#7B4015">Open</div>':''}
             </div>`;}
 
           // ── ADMIN VIEW: full detail ──
@@ -4444,6 +4444,16 @@ function checkDogVaccWarning(){
   if(!dog){warn.classList.add('hidden');hideOverride();unlockDates();return;}
   const vs=vaccStatus(dog);
   const vaccOkForBooking=hasRequiredVaccines(dog);
+
+  // If admin has already set a vaccine override on the dog profile, bypass ALL vaccine
+  // warnings and the override toggle — the admin already made the call at the dog level.
+  const vaccOverrideActive=(()=>{
+    if(!dog.vaccOverride)return false;
+    try{const ov=JSON.parse(dog.vaccOverride);if(!ov||!ov.until)return false;
+        return ov.until==='indefinite'||String(ov.until)>=TODAY;}
+    catch(e){return false;}
+  })();
+  if(vaccOverrideActive){warn.classList.add('hidden');hideOverride();unlockDates();return;}
 
   if(vs==='expired'||(!vaccOkForBooking&&vs!=='expiring')){
     // Merge: expired OR missing required vaccines block booking
