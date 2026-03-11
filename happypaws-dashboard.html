@@ -509,6 +509,16 @@ function startAutoRefresh(){
 async function silentRefresh(){
   if(state.mode!=='live'||state.isLoading)return;
   try{
+    // Clients can't read the private sheet directly — use the proxy instead.
+    // This prevents loadAllData() from wiping local client state on a 403.
+    if(state.role==='client'){
+      await loadClientDataViaProxy();
+      const fp=dataFingerprint();
+      if(fp===_lastDataFingerprint)return;
+      _lastDataFingerprint=fp;
+      showUpdatePill();
+      return;
+    }
     await loadAllData();
     lastSynced=Date.now();
     const fp=dataFingerprint();
@@ -517,8 +527,8 @@ async function silentRefresh(){
 
     if(state.role==='kiosk'){
       renderWithFade();           // Layer 3: soft crossfade for kiosk live board
-    }else if(state.role==='admin'||state.role==='client'){
-      showUpdatePill();           // Layer 2: unobtrusive pill for admin/client
+    }else if(state.role==='admin'){
+      showUpdatePill();           // Layer 2: unobtrusive pill for admin
     }else{
       render();
     }
@@ -994,6 +1004,11 @@ async function onToken(resp){
         state.clientView='home';
       }
     }else{
+      // For clients, loadAllData() fails (their token can't read the private sheet).
+      // Try loading via the proxy instead — this fetches their data, dogs, bookings
+      // and safe settings. If that also fails they'll see onboarding.
+      state.loadingMsg='Loading your profile…';render();
+      await loadClientDataViaProxy();
       const cl=clients.find(c=>c.email.toLowerCase()===email);
       if(cl){state.role='client';state.currentClientId=cl.id;}
       else{
@@ -1118,6 +1133,11 @@ async function loadAllData(){
   ]);
   const svR=await readRangeSafe('Services!A2:F');
   const pkR=await readRangeSafe('Packages!A2:K');
+  // Auth-failure guard: if settings came back completely empty but we already have
+  // local data, the read likely failed (e.g. 403 for a non-admin token). Don't wipe
+  // the existing state — silentRefresh for clients should use loadClientDataViaProxy
+  // instead, but this is a belt-and-suspenders safety net.
+  if(!(sR?.length)&&(clients.length>0||bookings.length>0))return;
   clients.length=0;
   (cR||[]).forEach(r=>{if(r[0])clients.push({id:+r[0],name:String(r[1]||''),email:String(r[2]||''),phone:String(r[3]||''),
     photoConsent:String(r[4]).toLowerCase()==='true',dogs:[]});});
@@ -1433,6 +1453,80 @@ async function proxyClientWrite(action, payload){
   if(!json.ok)throw new Error(json.error||'Proxy returned an error');
   return json;
 }
+
+// ─── Proxy-based client data loader ──────────────────────────────────────────
+// Called after a client signs in and on every silent refresh (instead of
+// loadAllData, which fails 403 because clients can't read the private sheet).
+// Fetches this client's own record, dogs, bookings + safe settings via the proxy.
+async function loadClientDataViaProxy(){
+  try{
+    const result=await proxyClientWrite('getClientData',{});
+    if(!result.ok)return; // not yet registered — let onboarding handle it
+
+    const cr=result.client; // array: [id, name, email, phone, photoConsent]
+    const actualCid=+cr[0];
+
+    // Rebuild the dog objects from the raw sheet rows
+    const serverDogs=(result.dogs||[]).map(r=>{
+      let vaccines=[];try{if(r[9])vaccines=JSON.parse(r[9]);}catch(e){}
+      vaccines=vaccines.map(v=>({...v,expiry:String(v.expiry||'')}));
+      let playPhotos=[];try{if(r[12])playPhotos=JSON.parse(r[12]);}catch(e){}
+      let photoOffset={x:50,y:50};
+      try{if(r[13]){const p=String(r[13]).split(',');if(p.length===2)photoOffset={x:+p[0]||50,y:+p[1]||50};}}catch(e){}
+      return{
+        id:+r[0],clientId:+r[1],name:String(r[2]||''),breed:String(r[3]||''),
+        age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',
+        notes:String(r[6]||''),birthday:String(r[7]||''),vaccExpiry:String(r[8]||''),
+        vaccines,driveFileLink:String(r[10]||''),photoLink:String(r[11]||''),
+        playPhotos,photoOffset,emergencyVetLimit:String(r[14]||''),
+        deceased:String(r[15]).toLowerCase()==='true',
+      };
+    });
+
+    const serverClient={
+      id:actualCid,name:String(cr[1]||''),email:String(cr[2]||''),
+      phone:String(cr[3]||''),photoConsent:String(cr[4]).toLowerCase()==='true',
+      dogs:serverDogs,
+    };
+
+    // Replace or insert this client in the local array (leave other clients untouched)
+    const idx=clients.findIndex(c=>String(c.email).toLowerCase()===String(cr[2]).toLowerCase());
+    if(idx>=0)clients[idx]=serverClient;else clients.push(serverClient);
+    state.currentClientId=actualCid;
+
+    // Merge bookings: keep other clients' bookings, replace this client's
+    const otherBks=bookings.filter(b=>b.clientId!==actualCid);
+    bookings.length=0;
+    otherBks.forEach(b=>bookings.push(b));
+    const statusWords=['confirmed','cancelled','pending'];
+    (result.bookings||[]).forEach(r=>{
+      if(!r[0])return;
+      const isOld=statusWords.includes(String(r[6]).toLowerCase());
+      if(isOld){
+        bookings.push({id:+r[0],clientId:+r[1],dogId:+r[2],dogName:r[3]||'',clientName:r[4]||'',
+          checkIn:r[5]||'',checkOut:r[5]||'',nights:1,status:r[6]||'confirmed',
+          service:r[7]||'Full Day',addons:'',price:+r[8]||0});
+      }else{
+        bookings.push({id:+r[0],clientId:+r[1],dogId:+r[2],dogName:r[3]||'',clientName:r[4]||'',
+          checkIn:r[5]||'',checkOut:r[6]||r[5]||'',nights:+r[7]||1,status:r[8]||'confirmed',
+          service:r[9]||'Full Day',addons:r[10]||'',price:+r[11]||0});
+      }
+    });
+
+    // Apply safe settings subset (no API keys returned)
+    const s=result.settings||{};
+    if(s.businessName)state.settings.businessName=String(s.businessName);
+    if(s.dailyCapacity)state.settings.dailyCapacity=+s.dailyCapacity||state.settings.dailyCapacity;
+    if(s.fullDayRate!==undefined)state.settings.fullDayRate=+s.fullDayRate||0;
+    if(s.halfDayRate!==undefined)state.settings.halfDayRate=+s.halfDayRate||0;
+    if(s.groomingAddOn!==undefined)state.settings.groomingAddOn=+s.groomingAddOn||0;
+    if(s.venmoHandle)state.settings.venmoHandle=String(s.venmoHandle);
+    if(s.squareLink)state.settings.squareLink=String(s.squareLink);
+    if(s.capacityOverrides){try{state.settings.capacityOverrides=JSON.parse(s.capacityOverrides)||{};}catch(e){}}
+
+  }catch(e){/* silent — proxy may be unavailable or client not yet registered */}
+}
+
 async function persistSettings(){
   if(state.mode!=='live')return;
   const overridesJson=JSON.stringify(state.settings.capacityOverrides||{});
@@ -1697,7 +1791,7 @@ function buildOnboarding(){
           <div style="display:flex;flex-direction:column;gap:.75rem;">
             <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
               <input type="checkbox" id="ob-agree-terms" ${d.agreeTerms?'checked':''} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
-              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I agree to Nigel's Place <button type="button" onclick="showPolicyModal('terms')" style="background:none;border:none;padding:0;cursor:pointer;font-size:.75rem;color:#7B4015;text-decoration:underline;font-weight:600;font-family:inherit;">Terms &amp; Conditions</button> — including payment, pick-up/drop-off times (8–10 AM drop-off, 4–6 PM pick-up), and <button type="button" onclick="showCancellationPolicyModal()" style="background:none;border:none;padding:0;cursor:pointer;font-size:.75rem;color:#7B4015;text-decoration:underline;font-weight:600;font-family:inherit;">cancellation policies</button>. <span style="color:#DC2626;">*</span></span>
+              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I agree to Nigel's Place <button type="button" onclick="showPolicyModal('terms')" style="background:none;border:none;padding:0;cursor:pointer;font-size:.75rem;color:#7B4015;text-decoration:underline;font-weight:600;font-family:inherit;">Terms &amp; Conditions</button> — including payment, pick-up/drop-off times (8–10 AM drop-off, 4–6 PM pick-up), <button type="button" onclick="showCancellationPolicyModal()" style="background:none;border:none;padding:0;cursor:pointer;font-size:.75rem;color:#7B4015;text-decoration:underline;font-weight:600;font-family:inherit;">cancellation policies</button>, and the <strong>vaccine requirement</strong> (Rabies, DHPP, Bordetella — current records required before every visit). <span style="color:#DC2626;">*</span></span>
             </label>
             <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
               <input type="checkbox" id="ob-agree-liability" ${d.agreeLiability?'checked':''} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
@@ -1863,8 +1957,9 @@ async function submitOnboarding(){
     clients.push(newClient);
 
     // New clients use the Apps Script proxy — their token can't write to Elyse's sheet directly.
+    // The proxy assigns IDs server-side and returns them so we can sync local state.
     if(state.mode==='live'){
-      await proxyClientWrite('registerClient',{
+      const regResult=await proxyClientWrite('registerClient',{
         client:{
           id:newClientId,name:newClient.name,email:newClient.email,
           phone:newClient.phone,photoConsent:newClient.photoConsent,
@@ -1876,14 +1971,26 @@ async function submitOnboarding(){
           emergencyVetLimit:newClient.dogs[0].emergencyVetLimit,
         },
       });
+      // Update local state with the server-assigned IDs to avoid ID collisions
+      if(regResult.clientId){
+        const actualCid=regResult.clientId;
+        const actualDid=regResult.dogId||newDogId;
+        newClient.id=actualCid;
+        newClient.dogs[0].id=actualDid;
+        newClient.dogs[0].clientId=actualCid;
+        // Update the entry we just pushed
+        clients[clients.length-1]=newClient;
+      }
     }
 
-    // Log them in as a new client
+    // Log them in as a new client using the (possibly server-corrected) ID
     state.role='client';
-    state.currentClientId=newClientId;
+    state.currentClientId=newClient.id;
     state.clientView='home';
     state.onboardingStep=1;
     state.onboardingData={};
+    // Immediately sync full data from the proxy (gets dogs, bookings, settings)
+    await loadClientDataViaProxy();
     showToast(`Welcome, ${d.ownerName}! Your profile is all set. 🐾`);
     render();
   }catch(e){
@@ -2816,7 +2923,53 @@ function buildSettingsView(){
 }
 function buildClientHome(){
   const cl=clients.find(c=>c.id===state.currentClientId);
-  return`<div class="slide-in"><div class="mb-5">
+  // ── Onboarding completion checklist ───────────────────────────────────────
+  // Show a progress card whenever there are outstanding items so clients know
+  // exactly what they need to do before they can book.
+  const dogs=cl?.dogs||[];
+  const hasVaccines=dogs.length>0&&dogs.every(d=>(d.vaccines||[]).length>0);
+  const anyVaccExpired=dogs.some(d=>(d.vaccines||[]).some(v=>{
+    if(!v.expiry)return false;
+    return v.expiry<TODAY;
+  }));
+  const vaccOk=hasVaccines&&!anyVaccExpired;
+  // Build checklist items
+  const steps=[
+    {done:true,label:'Profile created',detail:''},
+    {done:dogs.length>0,label:'Dog added to profile',detail:dogs.length===0?'Go to My Dog to add your pup.':''},
+    {done:vaccOk,
+     label:vaccOk?'Vaccine records on file':'Vaccine records needed',
+     detail:!hasVaccines
+       ?'Please provide up-to-date vaccine records to Nigel\'s Place before your first booking. Contact us or visit My Dog to see what\'s needed.'
+       :anyVaccExpired
+         ?'One or more vaccines are expired. Please provide updated records to continue booking.'
+         :''},
+  ];
+  const allDone=steps.every(s=>s.done);
+  const doneCt=steps.filter(s=>s.done).length;
+  const pct=Math.round((doneCt/steps.length)*100);
+  const checklistHtml=allDone?'':`
+  <div class="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+    <div class="flex items-center justify-between mb-2">
+      <span class="font-semibold text-amber-900 text-sm">Getting started checklist</span>
+      <span class="text-xs text-amber-700 font-medium">${doneCt}/${steps.length} complete</span>
+    </div>
+    <div class="w-full bg-amber-200 rounded-full h-1.5 mb-3">
+      <div class="h-1.5 rounded-full transition-all" style="width:${pct}%;background:#7B4015"></div>
+    </div>
+    ${steps.map(s=>`
+    <div class="flex items-start gap-2.5 py-1.5 ${s.done?'opacity-50':''}">
+      <span class="mt-0.5 flex-shrink-0 text-base">${s.done?'✅':'⚠️'}</span>
+      <div>
+        <span class="text-sm font-medium text-gray-800">${s.label}</span>
+        ${s.detail?`<p class="text-xs text-gray-500 mt-0.5">${s.detail}</p>`:''}
+      </div>
+    </div>`).join('')}
+  </div>`;
+  // ──────────────────────────────────────────────────────────────────────────
+  return`<div class="slide-in">
+  ${checklistHtml}
+  <div class="mb-5">
     <h1 class="text-2xl font-bold text-gray-800">Book a Stay 🐾</h1>
     <p class="text-gray-400 text-sm mt-1">Select available days to book a stay for ${cl?.dogs[0]?.name||'your pup'}.</p></div>
     ${buildCalendarView('client')}</div>`;
@@ -5098,10 +5251,18 @@ function showPolicyModal(type){
     <p>The portal lets you create a client profile, manage your pet's records, request bookings, upload vaccination documents, and view your booking history and invoices.</p>
     <h3>PawDesk Is Not the Pet Care Provider</h3>
     <p>PawDesk is the software platform — not the pet care facility. Questions or concerns about your pet's care should be directed to the facility directly. We are not responsible for the services your pet receives during a visit.</p>
+    <h3>Vaccination Requirement</h3>
+    <p><strong>All dogs must be up to date on required vaccinations before attending any stay or day care visit at Nigel's Place.</strong> By agreeing to these Terms, you confirm you understand this requirement and agree to keep your dog's records current. Nigel's Place reserves the right to refuse service or turn away any dog whose vaccination status cannot be verified or is expired. Required vaccinations include, but may not be limited to:</p>
+    <ul>
+      <li>Rabies</li>
+      <li>Distemper / DHPP (Distemper, Hepatitis, Parvovirus, Parainfluenza)</li>
+      <li>Bordetella (Kennel Cough) — required annually</li>
+    </ul>
+    <p>Proof of vaccination must be uploaded through your client portal or provided directly to Nigel's Place prior to your dog's first visit and kept up to date thereafter. If you do not read or notice these Terms, you remain bound by them — it is your responsibility to ensure your dog meets all health requirements before booking.</p>
     <h3>Your Responsibilities</h3>
     <ul>
       <li>Provide accurate, up-to-date information about yourself and your pet.</li>
-      <li>Ensure vaccination records are current before each booking.</li>
+      <li>Ensure all required vaccination records are current before every booking.</li>
       <li>Use the portal only for lawful purposes and in good faith.</li>
       <li>Keep your Google account credentials secure.</li>
     </ul>
