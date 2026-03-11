@@ -176,6 +176,9 @@ function registerClient(ss, req, callerEmail) {
     '{"x":50,"y":50}',    // photoOffset
     dog.emergencyVetLimit || '',
     'FALSE',              // deceased
+    '',                   // vaccOverride
+    dog.vetName || '',    // vetName
+    dog.vetPhone || '',   // vetPhone
   ]);
 
   // Return the server-assigned IDs so the browser can sync local state
@@ -235,6 +238,8 @@ function addDog(ss, req, callerEmail) {
     String(dog.emergencyVetLimit || ''),
     'FALSE',                       // deceased
     '',                            // vaccOverride
+    String(dog.vetName || ''),     // vetName
+    String(dog.vetPhone || ''),    // vetPhone
   ]);
 
   return respond({ ok: true, message: 'Dog added successfully.', dogId: newDogId });
@@ -389,10 +394,10 @@ function updateProfile(ss, req, callerEmail) {
 }
 
 // ─── ACTION: updateDog ────────────────────────────────────────────────────────
-// Updates a dog's breed, age, birthday, notes, and emergencyVetLimit.
+// Updates a dog's breed, age, birthday, notes, emergencyVetLimit, vetName, and vetPhone.
 // Only the client who owns the dog (matched by callerEmail) can update it.
 function updateDog(ss, req, callerEmail) {
-  const { dogId, breed, age, birthday, notes, emergencyVetLimit } = req;
+  const { dogId, breed, age, birthday, notes, emergencyVetLimit, vetName, vetPhone } = req;
   if (!dogId) return respond({ ok: false, error: 'dogId is required.' });
 
   const clientsSheet = ss.getSheetByName('Clients');
@@ -416,12 +421,14 @@ function updateDog(ss, req, callerEmail) {
   for (let i = 1; i < dogData.length; i++) {
     if (String(dogData[i][0]) === String(dogId) && String(dogData[i][1]) === String(callerClientId)) {
       const row = i + 1;
-      // Columns: id(1),clientId(2),name(3),breed(4),age(5),vaccinated(6),notes(7),birthday(8),...,emergencyVetLimit(15)
+      // Columns: id(1),clientId(2),name(3),breed(4),age(5),vaccinated(6),notes(7),birthday(8),...,emergencyVetLimit(15),deceased(16),vaccOverride(17),vetName(18),vetPhone(19)
       dogsSheet.getRange(row, 4).setValue(String(breed || dogData[i][3] || 'Mixed Breed'));
       dogsSheet.getRange(row, 5).setValue(Number(age) || 0);
       dogsSheet.getRange(row, 8).setValue(String(birthday || ''));
       dogsSheet.getRange(row, 7).setValue(String(notes || ''));
       dogsSheet.getRange(row, 15).setValue(String(emergencyVetLimit || ''));
+      dogsSheet.getRange(row, 18).setValue(String(vetName || ''));
+      dogsSheet.getRange(row, 19).setValue(String(vetPhone || ''));
       return respond({ ok: true, message: 'Dog updated.' });
     }
   }
