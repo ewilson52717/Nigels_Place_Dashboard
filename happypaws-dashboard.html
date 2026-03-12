@@ -1005,6 +1005,7 @@ let _dailySchedule={}; // { 'YYYY-MM-DD': service_name }
 let _bookingMain='daycare';  // 'daycare' | 'boarding'
 let _daycareMode='schedule'; // 'schedule' | 'package'
 let _sessionQty=1;           // number of daycare sessions being purchased
+let _schedGridCollapsed=false; // true = per-day grid is collapsed (auto-set when >1 day)
 // Mini-calendar state for booking modal date picker
 let _miniCalYear=new Date().getFullYear();
 let _miniCalMonth=new Date().getMonth(); // 0-based
@@ -5716,8 +5717,10 @@ function getDatesInRange(ci,co){
 function rebuildDailySchedule(){
   const ci=document.getElementById('bk-checkin')?.value;
   const co=document.getElementById('bk-checkout')?.value||ci;
-  if(!ci){_dailySchedule={};renderDailyScheduleGrid();return;}
+  if(!ci){_dailySchedule={};_schedGridCollapsed=false;renderDailyScheduleGrid();return;}
   const dates=getDatesInRange(ci,co);
+  // Auto-collapse the per-day grid whenever a multi-day range is set/changed
+  _schedGridCollapsed=dates.length>1;
   // Default service: first active base service, or Full Day fallback
   const baseSvcs=services.filter(s=>s.type==='base'&&s.active);
   const defSvc=_bkType==='boarding'?'Boarding':(baseSvcs[0]?.name||'Full Day');
@@ -5790,14 +5793,14 @@ function renderDailyScheduleGrid(){
   ];
   const dates=getDatesInRange(ci,co);
   const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  container.innerHTML=dates.map(ds=>{
+  // Build each day row (same logic for single or multi)
+  const rows=dates.map(ds=>{
     const dt=new Date(ds+'T00:00:00');
     const dayLbl=`${dayNames[dt.getDay()]} ${fmtDateShort(ds)}`;
     const cur=_dailySchedule[ds]||displaySvcs[0].name;
     const curSvc=displaySvcs.find(s=>s.name===cur)||displaySvcs[0];
     const btn=(s)=>{
       const active=cur===s.name;
-      // Emoji hint
       const em=s.name.toLowerCase().includes('board')?'🏡':s.name.toLowerCase().includes('half')?'½':'☀️';
       return `<button type="button" onclick="setDayType('${ds}','${s.name.replace(/'/g,"&#39;")}')"
         class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap"
@@ -5811,6 +5814,51 @@ function renderDailyScheduleGrid(){
       <span class="text-xs text-gray-400 ml-auto flex-shrink-0">${rateLabel}</span>
     </div>`;
   }).join('');
+  // Single day — no collapsible needed, just render the row
+  if(dates.length<=1){
+    container.innerHTML=`<div style="padding:.25rem 0;">${rows}</div>`;
+    return;
+  }
+  // Multiple days — build a collapsible summary header
+  const svcTypes=[...new Set(dates.map(ds=>_dailySchedule[ds]||displaySvcs[0].name))];
+  const svcSummary=svcTypes.length===1?svcTypes[0]:'Mixed';
+  const subtotal=dates.reduce((sum,ds)=>{
+    const cur=_dailySchedule[ds]||displaySvcs[0].name;
+    const svc=displaySvcs.find(s=>s.name===cur)||displaySvcs[0];
+    return sum+(svc?.price||0);
+  },0);
+  // Chip badges — one per unique service type
+  const chips=svcTypes.map(n=>{
+    const em=n.toLowerCase().includes('board')?'🏡':n.toLowerCase().includes('half')?'½':'☀️';
+    return`<span style="background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;border-radius:999px;padding:1px 8px;font-size:.68rem;font-weight:600;">${em} ${n}</span>`;
+  }).join(' ');
+  const collapsed=_schedGridCollapsed;
+  const chevron=collapsed
+    ?`<svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="flex-shrink:0;transition:transform .2s"><path d="M3 4.5L6 7.5L9 4.5" stroke="#92400E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+    :`<svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="flex-shrink:0;transition:transform .2s"><path d="M3 7.5L6 4.5L9 7.5" stroke="#92400E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  container.innerHTML=`
+    <div style="border:1px solid #F3E8D6;border-radius:12px;overflow:hidden;">
+      <!-- Collapsible header -->
+      <button type="button" onclick="toggleSchedGrid()"
+        style="width:100%;display:flex;align-items:center;justify-content:space-between;background:#FBF7F3;border:none;padding:.55rem .75rem;cursor:pointer;gap:.5rem;">
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;min-width:0;">
+          <span style="font-size:.72rem;font-weight:700;color:#7B4015;white-space:nowrap;">📋 ${dates.length} days</span>
+          ${chips}
+        </div>
+        <div style="display:flex;align-items:center;gap:.4rem;flex-shrink:0;">
+          <span style="font-size:.75rem;font-weight:700;color:#7B4015;">$${subtotal}</span>
+          ${chevron}
+        </div>
+      </button>
+      <!-- Expandable body -->
+      <div style="${collapsed?'display:none;':''}padding:.25rem .5rem;">
+        ${rows}
+      </div>
+    </div>`;
+}
+function toggleSchedGrid(){
+  _schedGridCollapsed=!_schedGridCollapsed;
+  renderDailyScheduleGrid();
 }
 // Legacy stub — kept so any remaining callers don't throw
 function onBkTypeChange(){rebuildDailySchedule();}
