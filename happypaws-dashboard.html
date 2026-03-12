@@ -4884,6 +4884,7 @@ function buildBookingModal(selectedDate){
                   class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white" onchange="syncBoardingDates()">
               </div>
             </div>
+            <div id="boarding-cap-warning" class="hidden mx-3 mb-3 text-xs rounded-lg px-3 py-2 leading-snug" style="background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;"></div>
           </div>
         </div>
 
@@ -4956,7 +4957,8 @@ function buildBookingModal(selectedDate){
 
                 <!-- Mini calendar -->
                 <div id="bk-mini-cal" class="rounded-xl overflow-hidden mb-1" style="border:1px solid #E5E7EB;"></div>
-                <p class="text-xs text-gray-400 text-center mb-2">Tap start date then end date · hatched = fully booked</p>
+                <p class="text-xs text-gray-400 text-center mb-1">Tap start date then end date · hatched = fully booked</p>
+                <div id="daycare-cap-warning" class="hidden text-xs rounded-lg px-3 py-2 mb-2 leading-snug" style="background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;"></div>
 
                 <!-- Per-day grid -->
                 <div id="daily-sched-grid" class="rounded-xl px-3 py-2" style="border:1px solid #F3F4F6;background:#FAFAFA;">
@@ -5989,16 +5991,51 @@ function updateBookingPrice(){
   preview.classList.remove('hidden');
 }
 function checkDateCapacity(){
-  const ci=document.getElementById('bk-checkin')?.value;
-  const co=document.getElementById('bk-checkout')?.value||ci;
-  const warn=document.getElementById('cap-warning');if(!warn||!ci)return;
-  let anyFull=false;
-  const a=new Date(ci+'T00:00:00'),b=new Date(co+'T00:00:00');
-  for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1)){
-    const ds=d.toISOString().split('T')[0];
-    if(booksForDate(ds).length>=getEffectiveCap(ds)){anyFull=true;break;}
+  // Returns sorted array of fully-booked date strings in a range
+  function _fullDatesInRange(ci, co){
+    if(!ci)return[];
+    const full=[];
+    const a=new Date(ci+'T00:00:00'), b=new Date((co||ci)+'T00:00:00');
+    for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1)){
+      const ds=d.toISOString().split('T')[0];
+      if(booksForDate(ds).length>=getEffectiveCap(ds))full.push(ds);
+    }
+    return full;
   }
-  warn.classList.toggle('hidden',!anyFull);
+  // Builds a human-readable warning HTML string from an array of date strings
+  function _buildCapMsg(fullDates){
+    if(!fullDates.length)return'';
+    const labels=fullDates.map(ds=>fmtDateShort(ds));
+    const dateStr=labels.length===1
+      ?`<strong>${labels[0]}</strong>`
+      :labels.slice(0,-1).map(l=>`<strong>${l}</strong>`).join(', ')+' and <strong>'+labels.at(-1)+'</strong>';
+    const verb=fullDates.length===1?'is':'are';
+    return`⚠️ ${dateStr} ${verb} fully booked — please review the calendar and adjust your selection.`;
+  }
+  // Boarding range
+  const bCi=document.getElementById('bk-board-checkin')?.value;
+  const bCo=document.getElementById('bk-board-checkout')?.value||bCi;
+  const bWarn=document.getElementById('boarding-cap-warning');
+  if(bWarn){
+    const msg=_buildCapMsg(_fullDatesInRange(bCi,bCo));
+    if(msg){bWarn.innerHTML=msg;bWarn.classList.remove('hidden');}
+    else bWarn.classList.add('hidden');
+  }
+  // Daycare range (hidden inputs bk-checkin / bk-checkout)
+  const dCi=document.getElementById('bk-checkin')?.value;
+  const dCo=document.getElementById('bk-checkout')?.value||dCi;
+  const dWarn=document.getElementById('daycare-cap-warning');
+  if(dWarn){
+    const msg=_buildCapMsg(_fullDatesInRange(dCi,dCo));
+    if(msg){dWarn.innerHTML=msg;dWarn.classList.remove('hidden');}
+    else dWarn.classList.add('hidden');
+  }
+  // Legacy cap-warning (⑤ warnings section) — keep for backward compat
+  const legacyWarn=document.getElementById('cap-warning');
+  if(legacyWarn){
+    const anyFull=_fullDatesInRange(bCi,bCo).length>0||_fullDatesInRange(dCi,dCo).length>0;
+    legacyWarn.classList.toggle('hidden',!anyFull);
+  }
 }
 function updateDogSelect(){
   const cId=parseInt(document.getElementById('bk-client')?.value);
