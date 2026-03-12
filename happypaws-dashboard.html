@@ -2659,7 +2659,7 @@ function buildClientLayout(){
   const cl=clients.find(c=>c.id===state.currentClientId);
   return`
   <div class="min-h-screen bg-gray-50">
-    <header class="bg-white border-b border-gray-100 px-4 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-10 shadow-sm">
+    <header class="bg-white border-b border-gray-100 px-4 sm:px-6 py-3 flex items-center justify-between shadow-sm" style="position:sticky;top:${state.adminViewAsClient?'34px':'0'};z-index:${state.adminViewAsClient?'100':'10'}">
       <div class="flex items-center gap-2">
         <button onclick="setClientView('home')" style="background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:0;" title="Go to home">
           <img src="${LOGO_URL}" style="width:32px;height:32px;object-fit:contain;border-radius:6px;">
