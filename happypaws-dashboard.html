@@ -401,6 +401,28 @@ function capColor(n,cap){
 }
 function fmtDate(ds){return new Date(ds+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});}
 function fmtDateShort(ds){return new Date(ds+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});}
+// Returns a human-readable age string like "6 mo", "1 yr 3 mo", "3 yrs"
+// Prefers birthday-based calculation when birthday is provided.
+function fmtAge(age, birthday){
+  if(birthday){
+    const now=new Date(), bd=new Date(birthday+'T00:00:00');
+    if(bd>now)return'< 1 mo';
+    let yrs=now.getFullYear()-bd.getFullYear();
+    let mos=now.getMonth()-bd.getMonth();
+    if(now.getDate()<bd.getDate())mos--;
+    if(mos<0){yrs--;mos+=12;}
+    yrs=Math.max(0,yrs); mos=Math.max(0,mos);
+    if(yrs===0&&mos===0)return'< 1 mo';
+    if(yrs===0)return`${mos} mo`;
+    if(mos===0)return`${yrs} yr${yrs===1?'':'s'}`;
+    return`${yrs} yr${yrs===1?'':'s'} ${mos} mo`;
+  }
+  const a=Number(age)||0;
+  if(a<1){const mos=Math.round(a*12);return mos<=0?'< 1 mo':`${mos} mo`;}
+  const yrs=Math.floor(a); const mos=Math.round((a-yrs)*12);
+  if(mos===0)return`${yrs} yr${yrs===1?'':'s'}`;
+  return`${yrs} yr${yrs===1?'':'s'} ${mos} mo`;
+}
 // Format a raw phone string as xxx-xxx-xxxx (display only — never use on tel:/sms: hrefs)
 function fmtPhone(raw){const d=(raw||'').replace(/\D/g,'');return d.length===10?`${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`:(raw||'');}
 // Live formatter — attach via oninput on any phone <input> to auto-insert dashes as the user types
@@ -3213,7 +3235,7 @@ function buildDogsView(){
                 :`<div onclick="openProfilePhotoLightbox(null,${dog.clientId},${dog.id})" class="w-32 h-32 rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-3 border-4 border-amber-100 text-5xl cursor-pointer hover:bg-amber-100 transition-colors" title="Upload a photo">🐶</div>`;
             })()}
             <h2 class="text-xl font-bold ${dog.deceased?'text-gray-400':'text-gray-800'}">${dog.name}</h2>
-            <p class="text-gray-400 text-sm">${dog.breed} · ${dog.age}yr old</p>
+            <p class="text-gray-400 text-sm">${dog.breed} · ${fmtAge(dog.age,dog.birthday)} old</p>
             ${dog.birthday?`<p class="text-xs text-gray-400 mt-1">🎂 Birthday: ${dog.birthday}</p>`:''}
             ${dog.deceased?`<div class="mt-2 px-3 py-1.5 rounded-full inline-block text-xs font-semibold" style="background:#F3F4F6;color:#9CA3AF;">🌈 At the Rainbow Bridge</div>`:`<div class="mt-2">${vaccBadge(dog)}</div>`}
             ${dog.notes?`<p class="text-xs text-gray-500 italic mt-2 px-2">"${dog.notes}"</p>`:''}
@@ -3349,7 +3371,7 @@ function buildDogsList(){
                 :`<div class="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-2xl border-2 border-gray-200">🐶</div>`}
               <div class="flex-1 min-w-0">
                 <div class="font-semibold text-gray-500">${dog.name}</div>
-                <div class="text-xs text-gray-400">${dog.breed} · ${dog.age}yr</div>
+                <div class="text-xs text-gray-400">${dog.breed} · ${fmtAge(dog.age,dog.birthday)}</div>
               </div>
               <span class="badge" style="background:#F3F4F6;color:#9CA3AF;">🌈</span>
             </div>
@@ -3365,7 +3387,7 @@ function buildDogsList(){
               :`<div class="w-12 h-12 rounded-full ${isRb?'bg-gray-100':'bg-amber-50'} flex items-center justify-center text-2xl border-2 ${isRb?'border-gray-200':'border-amber-100'}">🐶</div>`}
             <div class="flex-1 min-w-0">
               <div class="font-semibold ${isRb?'text-gray-500':'text-gray-800'}">${dog.name}</div>
-              <div class="text-xs text-gray-400">${dog.breed} · ${dog.age}yr</div>
+              <div class="text-xs text-gray-400">${dog.breed} · ${fmtAge(dog.age,dog.birthday)}</div>
             </div>
             ${isRb?`<span class="badge" style="background:#F3F4F6;color:#9CA3AF;">🌈</span>`:vs==='expired'?`<span class="badge bg-red-100 text-red-600">🚩</span>`:vs==='expiring'?`<span class="badge bg-amber-100 text-amber-700">⚠️</span>`:vs==='ok'?`<span class="badge bg-green-100 text-green-600">✅</span>`:''}
           </div>
@@ -4092,7 +4114,7 @@ function buildClientAccount(){
         <div class="w-10 h-10 rounded-full flex items-center justify-center text-xl flex-shrink-0 bg-amber-50">🐕</div>
         <div>
           <div class="font-semibold text-gray-800">${dog.name}</div>
-          <div class="text-xs text-gray-400">${dog.breed||'Mixed Breed'} · ${dog.age||0} yr${dog.age===1?'':'s'}</div>
+          <div class="text-xs text-gray-400">${dog.breed||'Mixed Breed'} · ${fmtAge(dog.age,dog.birthday)}</div>
         </div>
         <div class="ml-auto flex items-center gap-2">
           <button onclick="setClientView('mydog')" class="text-xs px-3 py-1.5 rounded-lg border font-medium" style="border-color:#D4A96B;color:#7B4015;background:#FFFBF0;">🐾 Full Profile</button>
@@ -4138,7 +4160,7 @@ function buildClientAccount(){
         </div>
         <div class="flex items-center justify-between pt-1">
           <label class="flex items-center gap-2 cursor-pointer select-none">
-            <input id="acct-photo" type="checkbox" ${cl.photoConsent?'checked':''} class="w-4 h-4 rounded accent-amber-600">
+            <input id="acct-photo" type="checkbox" ${cl.photoConsent!==false?'checked':''} class="w-4 h-4 rounded accent-amber-600">
             <span class="text-sm text-gray-600">📸 I allow Nigel's Place to share photos of my pet(s) on social media</span>
           </label>
         </div>
@@ -4214,25 +4236,51 @@ function buildEditMyDogModal(){
             ${breedSelectHtml('emydog-breed','emydog-breed-other',dog.breed||'')}
           </div>
           <div>
-            <label class="block text-xs text-gray-500 mb-1">Age (years)</label>
-            <input id="emydog-age" type="number" min="0" max="30" value="${dog.age||0}"
-              class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none"
-              placeholder="e.g. 3">
-            <p class="text-xs text-gray-400 mt-0.5">Auto-filled if birthday is set</p>
+            <label class="block text-xs text-gray-500 mb-1">Age</label>
+            ${(()=>{
+              let ageYrs=Math.floor(dog.age||0);
+              let ageMos=Math.round(((dog.age||0)-ageYrs)*12);
+              if(dog.birthday){
+                const now=new Date(),bd=new Date(dog.birthday+'T00:00:00');
+                let y=now.getFullYear()-bd.getFullYear(),m=now.getMonth()-bd.getMonth();
+                if(now.getDate()<bd.getDate())m--;
+                if(m<0){y--;m+=12;}
+                ageYrs=Math.max(0,y); ageMos=Math.max(0,m);
+              }
+              const autoBg=dog.birthday?'style="background:#FFFBEB;"':'';
+              const autoTitle=dog.birthday?'title="Calculated from birthday"':'';
+              return`<div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-xs text-gray-400 mb-0.5">Years</label>
+                  <input id="emydog-age-yrs" type="number" min="0" max="30" placeholder="0" value="${ageYrs}"
+                    class="w-full bg-white border border-gray-200 rounded-xl px-2 py-1.5 text-sm focus:outline-none text-center" ${autoBg} ${autoTitle}>
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-400 mb-0.5">Months</label>
+                  <input id="emydog-age-mos" type="number" min="0" max="11" placeholder="0" value="${ageMos}"
+                    class="w-full bg-white border border-gray-200 rounded-xl px-2 py-1.5 text-sm focus:outline-none text-center" ${autoBg} ${autoTitle}>
+                </div>
+              </div>
+              <p class="text-xs text-gray-400 mt-0.5">Auto-filled when birthday is set</p>`;
+            })()}
           </div>
         </div>
         <div class="mt-2">
           <label class="block text-xs text-gray-500 mb-1">Birthday <span class="text-gray-400 font-normal">(optional — age auto-calculates)</span></label>
           <input id="emydog-birthday" type="date" value="${dog.birthday||''}"
             class="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none"
-            onchange="
-              const bd=this.value;
-              if(bd){
-                const yrs=Math.max(0,Math.floor((Date.now()-new Date(bd+'T00:00:00'))/(365.25*864e5)));
-                const ageEl=document.getElementById('emydog-age');
-                if(ageEl){ageEl.value=yrs;ageEl.style.background='#FFFBEB';ageEl.title='Calculated from birthday';}
-              }
-            ">
+            onchange="(function(bd){
+              if(!bd)return;
+              const now=new Date(),bdObj=new Date(bd+'T00:00:00');
+              let y=now.getFullYear()-bdObj.getFullYear(),m=now.getMonth()-bdObj.getMonth();
+              if(now.getDate()<bdObj.getDate())m--;
+              if(m<0){y--;m+=12;}
+              y=Math.max(0,y); m=Math.max(0,m);
+              const yEl=document.getElementById('emydog-age-yrs');
+              const mEl=document.getElementById('emydog-age-mos');
+              if(yEl){yEl.value=y;yEl.style.background='#FFFBEB';yEl.title='Calculated from birthday';}
+              if(mEl){mEl.value=m;mEl.style.background='#FFFBEB';mEl.title='Calculated from birthday';}
+            })(this.value)">
         </div>
       </div>
 
@@ -4324,12 +4372,19 @@ async function submitEditMyDog(e,dogId){
   const dog=cl.dogs.find(d=>d.id===dogId);if(!dog)return;
   const breed=getBreedValue('emydog-breed','emydog-breed-other')||dog.breed||'Mixed Breed';
   const birthday=(document.getElementById('emydog-birthday')?.value||'').trim();
-  // Auto-calculate age from birthday when one is set; fall back to manual entry
+  // Auto-calculate age from birthday (years + months) when one is set; otherwise read manual fields
   let age;
   if(birthday){
-    age=Math.max(0,Math.floor((Date.now()-new Date(birthday+'T00:00:00'))/(365.25*864e5)));
+    const now=new Date(),bd=new Date(birthday+'T00:00:00');
+    let y=now.getFullYear()-bd.getFullYear(),m=now.getMonth()-bd.getMonth();
+    if(now.getDate()<bd.getDate())m--;
+    if(m<0){y--;m+=12;}
+    y=Math.max(0,y); m=Math.max(0,m);
+    age=parseFloat((y+m/12).toFixed(2));
   }else{
-    age=parseInt(document.getElementById('emydog-age')?.value)||0;
+    const y=parseInt(document.getElementById('emydog-age-yrs')?.value)||0;
+    const m=Math.min(11,parseInt(document.getElementById('emydog-age-mos')?.value)||0);
+    age=parseFloat((y+m/12).toFixed(2));
   }
   const notes=(document.getElementById('emydog-notes')?.value||'').trim();
   const emergencyVetLimit=document.getElementById('emydog-vet')?.value||'';
@@ -4377,7 +4432,7 @@ function buildClientDog(){
               <div class="font-bold text-gray-400 text-base">${dog.name}</div>
               <span class="text-xs px-2 py-0.5 rounded-full font-semibold" style="background:#F3F4F6;color:#9CA3AF;">🌈 Rainbow Bridge</span>
             </div>
-            <div class="text-sm text-gray-300">${dog.breed||'Pet'}${dog.age?' · '+dog.age+' yr':''}</div>
+            <div class="text-sm text-gray-300">${dog.breed||'Pet'}${fmtAge(dog.age,dog.birthday)?' · '+fmtAge(dog.age,dog.birthday):''}</div>
           </div>
         </div>
         <div class="text-center py-3 text-gray-300 border-t border-gray-100">
@@ -4413,7 +4468,7 @@ function buildClientDog(){
             <div class="font-bold text-gray-800 text-xl leading-tight">${dog.name}</div>
             <div class="text-sm text-amber-700 font-medium mt-0.5">${dog.breed||'Pet'}</div>
             <div class="flex flex-wrap gap-2 mt-2">
-              ${dog.age?`<span class="text-xs bg-white rounded-full px-2.5 py-0.5 border border-amber-200 text-amber-800">${dog.age} yr old</span>`:''}
+              ${fmtAge(dog.age,dog.birthday)?`<span class="text-xs bg-white rounded-full px-2.5 py-0.5 border border-amber-200 text-amber-800">${fmtAge(dog.age,dog.birthday)} old</span>`:''}
               ${dog.birthday?`<span class="text-xs bg-white rounded-full px-2.5 py-0.5 border border-amber-200 text-amber-800">🎂 ${fmtDateShort(dog.birthday)}</span>`:''}
             </div>
           </div>
@@ -5029,7 +5084,7 @@ function buildBookingModal(selectedDate){
         ${isClient?`
         <div class="px-3 py-2.5 rounded-xl" style="background:#EFF6FF;border:1px solid #BFDBFE;">
           <label class="flex items-start gap-3 cursor-pointer">
-            <input type="checkbox" id="bk-photo" class="mt-0.5 accent-amber-700 w-4 h-4 flex-shrink-0" ${cl?.photoConsent?'checked':''}>
+            <input type="checkbox" id="bk-photo" class="mt-0.5 accent-amber-700 w-4 h-4 flex-shrink-0" ${cl?.photoConsent!==false?'checked':''}>
             <span class="text-xs leading-relaxed" style="color:#1E40AF;">I consent to photos and videos of my pet being taken at Nigel's Place and shared on social media.</span>
           </label>
         </div>`:''}
@@ -6844,7 +6899,7 @@ async function submitClient(e){
   const nc={id:nextId(clients),name,
     email:document.getElementById('cl-email')?.value||'',
     phone:document.getElementById('cl-phone')?.value||'',
-    photoConsent:false,
+    photoConsent:true,
     dogs:[{id:maxDogId+1,
       name:document.getElementById('dog-name')?.value||'Pet',
       breed:getBreedValue('dog-breed','dog-breed-other'),
