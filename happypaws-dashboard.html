@@ -6979,19 +6979,24 @@ async function submitBooking(e){
       if(state.role==='client'){await proxyClientWrite('addPackage',{pkg});}
       else{await persistPackages();}
     }catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
-    // Trigger checkout for full package payment
-    if(state.settings.squareApiKey&&state.settings.squareLocationId){
-      try{
-        const label=`${state.settings.businessName||"Nigel's Place"} — ${dogName} ${_sessionQty}-session package`;
-        const fakeRef={id:pkg.id};
-        const checkoutUrl=await createSquareCheckoutLink(fakeRef,totalPaid,label);
-        if(checkoutUrl)showPayNowBanner(checkoutUrl,totalPaid,'Session Package');
-      }catch(sqErr){showToast(`Package saved! Square checkout: ${sqErr.message}`,'#F97316');}
-    }else{
-      const missing=[];
-      if(!state.settings.squareApiKey)missing.push('Square API Key');
-      if(!state.settings.squareLocationId)missing.push('Square Location ID');
-      if(missing.length)showToast(`Package saved! 💡 Square payment skipped — ${missing.join(' & ')} not set in Settings.`,'#F97316');
+    // Trigger checkout for full package payment (via proxy — same pattern as boarding)
+    {
+      const _proxyUrl=(CONFIG.APPS_SCRIPT_URL||state.settings.appsScriptUrl||'').trim();
+      if(_proxyUrl){
+        try{
+          const label=`${state.settings.businessName||"Nigel's Place"} — ${dogName} ${_sessionQty}-session package`;
+          const ckRes=await proxyClientWrite('createCheckoutLink',{bookingId:pkg.id,amountDollars:totalPaid,label});
+          if(ckRes?.checkoutUrl)showPayNowBanner(ckRes.checkoutUrl,totalPaid,'Session Package');
+        }catch(sqErr){showToast(`Package saved! Square checkout: ${sqErr.message}`,'#F97316');}
+      }else if(state.settings.squareApiKey&&state.settings.squareLocationId){
+        try{
+          const label=`${state.settings.businessName||"Nigel's Place"} — ${dogName} ${_sessionQty}-session package`;
+          const checkoutUrl=await createSquareCheckoutLink({id:pkg.id},totalPaid,label);
+          if(checkoutUrl)showPayNowBanner(checkoutUrl,totalPaid,'Session Package');
+        }catch(sqErr){showToast(`Package saved! Square checkout: ${sqErr.message}`,'#F97316');}
+      }else{
+        showToast('Package saved! 💡 Square API keys not configured in Settings — payment link skipped.','#F97316');
+      }
     }
     return;
   }
@@ -7027,30 +7032,43 @@ async function submitBooking(e){
       if(state.role==='client'){await proxyClientWrite('addBooking',{booking:newBk});}
       else{await persistBookings();if(state.adminViewAsClient)await persistClients();}
     }catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
-    // Attempt to generate Square checkout link for the deposit
-    if(state.settings.squareApiKey&&state.settings.squareLocationId){
-      try{
-        const label=`${state.settings.businessName||"Nigel's Place"} — ${dogName} boarding deposit (${fmtDateShort(ci)}–${fmtDateShort(co)})`;
-        const checkoutUrl=await createSquareCheckoutLink(newBk,depositAmt,label);
-        if(checkoutUrl){
-          newBk.checkoutUrl=checkoutUrl;newBk.paymentStatus='checkout_pending';
-          // Persist checkout URL + payment status to sheet (non-fatal either way)
-          try{
-            if(state.role==='client'){
-              await proxyClientWrite('updateBooking',{id:newBk.id,checkoutUrl,paymentStatus:'checkout_pending'});
-            }else{
-              await persistBookings();
-            }
-          }catch(e){}
-          showPayNowBanner(checkoutUrl,depositAmt,'Boarding Deposit');
-        }
-      }catch(sqErr){showToast(`Booking saved! Square checkout: ${sqErr.message}`,'#F97316');}
-    }else{
-      // Let admin know why no payment prompt appeared
-      const missing=[];
-      if(!state.settings.squareApiKey)missing.push('Square API Key');
-      if(!state.settings.squareLocationId)missing.push('Square Location ID');
-      if(missing.length)showToast(`Booking saved! 💡 Square payment skipped — ${missing.join(' & ')} not set in Settings.`,'#F97316');
+    // Attempt to generate Square checkout link for the deposit.
+    // Always route through the Apps Script proxy so: (a) Square API keys stay
+    // server-side and never touch the client browser, (b) no CORS issues.
+    // Falls back to a direct browser call only if the proxy URL is not configured.
+    {
+      const _proxyUrl=(CONFIG.APPS_SCRIPT_URL||state.settings.appsScriptUrl||'').trim();
+      if(_proxyUrl){
+        try{
+          const label=`${state.settings.businessName||"Nigel's Place"} — ${dogName} boarding deposit (${fmtDateShort(ci)}–${fmtDateShort(co)})`;
+          const ckRes=await proxyClientWrite('createCheckoutLink',{bookingId:newBk.id,amountDollars:depositAmt,label});
+          if(ckRes?.checkoutUrl){
+            newBk.checkoutUrl=ckRes.checkoutUrl;newBk.paymentStatus='checkout_pending';
+            // Persist checkout URL to sheet (non-fatal)
+            try{
+              if(state.role==='client'){
+                await proxyClientWrite('updateBooking',{id:newBk.id,checkoutUrl:ckRes.checkoutUrl,paymentStatus:'checkout_pending'});
+              }else{
+                await persistBookings();
+              }
+            }catch(e){}
+            showPayNowBanner(ckRes.checkoutUrl,depositAmt,'Boarding Deposit');
+          }
+        }catch(sqErr){showToast(`Booking saved! Square checkout: ${sqErr.message}`,'#F97316');}
+      }else if(state.settings.squareApiKey&&state.settings.squareLocationId){
+        // Fallback: direct browser call (proxy not configured — admin only)
+        try{
+          const label=`${state.settings.businessName||"Nigel's Place"} — ${dogName} boarding deposit (${fmtDateShort(ci)}–${fmtDateShort(co)})`;
+          const checkoutUrl=await createSquareCheckoutLink(newBk,depositAmt,label);
+          if(checkoutUrl){
+            newBk.checkoutUrl=checkoutUrl;newBk.paymentStatus='checkout_pending';
+            try{await persistBookings();}catch(e){}
+            showPayNowBanner(checkoutUrl,depositAmt,'Boarding Deposit');
+          }
+        }catch(sqErr){showToast(`Booking saved! Square checkout: ${sqErr.message}`,'#F97316');}
+      }else{
+        showToast('Booking saved! 💡 Square API keys not configured in Settings — payment link skipped.','#F97316');
+      }
     }
     return;
   }

@@ -21,8 +21,9 @@
  *   getClientData   — return client's own record, dogs, bookings + safe settings
  *   addDog          — add an additional dog to an existing client profile
  *   updateVetLimit  — update a dog's emergency vet spending limit
- *   cancelBooking   — mark a booking as 'cancelled'
- *   updateBooking   — update checkoutUrl and/or paymentStatus on an existing booking
+ *   cancelBooking      — mark a booking as 'cancelled'
+ *   updateBooking      — update checkoutUrl and/or paymentStatus on an existing booking
+ *   createCheckoutLink — call Square API server-side and return a checkout URL
  *   updateProfile   — update caller's email, phone, photoConsent (My Account)
  *   updateDog       — update a dog's breed/age/birthday/notes/vetLimit (My Account)
  *
@@ -92,7 +93,8 @@ function doPost(e) {
     if (action === 'addDog')         return addDog(ss, req, email);
     if (action === 'updateVetLimit') return updateVetLimit(ss, req, email);
     if (action === 'cancelBooking')  return cancelBooking(ss, req, email);
-    if (action === 'updateBooking')  return updateBooking(ss, req, email);
+    if (action === 'updateBooking')     return updateBooking(ss, req, email);
+    if (action === 'createCheckoutLink') return createCheckoutLink(ss, req, email);
     if (action === 'updateProfile')     return updateProfile(ss, req, email);
     if (action === 'updateDog')         return updateDog(ss, req, email);
     if (action === 'updateDogVaccines') return updateDogVaccines(ss, req, email);
@@ -430,6 +432,77 @@ function updateBooking(ss, req, callerEmail) {
     }
   }
   return respond({ ok: false, error: 'Booking not found.' });
+}
+
+// ─── ACTION: createCheckoutLink ───────────────────────────────────────────────
+// Calls Square's Online Checkout API server-side and returns a hosted payment URL.
+// Running this in Apps Script avoids browser CORS restrictions and keeps Square
+// API credentials secure — they are read from the Settings sheet, never sent to
+// the client browser.
+// Any authenticated user (admin or registered client) may call this.
+function createCheckoutLink(ss, req, callerEmail) {
+  const { bookingId, amountDollars, label } = req;
+  if (!bookingId || !amountDollars) {
+    return respond({ ok: false, error: 'bookingId and amountDollars are required.' });
+  }
+
+  // Read Square credentials from the Settings sheet
+  const settingsSheet = ss.getSheetByName('Settings');
+  if (!settingsSheet) return respond({ ok: false, error: 'Settings sheet not found.' });
+
+  let squareApiKey = '', squareLocationId = '', squareSandbox = false;
+  const rows = settingsSheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    const k = String(rows[i][0]);
+    if (k === 'squareApiKey')    squareApiKey    = String(rows[i][1] || '');
+    if (k === 'squareLocationId') squareLocationId = String(rows[i][1] || '');
+    if (k === 'squareSandbox')    squareSandbox   = String(rows[i][1]).toLowerCase() === 'true';
+  }
+
+  if (!squareApiKey)    return respond({ ok: false, error: 'Square API key not configured — add it in Settings.' });
+  if (!squareLocationId) return respond({ ok: false, error: 'Square Location ID not configured — add it in Settings.' });
+
+  const sqBase = squareSandbox
+    ? 'https://connect.squareupsandbox.com'
+    : 'https://connect.squareup.com';
+  const amountCents = Math.round(Number(amountDollars) * 100);
+  const idempotencyKey = 'bk-' + bookingId + '-' + Date.now();
+
+  try {
+    const response = UrlFetchApp.fetch(sqBase + '/v2/online-checkout/payment-links', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        'Authorization': 'Bearer ' + squareApiKey,
+        'Square-Version': '2024-01-18'
+      },
+      payload: JSON.stringify({
+        idempotency_key: idempotencyKey,
+        quick_pay: {
+          name: label || "Nigel's Place Payment",
+          price_money: { amount: amountCents, currency: 'USD' },
+          location_id: squareLocationId
+        }
+      }),
+      muteHttpExceptions: true
+    });
+
+    const code = response.getResponseCode();
+    const data = JSON.parse(response.getContentText());
+
+    if (code !== 200 && code !== 201) {
+      const errMsg = (data && data.errors && data.errors[0] && data.errors[0].detail)
+        || ('Square API error ' + code);
+      return respond({ ok: false, error: errMsg });
+    }
+
+    const checkoutUrl = (data.payment_link && data.payment_link.url) || '';
+    if (!checkoutUrl) return respond({ ok: false, error: 'Square returned no checkout URL.' });
+    return respond({ ok: true, checkoutUrl: checkoutUrl });
+
+  } catch (e) {
+    return respond({ ok: false, error: 'Square request failed: ' + e.message });
+  }
 }
 
 // ─── ACTION: updateProfile ────────────────────────────────────────────────────
