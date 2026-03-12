@@ -1668,7 +1668,7 @@ async function loadAllData(){
     else if(k==='squareLink')state.settings.squareLink=v;
     else if(k==='squareApiKey')state.settings.squareApiKey=v;
     else if(k==='squareLocationId')state.settings.squareLocationId=v;
-    else if(k==='squareSandbox')state.settings.squareSandbox=(v==='true');
+    else if(k==='squareSandbox')state.settings.squareSandbox=(v===true||v==='true');
     else if(k==='geminiApiKey')state.settings.geminiApiKey=v;
     else if(k==='googleMapsApiKey')state.settings.googleMapsApiKey=v;
     else if(k==='nigelsDriveFolderId')state.settings.nigelsDriveFolderId=v;
