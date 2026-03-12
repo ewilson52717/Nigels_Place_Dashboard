@@ -662,10 +662,11 @@ async function initVetAutocomplete(nameInputId, phoneInputId, websiteDisplayId){
     }
   }
 }
-// Google Places Text Search (New API) — more reliable than Gemini for real business lookups
-async function lookupVetWithPlacesAPI(vetName, apiKey){
+// Google Places Text Search (New API) — returns up to 3 candidates
+async function lookupVetWithPlacesAPI(vetName, apiKey, cityState=''){
   if(!vetName||!apiKey)return null;
   try{
+    const query=(vetName+' veterinarian'+(cityState?' '+cityState:'')).trim();
     const r=await fetch('https://places.googleapis.com/v1/places:searchText',{
       method:'POST',
       headers:{
@@ -673,34 +674,40 @@ async function lookupVetWithPlacesAPI(vetName, apiKey){
         'X-Goog-Api-Key':apiKey,
         'X-Goog-FieldMask':'places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri'
       },
-      body:JSON.stringify({textQuery:vetName+' veterinarian',maxResultCount:1})
+      body:JSON.stringify({textQuery:query,maxResultCount:3})
     });
     const d=await r.json();
     if(d.error||!d.places||!d.places[0])return null;
-    const p=d.places[0];
-    return{
-      found:true,
+    const candidates=d.places.map(p=>({
       name:p.displayName?.text||vetName,
       phone:p.nationalPhoneNumber||'',
       website:p.websiteUri||'',
       city:p.formattedAddress||''
-    };
+    }));
+    return{found:true,candidates};
   }catch(e){console.warn('[PawDesk] Places text search failed:',e);return null;}
 }
-// Gemini fallback: given a free-text vet name, look up phone + website
-// NOTE: Gemini is a language model — it may not know specific local clinic phone numbers.
-// It works best for large regional chains. Use lookupVetWithPlacesAPI when a Maps key exists.
-async function lookupVetWithGemini(vetName){
+// Gemini fallback — asks for up to 3 fuzzy-matched candidates with confidence
+// NOTE: Gemini is a language model — it may hallucinate specific local phone numbers.
+// It works best for well-known regional chains. Use lookupVetWithPlacesAPI when a Maps key exists.
+async function lookupVetWithGemini(vetName, cityState=''){
   const key=state.settings.geminiApiKey;
   if(!key||!vetName.trim())return null;
   try{
     const model=await getGeminiModel(key);
-    const prompt=`You are a veterinary clinic directory assistant. If you have confident knowledge of the following veterinary clinic's real phone number, return ONLY valid JSON with no markdown:
-{"name":"official clinic name","phone":"xxx-xxx-xxxx","website":"https://...","city":"city, state","found":true}
-If you do NOT have confident, accurate knowledge of this specific clinic's contact info (e.g. it is a small local clinic you may not have data for), return: {"found":false}
-Do NOT guess or hallucinate phone numbers. Only return found:true if you are highly confident.
-Clinic to look up: "${vetName.replace(/"/g,'\\"')}"`;
-    const r=await fetch(`https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${key}`,{
+    const locationHint=cityState?` in or near ${cityState}`:'';
+    const prompt=`You are a veterinary clinic directory assistant. The user is searching for a vet clinic${locationHint}.
+Return your best 1–3 matches as ONLY valid JSON (no markdown, no explanation):
+{"found":true,"candidates":[{"name":"Official Clinic Name","phone":"xxx-xxx-xxxx","website":"https://...","city":"City, State","confidence":0.9}]}
+Rules:
+- Only include clinics you are genuinely confident exist. Do NOT hallucinate.
+- If confidence < 0.55 for a candidate, omit it entirely.
+- If you have zero confident matches, return exactly: {"found":false}
+- Omit phone/website if you are not certain of the value — never guess.
+- Rank candidates by confidence descending.
+- The user may have misspelled the name — use fuzzy reasoning to interpret their intent.
+Clinic query: "${vetName.replace(/"/g,'\\"')}"`;
+    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})
     });
@@ -709,51 +716,105 @@ Clinic to look up: "${vetName.replace(/"/g,'\\"')}"`;
     const text=d.candidates?.[0]?.content?.parts?.[0]?.text||'{}';
     const clean=text.replace(/```json?|```/g,'').trim();
     const result=JSON.parse(clean);
-    return result.found?result:null;
+    if(!result.found||!result.candidates?.length)return null;
+    return{found:true,candidates:result.candidates};
   }catch(e){console.warn('[PawDesk] Gemini vet lookup failed:',e);return null;}
 }
-// AI Lookup button handler — tries Places API first, then Gemini fallback
-// btnId is optional: defaults to 'emydog-vet-lookup-btn' for the edit modal,
-// pass 'ob-vet-lookup-btn' (or any id) when calling from other contexts.
-async function lookupVetFromModal(nameInputId, phoneInputId, btnId, websiteInputId){
+// Fill vet form fields from a candidate object
+function _fillVetFromCandidate(c, nameInputId, phoneInputId, websiteInputId){
+  const nameEl=document.getElementById(nameInputId);
+  if(nameEl&&c.name)nameEl.value=c.name;
+  const phoneEl=document.getElementById(phoneInputId);
+  if(phoneEl&&c.phone)phoneEl.value=fmtPhone(c.phone.replace(/\D/g,''));
+  if(websiteInputId){
+    const wsEl=document.getElementById(websiteInputId);
+    if(wsEl&&c.website)wsEl.value=c.website;
+  }
+}
+// Show a lightbox letting the user pick from multiple matched clinics
+function showVetPickerLightbox(candidates, nameInputId, phoneInputId, websiteInputId){
+  document.getElementById('vet-picker-overlay')?.remove();
+  const cards=candidates.map((c,i)=>`
+    <button type="button" onclick="pickVetCandidate(${i})"
+      style="width:100%;text-align:left;background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:.75rem 1rem;cursor:pointer;transition:border-color .15s,box-shadow .15s;"
+      onmouseover="this.style.borderColor='#7B4015';this.style.boxShadow='0 2px 8px rgba(123,64,21,0.12)'"
+      onmouseout="this.style.borderColor='#E5E7EB';this.style.boxShadow='none'">
+      <div style="font-weight:700;font-size:.88rem;color:#1F2937;margin-bottom:.2rem;">🏥 ${c.name}</div>
+      ${c.city?`<div style="font-size:.75rem;color:#6B7280;margin-bottom:.1rem;">📍 ${c.city}</div>`:''}
+      ${c.phone?`<div style="font-size:.75rem;color:#6B7280;">📞 ${c.phone}</div>`:''}
+    </button>`).join('');
+  const ov=document.createElement('div');
+  ov.id='vet-picker-overlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.52);z-index:10001;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  ov.innerHTML=`
+    <div style="background:#F9FAFB;border-radius:20px;padding:1.5rem;max-width:440px;width:100%;box-shadow:0 24px 64px rgba(0,0,0,0.28);max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;">
+        <h3 style="font-size:1rem;font-weight:700;color:#1F2937;margin:0;">We found ${candidates.length} possible match${candidates.length>1?'es':''}</h3>
+        <button type="button" onclick="document.getElementById('vet-picker-overlay')?.remove()" style="background:none;border:none;cursor:pointer;font-size:1.2rem;color:#9CA3AF;line-height:1;padding:0 2px;">✕</button>
+      </div>
+      <p style="font-size:.78rem;color:#6B7280;margin:0 0 1rem;">Tap the correct clinic to auto-fill your details:</p>
+      <div style="display:flex;flex-direction:column;gap:.55rem;">${cards}</div>
+      <button type="button" onclick="document.getElementById('vet-picker-overlay')?.remove()"
+        style="width:100%;margin-top:1rem;padding:.6rem;border:1px solid #E5E7EB;border-radius:12px;background:#fff;color:#6B7280;font-size:.83rem;cursor:pointer;">
+        None of these — I'll enter it manually
+      </button>
+    </div>`;
+  ov._candidates=candidates;
+  ov._nameInputId=nameInputId;
+  ov._phoneInputId=phoneInputId;
+  ov._websiteInputId=websiteInputId;
+  document.body.appendChild(ov);
+}
+function pickVetCandidate(idx){
+  const ov=document.getElementById('vet-picker-overlay');
+  if(!ov)return;
+  const c=ov._candidates[idx];
+  if(c){
+    _fillVetFromCandidate(c,ov._nameInputId,ov._phoneInputId,ov._websiteInputId);
+    showToast(`🏥 ${c.name} selected!`);
+  }
+  ov.remove();
+}
+// Auto-Fill button handler — tries Places API first, then Gemini fallback
+// cityStateInputId is optional but recommended: an input with "City, State" hint
+async function lookupVetFromModal(nameInputId, phoneInputId, btnId, websiteInputId, cityStateInputId){
   const nameEl=document.getElementById(nameInputId);
   const vetName=(nameEl?.value||'').trim();
-  if(!vetName){showToast('Type the clinic name first, then click AI Lookup.','#F97316');return;}
+  if(!vetName){showToast('Type the clinic name first, then click Auto-Fill.','#F97316');return;}
+  const cityState=(cityStateInputId?document.getElementById(cityStateInputId)?.value||'':'').trim();
   const resolvedBtnId=btnId||'emydog-vet-lookup-btn';
   const btn=document.getElementById(resolvedBtnId);
   const prevText=btn?.innerHTML;
-  if(btn){btn.disabled=true;btn.textContent='🔍 Looking up…';}
+  if(btn){btn.disabled=true;btn.textContent='🔍 Searching…';}
   try{
-    let info=null;
+    let candidates=null;
     const mapsKey=state.settings.googleMapsApiKey;
     // Primary: Google Places Text Search (requires Maps API key)
     if(mapsKey){
-      info=await lookupVetWithPlacesAPI(vetName, mapsKey);
+      const res=await lookupVetWithPlacesAPI(vetName,mapsKey,cityState);
+      if(res?.found)candidates=res.candidates;
     }
-    // Fallback: Gemini (less reliable for specific local clinics)
-    if(!info){
-      info=await lookupVetWithGemini(vetName);
+    // Fallback: Gemini fuzzy match (works without Maps key)
+    if(!candidates){
+      const res=await lookupVetWithGemini(vetName,cityState);
+      if(res?.found)candidates=res.candidates;
     }
-    if(info&&info.found){
-      if(nameEl&&info.name)nameEl.value=info.name;
-      const phoneEl=document.getElementById(phoneInputId);
-      if(phoneEl&&info.phone)phoneEl.value=fmtPhone(info.phone.replace(/\D/g,''));
-      // Fill website if a website input id was provided
-      if(websiteInputId){
-        const wsEl=document.getElementById(websiteInputId);
-        if(wsEl&&info.website)wsEl.value=info.website;
+    if(candidates&&candidates.length>0){
+      if(candidates.length===1){
+        _fillVetFromCandidate(candidates[0],nameInputId,phoneInputId,websiteInputId);
+        const c=candidates[0];
+        showToast(`🏥 Found: ${c.name}${c.city?' — '+c.city.split(',').slice(-2).join(','):''}!`);
+      }else{
+        showVetPickerLightbox(candidates,nameInputId,phoneInputId,websiteInputId);
       }
-      showToast(`🏥 Found: ${info.name}${info.city?' — '+info.city.split(',').slice(-2).join(','):''}${info.phone?' · '+info.phone:''}!`);
     }else{
-      showToast(mapsKey
-        ?'Clinic not found in Google Places. Try the full official name (e.g. "Richmond Animal Hospital Richmond VA").'
-        :'Could not find that clinic automatically. Add a Google Maps API key in Settings for better results, or enter details manually.',
-        '#F97316');
+      const hint=cityState?'':'Try adding the city & state to narrow it down, or use the full official clinic name.';
+      showToast('Clinic not found. '+hint,'#F97316');
     }
   }catch(e){
     showToast('Lookup failed: '+e.message,'#EF4444');
   }finally{
-    if(btn){btn.disabled=false;btn.innerHTML=prevText||'🔍 AI Lookup';}
+    if(btn){btn.disabled=false;btn.innerHTML=prevText||'🔍 Auto-Fill';}
   }
 }
 // ── Vaccine processing overlay (shown during AI scan regardless of button stale refs) ──
@@ -2310,13 +2371,15 @@ function buildOnboarding(){
         <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:14px;padding:.85rem 1rem;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem;">
             <p style="font-size:.78rem;font-weight:700;color:#DC2626;margin:0;">🏥 Veterinary Information <span style="background:#DC2626;color:white;font-size:.6rem;padding:1px 5px;border-radius:999px;margin-left:3px;">Required</span></p>
-            <button id="ob-vet-lookup-btn" type="button" onclick="lookupVetFromModal('ob-vet-name','ob-vet-phone','ob-vet-lookup-btn')" style="font-size:.68rem;padding:2px 7px;border-radius:8px;border:1px solid #FECACA;background:#FFF5F5;color:#DC2626;cursor:pointer;">🔍 AI Lookup</button>
+            <button id="ob-vet-lookup-btn" type="button" onclick="lookupVetFromModal('ob-vet-name','ob-vet-phone','ob-vet-lookup-btn',null,'ob-vet-city')" style="font-size:.68rem;padding:2px 7px;border-radius:8px;border:1px solid #FECACA;background:#FFF5F5;color:#DC2626;cursor:pointer;">🔍 Auto-Fill</button>
           </div>
           <p style="font-size:.7rem;color:#374151;margin:0 0 .65rem;line-height:1.4;">Required before booking. Helps verify vaccine records and lets us reach your vet in an emergency. Start typing to search for your clinic.</p>
           <div style="display:flex;flex-direction:column;gap:.5rem;">
             <input id="ob-vet-name" type="text" placeholder="Type clinic name to search…" value="${(d.vetName||'').replace(/"/g,'&quot;')}"
               style="width:100%;border:1px solid #FECACA;border-radius:10px;padding:.55rem .75rem;font-size:.83rem;box-sizing:border-box;background:#fff;"
               onfocus="setTimeout(()=>initVetAutocomplete('ob-vet-name','ob-vet-phone'),100)">
+            <input id="ob-vet-city" type="text" placeholder="City & State (optional — helps narrow search)"
+              style="width:100%;border:1px solid #FECACA;border-radius:10px;padding:.55rem .75rem;font-size:.83rem;box-sizing:border-box;background:#fff;">
             <input id="ob-vet-phone" type="tel" placeholder="Phone (auto-fills from search)" value="${fmtPhone(d.vetPhone||'')}" oninput="phoneInputHandler(this)"
               style="width:100%;border:1px solid #FECACA;border-radius:10px;padding:.55rem .75rem;font-size:.83rem;box-sizing:border-box;background:#fff;">
           </div>
@@ -4180,7 +4243,7 @@ function buildEditMyDogModal(){
             🏥 Vet Clinic${!dog.vetName?` <span style="font-size:.6rem;background:#DC2626;color:white;padding:1px 6px;border-radius:999px;margin-left:3px;">Required</span>`:''}
           </label>
           <button type="button" id="emydog-vet-lookup-btn"
-            onclick="lookupVetFromModal('emydog-vet-name','emydog-vet-phone','emydog-vet-lookup-btn','emydog-vet-website')"
+            onclick="lookupVetFromModal('emydog-vet-name','emydog-vet-phone','emydog-vet-lookup-btn','emydog-vet-website','emydog-vet-city')"
             style="font-size:.7rem;padding:3px 10px;border-radius:8px;border:1px solid ${!dog.vetName?'#FECACA':'#BAE6FD'};background:${!dog.vetName?'#FFF5F5':'#EFF6FF'};color:${!dog.vetName?'#DC2626':'#0369A1'};cursor:pointer;font-weight:600;">
             🔍 Auto-Fill
           </button>
@@ -4198,6 +4261,12 @@ function buildEditMyDogModal(){
               class="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none"
               style="border-color:${!dog.vetName?'#FECACA':'#BAE6FD'};background:#fff;"
               onfocus="setTimeout(()=>initVetAutocomplete('emydog-vet-name','emydog-vet-phone','emydog-vet-website'),100)">
+          </div>
+          <div>
+            <label class="block text-xs mb-1" style="color:#0369A1;">City &amp; State <span style="font-weight:400;color:#94A3B8;">(optional — helps narrow search)</span></label>
+            <input id="emydog-vet-city" type="text" placeholder="e.g. Richmond, VA"
+              class="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none"
+              style="border-color:#BAE6FD;background:#fff;">
           </div>
           <div class="grid grid-cols-2 gap-2">
             <div>
