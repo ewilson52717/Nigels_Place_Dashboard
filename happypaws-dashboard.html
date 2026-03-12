@@ -6775,7 +6775,9 @@ async function submitBooking(e){
 
   // ── Resolve client / dog ───────────────────────────────────────────────
   let clientId,dogId,dogName,clientName;
-  if(state.role==='client'){
+  if(state.role==='client'||state.adminViewAsClient){
+    // Client path — also used when admin is previewing a client (adminViewAsClient=true),
+    // since #bk-client dropdown doesn't exist in the client modal layout.
     clientId=state.currentClientId;
     dogId=parseInt(document.getElementById('bk-dog')?.value);
     const cl=clients.find(c=>c.id===clientId),dg=cl?.dogs.find(d=>d.id===dogId);
@@ -6853,7 +6855,7 @@ async function submitBooking(e){
     showToast(`🏡 Boarding booked for ${dogName} · ${fmtDateShort(ci)} – ${fmtDateShort(co)} (${nights} ${nights===1?'night':'nights'})`);
     try{
       await persistBookings();
-      if(state.role==='client')await persistClients();
+      if(state.role==='client'||state.adminViewAsClient)await persistClients();
     }catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
     return;
   }
@@ -6907,7 +6909,7 @@ async function submitBooking(e){
     const brdStr=boardingBooked?`boarding ${fmtDateShort(bCi)}–${fmtDateShort(bCo)}`:'';
     const dcStr=dcEntries.length>0?`+ ${dcEntries.length} daycare day${dcEntries.length===1?'':'s'}`:'';
     showToast(`🏡☀️ ${dogName} booked · ${[brdStr,dcStr].filter(Boolean).join(' ')}`);
-    try{await persistBookings();if(state.role==='client')await persistClients();}
+    try{await persistBookings();if(state.role==='client'||state.adminViewAsClient)await persistClients();}
     catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
     return;
   }
@@ -6940,7 +6942,7 @@ async function submitBooking(e){
   showToast(`☀️ Booked ${dogName} · ${dateStr}!`);
   try{
     await persistBookings();
-    if(state.role==='client')await persistClients();
+    if(state.role==='client'||state.adminViewAsClient)await persistClients();
   }catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
 }
 async function submitClient(e){
