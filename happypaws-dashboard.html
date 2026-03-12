@@ -5689,7 +5689,11 @@ function openBookingModal(ds) {
   state.showModal={type:'booking',date:ds};
   render();
   setTimeout(()=>{
-    if(state.role!=='client')updateDogSelect();
+    // Only call updateDogSelect in pure admin mode — NOT in admin-as-client preview,
+    // because the client path already pre-populates #bk-dog from the HTML and
+    // updateDogSelect() (which looks for #bk-client) would overwrite it with
+    // "Select client first..." if #bk-client doesn't exist.
+    if(state.role!=='client'&&!state.adminViewAsClient)updateDogSelect();
     checkDogVaccWarning();
     renderMiniCal();
     // Seed the hidden inputs and daily grid if we have a pre-selected date
