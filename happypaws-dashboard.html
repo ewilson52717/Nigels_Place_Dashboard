@@ -6975,7 +6975,10 @@ async function submitBooking(e){
     packages.push(pkg);
     state.showModal=null;render();
     showToast(`🎫 ${_sessionQty} session${_sessionQty===1?'':'s'} added to ${dogName}'s package! ($${totalPaid})`);
-    try{await persistPackages();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+    try{
+      if(state.role==='client'){await proxyClientWrite('addPackage',{pkg});}
+      else{await persistPackages();}
+    }catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
     // Trigger checkout for full package payment
     if(state.settings.squareApiKey&&state.settings.squareLocationId){
       try{
@@ -7021,8 +7024,8 @@ async function submitBooking(e){
     state.showModal=null;render();
     showToast(`🏡 Boarding booked for ${dogName} · ${fmtDateShort(ci)} – ${fmtDateShort(co)} (${nights} ${nights===1?'night':'nights'})`);
     try{
-      await persistBookings();
-      if(state.role==='client'||state.adminViewAsClient)await persistClients();
+      if(state.role==='client'){await proxyClientWrite('addBooking',{booking:newBk});}
+      else{await persistBookings();if(state.adminViewAsClient)await persistClients();}
     }catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
     // Attempt to generate Square checkout link for the deposit
     if(state.settings.squareApiKey&&state.settings.squareLocationId){
@@ -7094,8 +7097,13 @@ async function submitBooking(e){
     const brdStr=boardingBooked?`boarding ${fmtDateShort(bCi)}–${fmtDateShort(bCo)}`:'';
     const dcStr=dcEntries.length>0?`+ ${dcEntries.length} daycare day${dcEntries.length===1?'':'s'}`:'';
     showToast(`🏡☀️ ${dogName} booked · ${[brdStr,dcStr].filter(Boolean).join(' ')}`);
-    try{await persistBookings();if(state.role==='client'||state.adminViewAsClient)await persistClients();}
-    catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+    try{
+      if(state.role==='client'){
+        // Combo may have created 1 or 2 new bookings — send each through the proxy
+        const comboNewBks=bookings.filter(b=>b.clientId===clientId&&b.status==='confirmed').slice(-2);
+        for(const cb of comboNewBks)await proxyClientWrite('addBooking',{booking:cb});
+      }else{await persistBookings();if(state.adminViewAsClient)await persistClients();}
+    }catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
     return;
   }
 
@@ -7111,14 +7119,15 @@ async function submitBooking(e){
     // Capacity check
     if(booksForDate(dt).length>=getEffectiveCap(dt)){showToast(`${fmtDate(dt)} is fully booked!`,'#EF4444');return;}
     const totalPrice=svcPrice+addonTotal;
-    bookings.push({id:nextId(bookings),clientId,dogId,dogName,clientName,
+    const customBk={id:nextId(bookings),clientId,dogId,dogName,clientName,
       checkIn:dt,checkOut:dt,nights:1,status:'confirmed',service:svcName,
-      addons:addonNames.join(','),price:totalPrice});
+      addons:addonNames.join(','),price:totalPrice};
+    bookings.push(customBk);
     state.showModal=null;render();
     showToast(`✨ ${svcName} booked for ${dogName} on ${fmtDate(dt)}!`);
     try{
-      await persistBookings();
-      if(state.role==='client'||state.adminViewAsClient)await persistClients();
+      if(state.role==='client'){await proxyClientWrite('addBooking',{booking:customBk});}
+      else{await persistBookings();if(state.adminViewAsClient)await persistClients();}
     }catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
     return;
   }
@@ -7142,16 +7151,17 @@ async function submitBooking(e){
   const svc=typeSet.length===1?typeSet[0]:'Mixed';
   Object.values(_dailySchedule).forEach(svcName=>{perDayTotal+=getServicePrice(svcName);});
   const totalPrice=perDayTotal+addonTotal;
-  bookings.push({id:nextId(bookings),clientId,dogId,dogName,clientName,
+  const dcBk={id:nextId(bookings),clientId,dogId,dogName,clientName,
     checkIn:ci,checkOut:co,nights:days,status:'confirmed',service:svc,
     dailySchedule:{..._dailySchedule},
-    addons:addonNames.join(','),price:totalPrice});
+    addons:addonNames.join(','),price:totalPrice};
+  bookings.push(dcBk);
   state.showModal=null;render();
   const dateStr=ci===co?fmtDate(ci):`${fmtDateShort(ci)} – ${fmtDateShort(co)} (${days} ${days===1?'day':'days'})`;
   showToast(`☀️ Booked ${dogName} · ${dateStr}!`);
   try{
-    await persistBookings();
-    if(state.role==='client'||state.adminViewAsClient)await persistClients();
+    if(state.role==='client'){await proxyClientWrite('addBooking',{booking:dcBk});}
+    else{await persistBookings();if(state.adminViewAsClient)await persistClients();}
   }catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
 }
 async function submitClient(e){

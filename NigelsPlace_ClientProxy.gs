@@ -94,6 +94,8 @@ function doPost(e) {
     if (action === 'updateProfile')     return updateProfile(ss, req, email);
     if (action === 'updateDog')         return updateDog(ss, req, email);
     if (action === 'updateDogVaccines') return updateDogVaccines(ss, req, email);
+    if (action === 'addBooking')        return addBooking(ss, req, email);
+    if (action === 'addPackage')        return addPackage(ss, req, email);
 
     return respond({ ok: false, error: `Unknown action: ${action}` });
 
@@ -490,6 +492,119 @@ function updateDogVaccines(ss, req, callerEmail) {
     }
   }
   return respond({ ok: false, error: 'Dog not found or does not belong to your account.' });
+}
+
+// ─── ACTION: addBooking ───────────────────────────────────────────────────────
+// Appends a new booking row on behalf of a verified client. The booking's
+// clientId must match the caller's registered client ID — prevents a client
+// from writing bookings under another account.
+function addBooking(ss, req, callerEmail) {
+  const { booking } = req;
+  if (!booking) return respond({ ok: false, error: 'No booking data provided.' });
+
+  const clientsSheet  = ss.getSheetByName('Clients');
+  const bookingsSheet = ss.getSheetByName('Bookings');
+  if (!clientsSheet || !bookingsSheet) return respond({ ok: false, error: 'Sheet not found.' });
+
+  // Verify caller is a registered client
+  const clientRows = clientsSheet.getDataRange().getValues();
+  let callerClientId = null;
+  for (let i = 1; i < clientRows.length; i++) {
+    if (String(clientRows[i][2]).toLowerCase() === callerEmail.toLowerCase()) {
+      callerClientId = String(clientRows[i][0]);
+      break;
+    }
+  }
+  if (!callerClientId) return respond({ ok: false, error: 'Client record not found for this account.' });
+
+  // Security: booking must belong to the caller
+  if (String(booking.clientId) !== callerClientId) {
+    return respond({ ok: false, error: 'Permission denied — clientId mismatch.' });
+  }
+
+  // Derive a safe ID: max existing ID + 1 (avoids conflicts with server-side rows)
+  const bkRows = bookingsSheet.getDataRange().getValues();
+  let maxId = 0;
+  for (let i = 1; i < bkRows.length; i++) {
+    if (bkRows[i][0]) maxId = Math.max(maxId, Number(bkRows[i][0]));
+  }
+  const safeId = Math.max(Number(booking.id) || 0, maxId + 1);
+
+  // Append using the 16-column schema: id, clientId, dogId, dogName, clientName,
+  // checkIn, checkOut, nights, status, service, addons, price,
+  // paymentStatus, depositAmount, squarePaymentId, checkoutUrl
+  bookingsSheet.appendRow([
+    safeId,
+    booking.clientId,
+    booking.dogId,
+    booking.dogName    || '',
+    booking.clientName || '',
+    booking.checkIn    || '',
+    booking.checkOut   || booking.checkIn || '',
+    booking.nights     || 1,
+    booking.status     || 'confirmed',
+    booking.service    || 'Full Day',
+    booking.addons     || '',
+    booking.price      || 0,
+    booking.paymentStatus   || '',
+    booking.depositAmount   || 0,
+    booking.squarePaymentId || '',
+    booking.checkoutUrl     || '',
+  ]);
+
+  return respond({ ok: true, id: safeId });
+}
+
+// ─── ACTION: addPackage ───────────────────────────────────────────────────────
+// Appends a new daycare package purchase row on behalf of a verified client.
+function addPackage(ss, req, callerEmail) {
+  const { pkg } = req;
+  if (!pkg) return respond({ ok: false, error: 'No package data provided.' });
+
+  const clientsSheet  = ss.getSheetByName('Clients');
+  const packagesSheet = ss.getSheetByName('Packages');
+  if (!clientsSheet || !packagesSheet) return respond({ ok: false, error: 'Sheet not found.' });
+
+  // Verify caller is a registered client
+  const clientRows = clientsSheet.getDataRange().getValues();
+  let callerClientId = null;
+  for (let i = 1; i < clientRows.length; i++) {
+    if (String(clientRows[i][2]).toLowerCase() === callerEmail.toLowerCase()) {
+      callerClientId = String(clientRows[i][0]);
+      break;
+    }
+  }
+  if (!callerClientId) return respond({ ok: false, error: 'Client record not found for this account.' });
+
+  if (String(pkg.clientId) !== callerClientId) {
+    return respond({ ok: false, error: 'Permission denied — clientId mismatch.' });
+  }
+
+  // Derive a safe ID
+  const pkgRows = packagesSheet.getDataRange().getValues();
+  let maxId = 0;
+  for (let i = 1; i < pkgRows.length; i++) {
+    if (pkgRows[i][0]) maxId = Math.max(maxId, Number(pkgRows[i][0]));
+  }
+  const safeId = Math.max(Number(pkg.id) || 0, maxId + 1);
+
+  // Schema: id, clientId, dogId, clientName, dogName, purchaseDate,
+  //         qty, remaining, pricePerSession, totalPaid, notes
+  packagesSheet.appendRow([
+    safeId,
+    pkg.clientId,
+    pkg.dogId,
+    pkg.clientName     || '',
+    pkg.dogName        || '',
+    pkg.purchaseDate   || '',
+    pkg.qty            || 0,
+    pkg.remaining      || 0,
+    pkg.pricePerSession|| 0,
+    pkg.totalPaid      || 0,
+    pkg.notes          || '',
+  ]);
+
+  return respond({ ok: true, id: safeId });
 }
 
 // ─── RESPONSE HELPER ─────────────────────────────────────────────────────────
