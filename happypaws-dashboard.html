@@ -1006,6 +1006,7 @@ let _bookingMain='daycare';  // 'daycare' | 'boarding'
 let _daycareMode='schedule'; // 'schedule' | 'package'
 let _sessionQty=1;           // number of daycare sessions being purchased
 let _schedGridCollapsed=false; // true = per-day grid is collapsed (auto-set when >1 day)
+let _customSvcId=null; // selected service id when _bookingMain==='custom'
 // Mini-calendar state for booking modal date picker
 let _miniCalYear=new Date().getFullYear();
 let _miniCalMonth=new Date().getMonth(); // 0-based
@@ -4777,7 +4778,7 @@ function getDaycareTier(qty){
 function setBkMain(type){
   _bookingMain=type;
   // Update type button styles
-  ['boarding','daycare','combo'].forEach(t=>{
+  ['boarding','daycare','combo','custom'].forEach(t=>{
     const btn=document.getElementById(`bk-type-${t}`);
     if(!btn)return;
     const a=t===type;
@@ -4787,6 +4788,7 @@ function setBkMain(type){
   });
   const bSec=document.getElementById('bk-boarding-section');
   const dSec=document.getElementById('bk-daycare-section');
+  const cSec=document.getElementById('bk-custom-section');
   const pkgRow=document.getElementById('bk-pkg-mode-row');
   const pkgPicker=document.getElementById('bk-session-picker');
   const datesSec=document.getElementById('bk-daycare-dates');
@@ -4794,6 +4796,13 @@ function setBkMain(type){
   if(bSec)bSec.style.display=(type==='boarding'||type==='combo')?'':'none';
   // Daycare section: visible for daycare or combo
   if(dSec)dSec.style.display=(type==='daycare'||type==='combo')?'':'none';
+  // Custom section: visible only for custom
+  if(cSec)cSec.style.display=type==='custom'?'':'none';
+  // Initialise _customSvcId when switching to custom
+  if(type==='custom'){
+    const sel=document.getElementById('bk-custom-svc');
+    if(sel)_customSvcId=+sel.value||null;
+  }
   // Package mode toggle only available for pure daycare
   if(pkgRow)pkgRow.style.display=type==='daycare'?'':'none';
   // Combo always uses schedule mode (package can't be combined with boarding)
@@ -4852,6 +4861,8 @@ function buildBookingModal(selectedDate){
   const minBookDate=isClient?MIN_BOOKING_DATE:TODAY;
   const cl=isClient?clients.find(c=>c.id===state.currentClientId):null;
   const activeAddons=services.filter(s=>s.type==='addon'&&s.active);
+  // Extra base services that aren't Full Day / Half Day / Boarding — shown as 4th "Other" tile
+  const extraSvcs=services.filter(s=>s.type==='base'&&s.active&&!['full day','half day','boarding'].some(n=>s.name.toLowerCase().includes(n)));
   const tier=getDaycareTier(_sessionQty);
   const clientId=isClient?state.currentClientId:null;
   const pkgBalance=clientId?packages.filter(p=>p.clientId===clientId&&p.remaining>0).reduce((s,p)=>s+p.remaining,0):0;
@@ -4914,10 +4925,11 @@ function buildBookingModal(selectedDate){
         <!-- ② TYPE OF STAY ──────────────────────────────────────── -->
         <div>
           <label class="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">Type of stay</label>
-          <div style="display:flex;gap:8px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
             ${typeBtn('boarding','🏡','Boarding','Overnight')}
             ${typeBtn('daycare','☀️','Daycare','Day sessions')}
             ${typeBtn('combo','🏡☀️','Stay & Play','Board + Daycare')}
+            ${extraSvcs.length>0?typeBtn('custom','✨','Other','Special services'):''}
           </div>
         </div>
 
@@ -5033,7 +5045,30 @@ function buildBookingModal(selectedDate){
           </div><!-- /daycare card -->
         </div>
 
-        <!-- ⑤ WARNINGS ──────────────────────────────────────────── -->
+        <!-- ⑤ CUSTOM SERVICE (extra base services) ─────────────── -->
+        <div id="bk-custom-section" style="display:${_bookingMain==='custom'?'':'none'}">
+          <div class="rounded-xl border border-gray-200 overflow-hidden">
+            <div class="px-3 py-2 flex items-center gap-2" style="background:#F8F4F0;border-bottom:1px solid #E5E7EB;">
+              <span class="text-sm">✨</span>
+              <span class="text-xs font-bold text-amber-900 uppercase tracking-wider">Special Service</span>
+            </div>
+            <div class="p-3 space-y-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1.5">Select Service</label>
+                <select id="bk-custom-svc" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white" onchange="_customSvcId=+this.value;updateBookingPrice()">
+                  ${extraSvcs.map(s=>`<option value="${s.id}" data-price="${s.price}">${s.name} — $${s.price}</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1.5">Date</label>
+                <input type="date" id="bk-custom-date" value="${selectedDate||''}" min="${TODAY}"
+                  class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white" onchange="updateBookingPrice()">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ⑥ WARNINGS ──────────────────────────────────────────── -->
         <div id="vacc-warning" class="text-xs hidden p-2.5 rounded-xl"></div>
         <div id="vacc-override-row" class="hidden">
           <label class="flex items-center gap-2 text-xs text-amber-800 cursor-pointer px-3 py-2 rounded-xl" style="background:#FFF7ED;border:1px solid #FDE68A;">
@@ -5687,6 +5722,7 @@ function openBookingModal(ds) {
   _bookingMain='daycare';
   _daycareMode='schedule';
   _sessionQty=1;
+  _customSvcId=null;
   // Seed mini-cal to the month containing the clicked date (or current month)
   const seedDate=ds&&ds>=MIN_BOOKING_DATE?ds:MIN_BOOKING_DATE;
   _miniCalYear=parseInt(seedDate.slice(0,4));
@@ -6056,12 +6092,23 @@ function updateBookingPrice(){
       hasContent=true;
     }
     if(!hasContent){preview.classList.add('hidden');return;}
+  } else if(_bookingMain==='custom'){
+    // Custom / special service — single-day booking
+    const sel=document.getElementById('bk-custom-svc');
+    const dt=document.getElementById('bk-custom-date')?.value;
+    if(!sel||!dt){preview.classList.add('hidden');return;}
+    const svcOpt=sel.options[sel.selectedIndex];
+    const svcName=svcOpt?svcOpt.text.split(' — ')[0]:'Service';
+    const svcPrice=parseFloat(sel.options[sel.selectedIndex]?.getAttribute('data-price'))||0;
+    html+=`<div>✨ ${svcName} · $${svcPrice}</div>`;
+    total=svcPrice;
   } else if(_daycareMode==='package'){
     // Package purchase — no dates needed
     const tier=getDaycareTier(_sessionQty);
     const packageTotal=_sessionQty*tier.price;
     html+=`<div>🎫 ${_sessionQty} session${_sessionQty===1?'':'s'} · $${tier.price}/session = $${packageTotal}</div>`;
     html+=`<div class="text-amber-600 mt-0.5">Sessions never expire — schedule whenever you're ready!</div>`;
+    html+=`<div class="mt-2 px-2.5 py-2 rounded-lg text-xs leading-snug" style="background:#EFF6FF;border:1px solid #BFDBFE;color:#1D4ED8;">💳 <strong>Payment due in full at purchase</strong> to lock in this rate. Sessions are deducted as you schedule them.</div>`;
     total=packageTotal;
   } else {
     // Daycare scheduled — use per-day schedule
@@ -6919,6 +6966,30 @@ async function submitBooking(e){
     showToast(`🏡☀️ ${dogName} booked · ${[brdStr,dcStr].filter(Boolean).join(' ')}`);
     try{await persistBookings();if(state.role==='client'||state.adminViewAsClient)await persistClients();}
     catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+    return;
+  }
+
+  // ── CUSTOM / SPECIAL SERVICE MODE ──────────────────────────────────────
+  if(_bookingMain==='custom'){
+    const sel=document.getElementById('bk-custom-svc');
+    const dt=document.getElementById('bk-custom-date')?.value;
+    if(!sel||!dt){showToast('Please select a service and date.','#EF4444');return;}
+    if(dt<TODAY){showToast('Please choose a future date.','#EF4444');return;}
+    const svcOpt=sel.options[sel.selectedIndex];
+    const svcName=svcOpt?svcOpt.text.split(' — ')[0]:'Service';
+    const svcPrice=parseFloat(svcOpt?.getAttribute('data-price'))||0;
+    // Capacity check
+    if(booksForDate(dt).length>=getEffectiveCap(dt)){showToast(`${fmtDate(dt)} is fully booked!`,'#EF4444');return;}
+    const totalPrice=svcPrice+addonTotal;
+    bookings.push({id:nextId(bookings),clientId,dogId,dogName,clientName,
+      checkIn:dt,checkOut:dt,nights:1,status:'confirmed',service:svcName,
+      addons:addonNames.join(','),price:totalPrice});
+    state.showModal=null;render();
+    showToast(`✨ ${svcName} booked for ${dogName} on ${fmtDate(dt)}!`);
+    try{
+      await persistBookings();
+      if(state.role==='client'||state.adminViewAsClient)await persistClients();
+    }catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
     return;
   }
 
