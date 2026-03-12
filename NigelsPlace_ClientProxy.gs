@@ -310,7 +310,19 @@ function getClientData(ss, req, callerEmail) {
     }
   }
 
-  return respond({ ok: true, client: clientRow, dogs, bookings, settings });
+  // Return all active services so clients see the correct booking options
+  // (Full Day / Half Day / Boarding / any custom "Other" services and add-ons).
+  // Service data is non-sensitive — names and prices only.
+  const servicesSheet = ss.getSheetByName('Services');
+  const services = [];
+  if (servicesSheet) {
+    const svcRows = servicesSheet.getDataRange().getValues();
+    for (let i = 1; i < svcRows.length; i++) {
+      if (svcRows[i][0]) services.push(svcRows[i]);
+    }
+  }
+
+  return respond({ ok: true, client: clientRow, dogs, bookings, settings, services });
 }
 
 // ─── ACTION: updateVetLimit ───────────────────────────────────────────────────

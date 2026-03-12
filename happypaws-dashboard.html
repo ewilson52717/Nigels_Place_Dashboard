@@ -2078,6 +2078,16 @@ async function loadClientDataViaProxy(){
     if(s.geminiApiKey&&!state.settings.geminiApiKey)state.settings.geminiApiKey=String(s.geminiApiKey);
     if(s.googleMapsApiKey&&!state.settings.googleMapsApiKey)state.settings.googleMapsApiKey=String(s.googleMapsApiKey);
 
+    // Populate services from proxy response so clients see correct booking options
+    // (including any custom "Other" services and add-ons configured by the admin).
+    if(result.services&&result.services.length>0){
+      services.length=0;
+      result.services.forEach(r=>{
+        if(r[0])services.push({id:+r[0],name:r[1]||'',type:r[2]||'addon',price:+r[3]||0,
+          active:String(r[4]).toLowerCase()!=='false',frequency:r[5]||'stay'});
+      });
+    }
+
     // Cache client email so we recognise this user on next sign-in even if proxy is slow
     try{if(cr[2])localStorage.setItem('np_client_email',String(cr[2]).toLowerCase());}catch(e){}
     return 'found';
