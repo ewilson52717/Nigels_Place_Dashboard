@@ -2945,8 +2945,8 @@ function buildCalendarView(role){
     </div>
     <div class="flex items-center gap-3 sm:gap-5 mb-4 text-xs text-gray-500 flex-wrap">
       ${isClient?`
-        <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:3px;background:white;border:1px solid #E5E7EB;display:inline-block"></span>Available — tap to book</span>
-        <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:3px;background:#F3F4F6;border:1px solid #D1D5DB;display:inline-block"></span>Unavailable</span>
+        <span class="flex items-center gap-2"><span style="width:18px;height:18px;border-radius:4px;background:white;border:2px solid #9CA3AF;display:inline-block;flex-shrink:0;"></span>Available — tap to book</span>
+        <span class="flex items-center gap-2"><span style="width:18px;height:18px;border-radius:4px;background:#EAECEF;border:1px solid #C9CDD4;background-image:repeating-linear-gradient(135deg,transparent,transparent 4px,rgba(0,0,0,0.18) 4px,rgba(0,0,0,0.18) 5px);display:inline-block;flex-shrink:0;"></span>Unavailable</span>
       `:`
         <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#10B981;display:inline-block"></span>Available</span>
         <span class="flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:50%;background:#EAB308;display:inline-block"></span>Filling Up</span>
@@ -3112,13 +3112,13 @@ function buildCalendarView(role){
     </div><!-- /min-width -->
     </div><!-- /overflow-x-auto -->
     ${isClient?`
-      <div class="mt-3 flex items-center gap-5 px-1 text-xs text-gray-400">
-        <div class="flex items-center gap-1.5">
-          <div class="w-3.5 h-3.5 rounded-sm border border-gray-300 flex-shrink-0" style="background:#F3F4F6;background-image:repeating-linear-gradient(135deg,transparent,transparent 3px,rgba(180,180,190,0.5) 3px,rgba(180,180,190,0.5) 4px);"></div>
+      <div class="mt-3 flex items-center gap-5 px-1 text-xs text-gray-500">
+        <div class="flex items-center gap-2">
+          <div class="flex-shrink-0 rounded" style="width:22px;height:22px;background:#EAECEF;border:1px solid #C9CDD4;background-image:repeating-linear-gradient(135deg,transparent,transparent 4px,rgba(0,0,0,0.18) 4px,rgba(0,0,0,0.18) 5px);"></div>
           <span>Unavailable</span>
         </div>
-        <div class="flex items-center gap-1.5">
-          <div class="w-3.5 h-3.5 rounded-sm border border-gray-200 bg-white flex-shrink-0"></div>
+        <div class="flex items-center gap-2">
+          <div class="flex-shrink-0 rounded bg-white" style="width:22px;height:22px;border:2px solid #9CA3AF;"></div>
           <span>Available — tap to book</span>
         </div>
       </div>
