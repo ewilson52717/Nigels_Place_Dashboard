@@ -22,6 +22,7 @@
  *   addDog          — add an additional dog to an existing client profile
  *   updateVetLimit  — update a dog's emergency vet spending limit
  *   cancelBooking   — mark a booking as 'cancelled'
+ *   updateBooking   — update checkoutUrl and/or paymentStatus on an existing booking
  *   updateProfile   — update caller's email, phone, photoConsent (My Account)
  *   updateDog       — update a dog's breed/age/birthday/notes/vetLimit (My Account)
  *
@@ -91,6 +92,7 @@ function doPost(e) {
     if (action === 'addDog')         return addDog(ss, req, email);
     if (action === 'updateVetLimit') return updateVetLimit(ss, req, email);
     if (action === 'cancelBooking')  return cancelBooking(ss, req, email);
+    if (action === 'updateBooking')  return updateBooking(ss, req, email);
     if (action === 'updateProfile')     return updateProfile(ss, req, email);
     if (action === 'updateDog')         return updateDog(ss, req, email);
     if (action === 'updateDogVaccines') return updateDogVaccines(ss, req, email);
@@ -384,6 +386,47 @@ function cancelBooking(ss, req, callerEmail) {
       }
       bookingsSheet.getRange(i + 1, 9).setValue('cancelled');
       return respond({ ok: true, message: 'Booking cancelled.' });
+    }
+  }
+  return respond({ ok: false, error: 'Booking not found.' });
+}
+
+// ─── ACTION: updateBooking ────────────────────────────────────────────────────
+// Updates checkoutUrl and/or paymentStatus on an existing booking row.
+// Security: the booking must belong to the verified caller (clientId must match).
+// Used by the client portal after Square checkout link is generated, so the URL
+// survives page reloads and silentRefresh cycles.
+function updateBooking(ss, req, callerEmail) {
+  const { id, checkoutUrl, paymentStatus } = req;
+  if (!id) return respond({ ok: false, error: 'Booking id is required.' });
+
+  const clientsSheet  = ss.getSheetByName('Clients');
+  const bookingsSheet = ss.getSheetByName('Bookings');
+  if (!clientsSheet || !bookingsSheet) return respond({ ok: false, error: 'Sheet not found.' });
+
+  // Verify caller's clientId
+  const clientRows = clientsSheet.getDataRange().getValues();
+  let callerClientId = null;
+  for (let i = 1; i < clientRows.length; i++) {
+    if (String(clientRows[i][2]).toLowerCase() === callerEmail.toLowerCase()) {
+      callerClientId = String(clientRows[i][0]);
+      break;
+    }
+  }
+  if (!callerClientId) return respond({ ok: false, error: 'Client record not found for this account.' });
+
+  // Find and update the booking row
+  const bkRows = bookingsSheet.getDataRange().getValues();
+  for (let i = 1; i < bkRows.length; i++) {
+    if (String(bkRows[i][0]) === String(id)) {
+      // Security: booking must belong to caller
+      if (String(bkRows[i][1]) !== callerClientId) {
+        return respond({ ok: false, error: 'Permission denied — this booking does not belong to your account.' });
+      }
+      // col13 = paymentStatus (1-indexed), col16 = checkoutUrl
+      if (paymentStatus !== undefined) bookingsSheet.getRange(i + 1, 13).setValue(String(paymentStatus));
+      if (checkoutUrl   !== undefined) bookingsSheet.getRange(i + 1, 16).setValue(String(checkoutUrl));
+      return respond({ ok: true, message: 'Booking updated.' });
     }
   }
   return respond({ ok: false, error: 'Booking not found.' });

@@ -7034,7 +7034,14 @@ async function submitBooking(e){
         const checkoutUrl=await createSquareCheckoutLink(newBk,depositAmt,label);
         if(checkoutUrl){
           newBk.checkoutUrl=checkoutUrl;newBk.paymentStatus='checkout_pending';
-          await persistBookings();
+          // Persist checkout URL + payment status to sheet (non-fatal either way)
+          try{
+            if(state.role==='client'){
+              await proxyClientWrite('updateBooking',{id:newBk.id,checkoutUrl,paymentStatus:'checkout_pending'});
+            }else{
+              await persistBookings();
+            }
+          }catch(e){}
           showPayNowBanner(checkoutUrl,depositAmt,'Boarding Deposit');
         }
       }catch(sqErr){showToast(`Booking saved! Square checkout: ${sqErr.message}`,'#F97316');}
