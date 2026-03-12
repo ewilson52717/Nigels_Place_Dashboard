@@ -3069,11 +3069,11 @@ function buildCalendarView(role){
             const unavailable=clientPast||(cap===0)||full;
             const canBook=!unavailable;
             return`
-            <div class="day-cell border-b border-r p-2 relative ${wknd?'weekend-day':''} ${clientPast?'past-day':''}"
-                 style="${!clientPast&&unavailable?'background:#F3F4F6;border-color:#E5E7EB;cursor:default;background-image:repeating-linear-gradient(135deg,transparent,transparent 6px,rgba(180,180,190,0.35) 6px,rgba(180,180,190,0.35) 7px);':''}"
+            <div class="day-cell border-b border-r p-2 relative ${wknd?'weekend-day':''}"
+                 style="${unavailable?'background:#F3F4F6;border-color:#E5E7EB;cursor:default;background-image:repeating-linear-gradient(135deg,transparent,transparent 6px,rgba(180,180,190,0.35) 6px,rgba(180,180,190,0.35) 7px);':''}"
                  onclick="${canBook?'openDayModal(\''+ds+'\')':''}">
               <div class="flex items-start justify-between mb-1">
-                <span class="${!clientPast&&unavailable?'text-sm font-medium text-gray-300':'text-sm font-medium text-gray-600'}">${day}</span>
+                <span class="${unavailable?'text-sm font-medium text-gray-300':'text-sm font-medium text-gray-600'}">${day}</span>
               </div>
               ${!clientPast?unavailable?'<div class="text-xs text-gray-300 mt-1 select-none">Full</div>':'<div class="text-xs mt-1" style="color:#7B4015">Open</div>':''}
             </div>`;}
@@ -3114,11 +3114,11 @@ function buildCalendarView(role){
     ${isClient?`
       <div class="mt-3 flex items-center gap-5 px-1 text-xs text-gray-400">
         <div class="flex items-center gap-1.5">
-          <div class="w-3.5 h-3.5 rounded-sm border border-gray-300" style="background:#F3F4F6"></div>
+          <div class="w-3.5 h-3.5 rounded-sm border border-gray-300 flex-shrink-0" style="background:#F3F4F6;background-image:repeating-linear-gradient(135deg,transparent,transparent 3px,rgba(180,180,190,0.5) 3px,rgba(180,180,190,0.5) 4px);"></div>
           <span>Unavailable</span>
         </div>
         <div class="flex items-center gap-1.5">
-          <div class="w-3.5 h-3.5 rounded-sm border border-gray-200 bg-white"></div>
+          <div class="w-3.5 h-3.5 rounded-sm border border-gray-200 bg-white flex-shrink-0"></div>
           <span>Available — tap to book</span>
         </div>
       </div>
@@ -4995,6 +4995,13 @@ function buildBookingModal(selectedDate){
               <!-- Date scheduling (schedule now / combo) -->
               <div id="bk-daycare-dates" style="display:${_daycareMode==='schedule'||_bookingMain==='combo'?'':'none'}">
 
+                <!-- Combo-mode hint: remind user boarding dates are set above -->
+                ${_bookingMain==='combo'?`
+                <div class="flex items-start gap-2 mb-3 px-3 py-2 rounded-xl text-xs leading-snug" style="background:#EFF6FF;border:1px solid #BFDBFE;color:#1D4ED8;">
+                  <span style="flex-shrink:0;font-size:1rem;">🏡</span>
+                  <span><strong>Overnight stays:</strong> set your boarding check-in &amp; check-out dates in the Boarding section above — then pick any extra daycare days here.</span>
+                </div>`:''}
+
                 <!-- Quick Set -->
                 <div class="flex items-center gap-2 mb-2">
                   <span class="text-xs text-gray-400 flex-shrink-0">Apply all days:</span>
@@ -5901,7 +5908,8 @@ function renderMiniCal(){
     let label='';
 
     if(isPast){
-      bg='transparent';color='#D1D5DB';cursor='default';
+      bg='#F3F4F6';color='#D1D5DB';cursor='default';
+      stripeOverlay=`background-image:repeating-linear-gradient(135deg,transparent,transparent 5px,rgba(160,160,170,0.35) 5px,rgba(160,160,170,0.35) 6px);`;
     } else if(isStart||isEnd){
       bg='#7B4015';color='#fff';
     } else if(inRange){
