@@ -273,7 +273,7 @@ const state={
   settings:{
     businessName:"Nigel's Place",ownerName:'Kelly Hendrickson',
     dailyCapacity:5,fullDayRate:45,halfDayRate:25,groomingAddOn:20,
-    venmoHandle:'',squareLink:'',squareApiKey:'',squareLocationId:'',geminiApiKey:'',googleMapsApiKey:'',nigelsDriveFolderId:'',
+    venmoHandle:'',squareLink:'',squareApiKey:'',squareLocationId:'',squareSandbox:false,geminiApiKey:'',googleMapsApiKey:'',nigelsDriveFolderId:'',
     appsScriptUrl:'', // Google Apps Script proxy URL — lets new clients write to the sheet securely
     kioskPassword:'', // if set, kiosk ?kiosk URL requires this password before showing the lobby
     capacityOverrides:{}, // { 'YYYY-MM-DD': number } — per-date overrides (0 = closed/blocked)
@@ -1588,7 +1588,7 @@ async function ensurePackagesSheet(){
 }
 async function loadAllData(){
   const[cR,dR,bR,iR,sR]=await Promise.all([
-    readRangeSafe('Clients!A2:E'),readRangeSafe('Dogs!A2:T'),readRangeSafe('Bookings!A2:L'),
+    readRangeSafe('Clients!A2:E'),readRangeSafe('Dogs!A2:T'),readRangeSafe('Bookings!A2:P'),
     readRangeSafe('Invoices!A2:K'),readRangeSafe('Settings!A2:B'),
   ]);
   const svR=await readRangeSafe('Services!A2:F');
@@ -1636,7 +1636,8 @@ async function loadAllData(){
       const ci5=sheetDateStr(r[5]);
       bookings.push({id:+r[0],clientId:+r[1],dogId:+r[2],dogName:String(r[3]||''),clientName:String(r[4]||''),
         checkIn:ci5,checkOut:sheetDateStr(r[6])||ci5,nights:+r[7]||1,status:String(r[8]||'confirmed'),
-        service:String(r[9]||'Full Day'),addons:String(r[10]||''),price:+r[11]||0});
+        service:String(r[9]||'Full Day'),addons:String(r[10]||''),price:+r[11]||0,
+        paymentStatus:String(r[12]||''),depositAmount:+r[13]||0,squarePaymentId:String(r[14]||''),checkoutUrl:String(r[15]||'')});
     }
   });
   // ── Orphan booking cleanup ──────────────────────────────────────────────────
@@ -1667,6 +1668,7 @@ async function loadAllData(){
     else if(k==='squareLink')state.settings.squareLink=v;
     else if(k==='squareApiKey')state.settings.squareApiKey=v;
     else if(k==='squareLocationId')state.settings.squareLocationId=v;
+    else if(k==='squareSandbox')state.settings.squareSandbox=(v==='true');
     else if(k==='geminiApiKey')state.settings.geminiApiKey=v;
     else if(k==='googleMapsApiKey')state.settings.googleMapsApiKey=v;
     else if(k==='nigelsDriveFolderId')state.settings.nigelsDriveFolderId=v;
@@ -1699,11 +1701,11 @@ async function persistPackages(){
 }
 async function persistBookings(){
   if(state.mode!=='live')return;
-  const rows=[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price'],
-    ...bookings.map(b=>[b.id,b.clientId,b.dogId,b.dogName,b.clientName,b.checkIn,b.checkOut,b.nights,b.status,b.service,b.addons||'',b.price])];
+  const rows=[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price','paymentStatus','depositAmount','squarePaymentId','checkoutUrl'],
+    ...bookings.map(b=>[b.id,b.clientId,b.dogId,b.dogName,b.clientName,b.checkIn,b.checkOut,b.nights,b.status,b.service,b.addons||'',b.price,b.paymentStatus||'',b.depositAmount||0,b.squarePaymentId||'',b.checkoutUrl||''])];
   // Write first (data always present), then clear any leftover rows below
-  await writeRange(`Bookings!A1:L${rows.length}`,rows);
-  if(rows.length<9999)await clearRange(`Bookings!A${rows.length+1}:L9999`);
+  await writeRange(`Bookings!A1:P${rows.length}`,rows);
+  if(rows.length<9999)await clearRange(`Bookings!A${rows.length+1}:P9999`);
 }
 async function persistClients(){
   if(state.mode!=='live')return;
@@ -2055,7 +2057,8 @@ async function loadClientDataViaProxy(){
       }else{
         bookings.push({id:+r[0],clientId:+r[1],dogId:+r[2],dogName:r[3]||'',clientName:r[4]||'',
           checkIn:r[5]||'',checkOut:r[6]||r[5]||'',nights:+r[7]||1,status:r[8]||'confirmed',
-          service:r[9]||'Full Day',addons:r[10]||'',price:+r[11]||0});
+          service:r[9]||'Full Day',addons:r[10]||'',price:+r[11]||0,
+          paymentStatus:r[12]||'',depositAmount:+r[13]||0,squarePaymentId:r[14]||'',checkoutUrl:r[15]||''});
       }
     });
 
@@ -2104,12 +2107,13 @@ async function persistSettings(){
   const overridesJson=JSON.stringify(state.settings.capacityOverrides||{});
   const vaccinesJson=JSON.stringify(state.settings.requiredVaccines||[]);
   const manualClinicsJson=JSON.stringify(state.settings.manualVetClinics||[]);
-  await writeRange('Settings!A1:B17',[
+  await writeRange('Settings!A1:B18',[
     ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
     ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
     ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',state.settings.venmoHandle||''],
     ['squareLink',state.settings.squareLink||''],['squareApiKey',state.settings.squareApiKey||''],
     ['squareLocationId',state.settings.squareLocationId||''],
+    ['squareSandbox',state.settings.squareSandbox?'true':'false'],
     ['geminiApiKey',state.settings.geminiApiKey||''],
     ['nigelsDriveFolderId',state.settings.nigelsDriveFolderId||''],
     ['appsScriptUrl',state.settings.appsScriptUrl||''],
@@ -3729,6 +3733,13 @@ function buildSettingsView(){
           <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Square Location ID</label>
             <input id="set-square-location" type="text" placeholder="LxxxxxxxxxxxxX" value="${state.settings.squareLocationId||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
             <p class="text-xs text-gray-400 mt-1">Production → Location ID (under Locations in your Square dashboard).</p></div>
+          <div class="flex items-center gap-3 mt-1 px-3 py-2.5 rounded-xl" style="background:${state.settings.squareSandbox?'#FFF7ED':'#F0FDF4'};border:1px solid ${state.settings.squareSandbox?'#FDE68A':'#86EFAC'};">
+            <input type="checkbox" id="set-square-sandbox" class="accent-amber-700 w-4 h-4 flex-shrink-0" ${state.settings.squareSandbox?'checked':''}>
+            <div>
+              <label for="set-square-sandbox" class="text-xs font-semibold cursor-pointer" style="color:${state.settings.squareSandbox?'#92400E':'#166534'};">${state.settings.squareSandbox?'🧪 Sandbox mode — test payments only':'🟢 Production mode — real payments'}</label>
+              <div class="text-xs mt-0.5" style="color:${state.settings.squareSandbox?'#92400E':'#166534'};">${state.settings.squareSandbox?'Using squareupsandbox.com — no real charges. Uncheck when ready to go live.':'Using connect.squareup.com. Check this to switch to sandbox for testing.'}</div>
+            </div>
+          </div>
         </div>
       </div>
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
@@ -4080,6 +4091,14 @@ function buildClientBookings(){
       <button onclick="setClientView('home')" class="mt-3 text-amber-800 hover:underline text-sm">Book your first stay →</button></div>`
     :`<div class="space-y-3">${myBks.map(b=>{
       const isUpcoming=b.checkIn>=TODAY&&b.status!=='cancelled';
+      // Payment status badge
+      const pmtBadge=(()=>{
+        const ps=b.paymentStatus||'';
+        if(ps==='paid')return`<span class="ml-1 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">✓ Paid</span>`;
+        if(ps==='deposit_paid')return`<span class="ml-1 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">🔐 Deposit paid</span>`;
+        if(ps==='checkout_pending'||ps==='deposit_due')return`<span class="ml-1 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">💳 Payment due</span>`;
+        return'';
+      })();
       return`
       <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
         <div class="flex items-center gap-4">
@@ -4090,10 +4109,18 @@ function buildClientBookings(){
             ${b.addons?`<div class="text-xs text-gray-400">Add-ons: ${b.addons}</div>`:''}
           </div>
           <div class="text-right"><div class="font-bold text-gray-800">$${b.price}</div>
-            <span class="badge ${sCls[b.status]||'bg-gray-100 text-gray-600'}">${b.status}</span></div>
+            <span class="badge ${sCls[b.status]||'bg-gray-100 text-gray-600'}">${b.status}</span>${pmtBadge}</div>
         </div>
-        ${isUpcoming?`<div class="mt-3 pt-3 border-t border-gray-100">
+        ${(b.paymentStatus==='deposit_due'||b.paymentStatus==='checkout_pending')&&b.checkoutUrl&&isUpcoming?`
+        <div class="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2">
+          <a href="${b.checkoutUrl}" target="_blank" style="flex:1;display:block;text-align:center;padding:.5rem;background:#7B4015;color:white;border-radius:10px;font-size:.75rem;font-weight:700;text-decoration:none;">💳 Pay ${b.depositAmount?`$${b.depositAmount.toFixed(2)} Deposit`:'Now'} via Square</a>
+        </div>`:
+        isUpcoming?`<div class="mt-3 pt-3 border-t border-gray-100">
           <button onclick="showClientCancelConfirm('${b.id}')" style="background:none;border:1px solid #FCA5A5;border-radius:8px;padding:.3rem .8rem;font-size:.72rem;color:#DC2626;cursor:pointer;font-weight:600;">Cancel booking</button>
+        </div>`:''}
+        ${(b.paymentStatus==='deposit_due'||b.paymentStatus==='checkout_pending')&&b.checkoutUrl&&isUpcoming?`
+        <div class="mt-1.5 flex justify-end">
+          <button onclick="showClientCancelConfirm('${b.id}')" style="background:none;border:none;padding:0;font-size:.68rem;color:#9CA3AF;cursor:pointer;text-decoration:underline;">Cancel booking</button>
         </div>`:''}
       </div>`;
     }).join('')}</div>`}
@@ -4742,6 +4769,9 @@ function buildDayModal(ds){
           </div>
           <div class="flex flex-col items-end gap-1">
             ${isAdm?`<span class="text-sm text-gray-600 font-medium whitespace-nowrap">$${b.price}</span>`:''}
+            ${isAdm&&b.paymentStatus==='paid'?`<span class="text-xs font-semibold text-green-600">✓ Paid</span>`:''}
+            ${isAdm&&(b.paymentStatus==='deposit_paid')?`<span class="text-xs font-semibold text-blue-600">🔐 Deposit paid</span>`:''}
+            ${isAdm&&(b.paymentStatus==='deposit_due'||b.paymentStatus==='checkout_pending')?`<span class="text-xs font-semibold text-amber-600">💳 Awaiting payment</span>`:''}
             ${isAdm?`<button onclick="cancelBooking(${b.id})" class="text-xs text-red-400 hover:text-red-600 whitespace-nowrap" title="Cancel booking">✕ Cancel</button>`:''}
           </div>
         </div>`).join('')}</div>`
@@ -4821,6 +4851,24 @@ function setBkMain(type){
     const ci=document.getElementById('bk-board-checkin')?.value;
     const co=document.getElementById('bk-board-checkout')?.value||ci;
     if(ci){getDatesInRange(ci,co||ci).forEach(ds=>{_dailySchedule[ds]='Boarding';});}
+  }
+  // Update policy notice banner
+  const pn=document.getElementById('bk-policy-notice');
+  if(pn){
+    const policyLink=`<button type="button" onclick="showCancellationPolicyModal()" style="background:none;border:none;padding:0;cursor:pointer;text-decoration:underline;font-weight:600;color:inherit;font-size:inherit;">cancellation policy</button>`;
+    if(type==='boarding'||type==='combo'){
+      pn.innerHTML=`<div class="flex items-start gap-2 px-3 py-2.5 rounded-xl text-xs leading-snug" style="background:#FFF7ED;border:1px solid #FDE68A;color:#92400E;">
+        <span style="flex-shrink:0;font-size:1rem;">🔐</span>
+        <span><strong>25% deposit required</strong> to confirm boarding. Remaining balance due at check-in. Refundable per our ${policyLink} (7+ days = full, 3–6 days = 50%, 1–2 days = none).</span>
+      </div>`;
+    } else if(type==='daycare'){
+      pn.innerHTML=`<div class="flex items-start gap-2 px-3 py-2.5 rounded-xl text-xs leading-snug" style="background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;">
+        <span style="flex-shrink:0;font-size:1rem;">📋</span>
+        <span><strong>Daycare sessions are non-refundable.</strong> If you need to cancel, contact us and we'll do our best to arrange a session credit.</span>
+      </div>`;
+    } else {
+      pn.innerHTML='';
+    }
   }
   updateBookingPrice();
 }
@@ -5110,7 +5158,10 @@ function buildBookingModal(selectedDate){
           </div>
         </div>`:''}
 
-        <!-- ⑦ PRICE SUMMARY ─────────────────────────────────────── -->
+        <!-- ⑦ POLICY NOTICE (dynamic — updated by setBkMain) ────── -->
+        <div id="bk-policy-notice"></div>
+
+        <!-- ⑧ PRICE SUMMARY ─────────────────────────────────────── -->
         <div id="price-preview" class="hidden rounded-xl p-3.5" style="background:#FFFBEB;border:1px solid #FDE68A;">
           <div class="font-semibold text-amber-900 mb-1.5 text-sm flex items-center gap-1.5">💰 Booking Summary</div>
           <div id="price-lines" class="text-amber-800 space-y-0.5 text-xs leading-relaxed"></div>
@@ -6063,6 +6114,9 @@ function updateBookingPrice(){
     const nights=Math.max(0,Math.round((b-a)/864e5));
     const baseTotal=nights*boardingRate;
     html+=`<div>🏡 ${nights} ${nights===1?'night':'nights'} boarding · $${boardingRate}/night = $${baseTotal}</div>`;
+    const deposit=Math.ceil(baseTotal*0.25*100)/100;
+    html+=`<div class="mt-1 font-semibold" style="color:#7B4015;">🔐 25% deposit due now: <strong>$${deposit.toFixed(2)}</strong></div>`;
+    html+=`<div style="color:#9CA3AF;font-size:.7rem;">Remaining $${(baseTotal-deposit).toFixed(2)} due at check-in</div>`;
     total=baseTotal;
   } else if(_bookingMain==='combo'){
     // Combo: boarding portion + daycare portion
@@ -6074,8 +6128,11 @@ function updateBookingPrice(){
       const boardingRate=boardingSvc?.price||state.settings.fullDayRate||55;
       const nights=Math.max(0,Math.round((new Date(co+'T00:00:00')-new Date(ci+'T00:00:00'))/864e5));
       if(nights>0){
-        html+=`<div>🏡 ${nights} ${nights===1?'night':'nights'} boarding · $${boardingRate}/night = $${nights*boardingRate}</div>`;
-        total+=nights*boardingRate;
+        const bTotal=nights*boardingRate;
+        const bDeposit=Math.ceil(bTotal*0.25*100)/100;
+        html+=`<div>🏡 ${nights} ${nights===1?'night':'nights'} boarding · $${boardingRate}/night = $${bTotal}</div>`;
+        html+=`<div class="mt-0.5 font-semibold" style="color:#7B4015;">🔐 25% deposit due now: <strong>$${bDeposit.toFixed(2)}</strong></div>`;
+        total+=bTotal;
         hasContent=true;
       }
     }
@@ -6881,6 +6938,15 @@ async function submitBooking(e){
     state.showModal=null;render();
     showToast(`🎫 ${_sessionQty} session${_sessionQty===1?'':'s'} added to ${dogName}'s package! ($${totalPaid})`);
     try{await persistPackages();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+    // Trigger checkout for full package payment
+    if(state.settings.squareApiKey&&state.settings.squareLocationId){
+      try{
+        const label=`${state.settings.businessName||"Nigel's Place"} — ${dogName} ${_sessionQty}-session package`;
+        const fakeRef={id:pkg.id};
+        const checkoutUrl=await createSquareCheckoutLink(fakeRef,totalPaid,label);
+        if(checkoutUrl)showPayNowBanner(checkoutUrl,totalPaid,'Session Package');
+      }catch(sqErr){showToast(`Package saved! Square checkout: ${sqErr.message}`,'#F97316');}
+    }
     return;
   }
 
@@ -6902,16 +6968,31 @@ async function submitBooking(e){
     }
     const baseTotal=nights*boardingRate;
     const totalPrice=baseTotal+addonTotal;
+    const depositAmt=Math.ceil(baseTotal*0.25*100)/100;
     const svcLabel=boardingSvc?.name||'Boarding';
-    bookings.push({id:nextId(bookings),clientId,dogId,dogName,clientName,
+    const newBk={id:nextId(bookings),clientId,dogId,dogName,clientName,
       checkIn:ci,checkOut:co,nights,status:'confirmed',service:svcLabel,
-      addons:addonNames.join(','),price:totalPrice});
+      addons:addonNames.join(','),price:totalPrice,
+      paymentStatus:'deposit_due',depositAmount:depositAmt,squarePaymentId:'',checkoutUrl:''};
+    bookings.push(newBk);
     state.showModal=null;render();
     showToast(`🏡 Boarding booked for ${dogName} · ${fmtDateShort(ci)} – ${fmtDateShort(co)} (${nights} ${nights===1?'night':'nights'})`);
     try{
       await persistBookings();
       if(state.role==='client'||state.adminViewAsClient)await persistClients();
     }catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+    // Attempt to generate Square checkout link for the deposit
+    if(state.settings.squareApiKey&&state.settings.squareLocationId){
+      try{
+        const label=`${state.settings.businessName||"Nigel's Place"} — ${dogName} boarding deposit (${fmtDateShort(ci)}–${fmtDateShort(co)})`;
+        const checkoutUrl=await createSquareCheckoutLink(newBk,depositAmt,label);
+        if(checkoutUrl){
+          newBk.checkoutUrl=checkoutUrl;newBk.paymentStatus='checkout_pending';
+          await persistBookings();
+          showPayNowBanner(checkoutUrl,depositAmt,'Boarding Deposit');
+        }
+      }catch(sqErr){showToast(`Booking saved! Square checkout: ${sqErr.message}`,'#F97316');}
+    }
     return;
   }
 
@@ -7113,13 +7194,80 @@ async function deleteClient(id){
   }
 }
 // ─── CANCEL/DELETE BOOKING ────────────────────────────────────────────────────
-async function cancelBooking(id){
+function cancelBooking(id){
   const b=bookings.find(bk=>bk.id===id);if(!b)return;
-  if(!confirm(`Cancel ${b.dogName}'s booking (${fmtDateShort(b.checkIn)}${b.checkIn!==b.checkOut?'–'+fmtDateShort(b.checkOut):''})?`))return;
+  const pol=calcCancelRefund(b.checkIn,b.depositAmount||0);
+  const hasPmtId=b.squarePaymentId&&b.squarePaymentId.length>5;
+  const hasDeposit=(b.depositAmount||0)>0;
+  const existing=document.getElementById('np-admin-cancel-modal');if(existing)existing.remove();
+  const ov=document.createElement('div');
+  ov.id='np-admin-cancel-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  ov.innerHTML=`
+    <div style="background:white;border-radius:20px;padding:1.75rem;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;">
+        <div style="width:34px;height:34px;background:linear-gradient(135deg,#DC2626,#991B1B);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">✖️</div>
+        <div>
+          <div style="font-weight:700;font-size:1rem;color:#111827;">Cancel Booking</div>
+          <div style="font-size:.72rem;color:#9CA3AF;">${b.dogName} · ${b.checkIn===b.checkOut?fmtDate(b.checkIn):`${fmtDateShort(b.checkIn)} – ${fmtDateShort(b.checkOut)}`}</div>
+        </div>
+        <button onclick="document.getElementById('np-admin-cancel-modal').remove()" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:1.3rem;color:#9CA3AF;">×</button>
+      </div>
+      <div style="background:${pol.bgColor};border:1px solid ${pol.borderColor};border-radius:10px;padding:.75rem 1rem;margin-bottom:1rem;">
+        <div style="font-size:.85rem;font-weight:700;color:${pol.color};">${pol.icon} ${pol.label} · ${pol.daysUntil>0?pol.daysUntil+' days until check-in':'Check-in already passed'}</div>
+        <div style="font-size:.75rem;color:${pol.color};margin-top:.25rem;">${pol.sublabel}</div>
+        ${hasDeposit?`<div style="font-size:.8rem;font-weight:600;color:${pol.color};margin-top:.5rem;">
+          Deposit paid: <strong>$${(b.depositAmount).toFixed(2)}</strong> ·
+          Refund owed: <strong>$${pol.refundAmt.toFixed(2)}</strong>
+        </div>`:''}
+      </div>
+      ${hasDeposit&&pol.refundAmt>0?`
+      <div style="margin-bottom:.75rem;padding:.65rem .9rem;background:#F0FDF4;border:1px solid #86EFAC;border-radius:10px;font-size:.75rem;color:#166534;">
+        ${hasPmtId?`💳 A refund of <strong>$${pol.refundAmt.toFixed(2)}</strong> can be issued via Square. Use the button below or process manually in your Square dashboard.`:`ℹ️ No Square payment ID on file — please process any refund of <strong>$${pol.refundAmt.toFixed(2)}</strong> manually in Square.`}
+      </div>`:''}
+      <div style="display:flex;flex-direction:column;gap:.5rem;">
+        ${hasDeposit&&pol.refundAmt>0&&hasPmtId?`
+        <button onclick="adminCancelWithRefund(${id},true)" style="padding:.65rem;background:#166534;color:white;border:none;border-radius:12px;font-size:.875rem;font-weight:600;cursor:pointer;">
+          Cancel + Refund $${pol.refundAmt.toFixed(2)} via Square
+        </button>`:''}
+        <button onclick="adminCancelWithRefund(${id},false)" style="padding:.65rem;background:#DC2626;color:white;border:none;border-radius:12px;font-size:.875rem;font-weight:600;cursor:pointer;">
+          Cancel booking (no refund action)
+        </button>
+        <button onclick="document.getElementById('np-admin-cancel-modal').remove()" style="padding:.65rem;background:none;border:1px solid #D1D5DB;border-radius:12px;font-size:.875rem;font-weight:600;cursor:pointer;color:#374151;">Keep booking</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+async function adminCancelWithRefund(id, processRefund){
+  const b=bookings.find(bk=>bk.id===id);if(!b)return;
+  document.getElementById('np-admin-cancel-modal')?.remove();
   const idx=bookings.findIndex(bk=>bk.id===id);
-  if(idx>=0)bookings.splice(idx,1);
+  if(idx>=0){bookings[idx].status='cancelled';}
   render();showToast('Booking cancelled.');
   try{await persistBookings();}catch(e){showToast('Sheet sync failed.','#F97316');}
+  if(processRefund&&b.squarePaymentId){
+    const pol=calcCancelRefund(b.checkIn,b.depositAmount||0);
+    if(pol.refundAmt>0){
+      try{
+        const apiKey=state.settings.squareApiKey;
+        const sqBase=squareBaseUrl();
+        const refResp=await fetch(`${sqBase}/v2/refunds`,{
+          method:'POST',
+          headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json','Square-Version':'2024-01-18'},
+          body:JSON.stringify({
+            idempotency_key:`refund-${id}-${Date.now()}`,
+            payment_id:b.squarePaymentId,
+            amount_money:{amount:Math.round(pol.refundAmt*100),currency:'USD'},
+            reason:`Booking cancelled — ${pol.label}`
+          })
+        });
+        if(!refResp.ok)throw new Error(`Square refund: ${refResp.status}`);
+        showToast(`✅ Refund of $${pol.refundAmt.toFixed(2)} issued via Square`,'#166534');
+        b.paymentStatus='refunded';
+        await persistBookings();
+      }catch(err){showToast(`Cancellation saved; refund failed: ${err.message} — process manually in Square.`,'#F97316');}
+    }
+  }
 }
 // ─── DELETE INVOICE ───────────────────────────────────────────────────────────
 async function deleteInvoice(id){
@@ -7546,6 +7694,7 @@ async function saveSettings(){
   const sq=v('set-square')?.trim();if(sq!==undefined)state.settings.squareLink=sq;
   const sqKey=v('set-square-api-key')?.trim();if(sqKey!==undefined)state.settings.squareApiKey=sqKey;
   const sqLoc=v('set-square-location')?.trim();if(sqLoc!==undefined)state.settings.squareLocationId=sqLoc;
+  state.settings.squareSandbox=document.getElementById('set-square-sandbox')?.checked||false;
   const gk=v('set-gemini')?.trim();if(gk!==undefined)state.settings.geminiApiKey=gk;
   const gmk=v('set-maps-key')?.trim();if(gmk!==undefined)state.settings.googleMapsApiKey=gmk;
   const asUrl=v('set-apps-script-url')?.trim();if(asUrl!==undefined){state.settings.appsScriptUrl=asUrl;CONFIG.APPS_SCRIPT_URL=asUrl;try{if(asUrl)localStorage.setItem('np_apps_script_url',asUrl);else localStorage.removeItem('np_apps_script_url');}catch(e){}}
@@ -7643,6 +7792,82 @@ document.addEventListener('webkitfullscreenchange',()=>_syncFsBtns(_inNativeFs()
 // Esc key exits iOS CSS-fs too
 document.addEventListener('keydown',(e)=>{if(e.key==='Escape'&&_iosFsEl)_iosExitFs();});
 
+// ─── Square Helpers ───────────────────────────────────────────────────────────
+// Returns the correct Square API base URL based on sandbox/production mode
+function squareBaseUrl(){
+  return state.settings.squareSandbox
+    ? 'https://connect.squareupsandbox.com'
+    : 'https://connect.squareup.com';
+}
+// Cancellation policy refund calculation
+// Returns { refundPct, label, color, bgColor, borderColor }
+function calcCancelRefund(checkInDateStr, depositAmount){
+  const checkInDate=new Date(checkInDateStr+'T00:00:00');
+  const todayDate=new Date(TODAY+'T00:00:00');
+  const daysUntil=Math.ceil((checkInDate-todayDate)/864e5);
+  if(daysUntil>=7)return{daysUntil,refundPct:100,refundAmt:depositAmount,label:'Full refund',sublabel:'7+ days notice — full deposit returned',color:'#166534',bgColor:'#F0FDF4',borderColor:'#86EFAC',icon:'🟢'};
+  if(daysUntil>=3)return{daysUntil,refundPct:50,refundAmt:Math.round(depositAmount*0.5*100)/100,label:'50% refund',sublabel:`${daysUntil} days notice — half the deposit is returned`,color:'#92400E',bgColor:'#FFFBEB',borderColor:'#FCD34D',icon:'🟡'};
+  return{daysUntil,refundPct:0,refundAmt:0,label:'No refund',sublabel:daysUntil<=0?'Check-in has passed — deposit forfeited':`${daysUntil} day${daysUntil===1?'':'s'} notice — deposit forfeited per policy`,color:'#991B1B',bgColor:'#FEF2F2',borderColor:'#FCA5A5',icon:'🔴'};
+}
+
+// Shows a prominent "Pay Now" overlay banner after a booking that requires payment.
+function showPayNowBanner(checkoutUrl, amountDollars, description){
+  const existing=document.getElementById('np-paynow-banner');if(existing)existing.remove();
+  const ov=document.createElement('div');
+  ov.id='np-paynow-banner';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  ov.innerHTML=`
+    <div style="background:white;border-radius:20px;padding:2rem;max-width:380px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.35);">
+      <div style="font-size:2.8rem;margin-bottom:.5rem;">💳</div>
+      <h3 style="font-size:1.15rem;font-weight:700;color:#111827;margin:0 0 .4rem;">Payment Due</h3>
+      <p style="font-size:.875rem;color:#374151;margin:0 0 .25rem;">${description}</p>
+      <p style="font-size:1.5rem;font-weight:800;color:#7B4015;margin:.25rem 0 1rem;">$${Number(amountDollars).toFixed(2)}</p>
+      <p style="font-size:.75rem;color:#6B7280;margin:0 0 1.25rem;line-height:1.5;">You'll be taken to Square's secure checkout. Your booking is already saved — you can also pay later from your bookings page.</p>
+      <div style="display:flex;flex-direction:column;gap:.6rem;">
+        <a href="${checkoutUrl}" target="_blank" onclick="document.getElementById('np-paynow-banner').remove()"
+          style="display:block;padding:.75rem 1.5rem;background:#7B4015;color:white;border-radius:12px;font-size:.9rem;font-weight:700;text-decoration:none;">
+          Pay $${Number(amountDollars).toFixed(2)} via Square →
+        </a>
+        <button onclick="document.getElementById('np-paynow-banner').remove()" style="padding:.65rem 1.5rem;background:none;border:1px solid #D1D5DB;border-radius:12px;font-size:.875rem;font-weight:600;cursor:pointer;color:#374151;">Pay later</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+
+// Creates a Square Checkout payment link for a booking.
+// amountCents: integer cents  |  label: description shown on checkout page
+// Returns the hosted checkout URL string, or throws on failure.
+async function createSquareCheckoutLink(booking, amountDollars, label){
+  const apiKey=state.settings.squareApiKey;
+  const locationId=state.settings.squareLocationId;
+  if(!apiKey)throw new Error('No Square API key — add it in Settings.');
+  if(!locationId)throw new Error('No Square Location ID — add it in Settings.');
+  const amountCents=Math.round(amountDollars*100);
+  const idempotencyKey=`bk-${booking.id}-${Date.now()}`;
+  const sqBase=squareBaseUrl();
+  const resp=await fetch(`${sqBase}/v2/online-checkout/payment-links`,{
+    method:'POST',
+    headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json','Square-Version':'2024-01-18'},
+    body:JSON.stringify({
+      idempotency_key:idempotencyKey,
+      quick_pay:{
+        name:label,
+        price_money:{amount:amountCents,currency:'USD'},
+        location_id:locationId
+      },
+      checkout_options:{
+        redirect_url:window.location.href.split('?')[0]
+      }
+    })
+  });
+  if(!resp.ok){
+    const err=await resp.json().catch(()=>({}));
+    throw new Error(err?.errors?.[0]?.detail||`Square ${resp.status}`);
+  }
+  const data=await resp.json();
+  return data.payment_link?.url||'';
+}
+
 // ─── Square Payment Sync ──────────────────────────────────────────────────────
 async function syncSquarePayments(invoiceId){
   const inv=invoices.find(i=>i.id===invoiceId);if(!inv)return;
@@ -7652,7 +7877,8 @@ async function syncSquarePayments(invoiceId){
   showToast('Syncing from Square…','#0EA5E9');
   try{
     // Step 1: find Square customer by email
-    const searchResp=await fetch('https://connect.squareup.com/v2/customers/search',{
+    const sqBase=squareBaseUrl();
+    const searchResp=await fetch(`${sqBase}/v2/customers/search`,{
       method:'POST',
       headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json','Square-Version':'2024-01-18'},
       body:JSON.stringify({query:{filter:{email_address:{exact:cl.email}}}})
@@ -7663,7 +7889,7 @@ async function syncSquarePayments(invoiceId){
     if(!customers.length){showToast(`No Square customer found for ${cl.email}`,'#F97316');return;}
     const customerId=customers[0].id;
     // Step 2: get completed payments for this customer
-    const payResp=await fetch(`https://connect.squareup.com/v2/payments?customer_id=${customerId}&sort_order=DESC&limit=50`,{
+    const payResp=await fetch(`${sqBase}/v2/payments?customer_id=${customerId}&sort_order=DESC&limit=50`,{
       headers:{'Authorization':`Bearer ${apiKey}`,'Square-Version':'2024-01-18'}
     });
     if(!payResp.ok)throw new Error(`Square payments: ${payResp.status}`);
@@ -7692,31 +7918,26 @@ async function syncSquarePayments(invoiceId){
 function showClientCancelConfirm(bookingId){
   const b=bookings.find(bk=>bk.id===bookingId||bk.id==bookingId);
   if(!b)return;
-  const checkInDate=new Date(b.checkIn+'T00:00:00');
-  const todayDate=new Date(TODAY+'T00:00:00');
-  const daysUntil=Math.ceil((checkInDate-todayDate)/864e5);
-  // Find any paid amount on invoices linked to this client (Square + external)
-  const clientInvoices=invoices.filter(i=>i.clientId===state.currentClientId&&((i.paid||0)+(i.externalPaid||0))>0);
-  const totalPaid=clientInvoices.reduce((s,i)=>s+(i.paid||0)+(i.externalPaid||0),0);
-  let feeHtml,feeLevel;
-  if(daysUntil>=7){
-    feeLevel='green';
-    feeHtml=`<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:10px;padding:.75rem 1rem;margin:.75rem 0;">
-      <div style="font-size:.85rem;font-weight:700;color:#166534;">🟢 No cancellation fee</div>
-      <div style="font-size:.75rem;color:#166534;margin-top:.25rem;">You're cancelling ${daysUntil} days in advance — well within the notice window. No deposit will be forfeited.</div>
+  const depositAmount=b.depositAmount||0;
+  const pol=calcCancelRefund(b.checkIn, depositAmount);
+  let feeHtml;
+  if(pol.refundPct===100){
+    feeHtml=`<div style="background:${pol.bgColor};border:1px solid ${pol.borderColor};border-radius:10px;padding:.75rem 1rem;margin:.75rem 0;">
+      <div style="font-size:.85rem;font-weight:700;color:${pol.color};">${pol.icon} Full refund</div>
+      <div style="font-size:.75rem;color:${pol.color};margin-top:.25rem;">${pol.sublabel}</div>
+      ${depositAmount>0?`<div style="font-size:.75rem;margin-top:.3rem;color:${pol.color};">Your $${depositAmount.toFixed(2)} deposit will be fully refunded.</div>`:''}
     </div>`;
-  } else if(daysUntil>=2){
-    feeLevel='yellow';
-    feeHtml=`<div style="background:#FFFBEB;border:1px solid #FCD34D;border-radius:10px;padding:.75rem 1rem;margin:.75rem 0;">
-      <div style="font-size:.85rem;font-weight:700;color:#92400E;">🟡 Within the standard 48-hour window</div>
-      <div style="font-size:.75rem;color:#92400E;margin-top:.25rem;">You're cancelling ${daysUntil} day${daysUntil===1?'':'s'} before check-in, which meets the standard 48-hour policy. However, if this stay falls during a <strong>holiday or peak period</strong>, a 7-day notice is required and your deposit may be forfeited. Please contact Nigel's Place if unsure.</div>
+  } else if(pol.refundPct===50){
+    feeHtml=`<div style="background:${pol.bgColor};border:1px solid ${pol.borderColor};border-radius:10px;padding:.75rem 1rem;margin:.75rem 0;">
+      <div style="font-size:.85rem;font-weight:700;color:${pol.color};">${pol.icon} 50% of deposit refunded</div>
+      <div style="font-size:.75rem;color:${pol.color};margin-top:.25rem;">${pol.sublabel}</div>
+      ${depositAmount>0?`<div style="font-size:.75rem;margin-top:.3rem;color:${pol.color};">Refund: <strong>$${pol.refundAmt.toFixed(2)}</strong> · Retained: <strong>$${(depositAmount-pol.refundAmt).toFixed(2)}</strong></div>`:''}
     </div>`;
   } else {
-    feeLevel='red';
-    const depositNote=totalPaid>0?`<div style="font-size:.75rem;color:#991B1B;margin-top:.35rem;">Based on your account, <strong>$${totalPaid.toFixed(2)}</strong> paid will be retained as the deposit.</div>`:'<div style="font-size:.75rem;color:#991B1B;margin-top:.35rem;">Any deposit paid will be retained per the cancellation policy.</div>';
-    feeHtml=`<div style="background:#FEF2F2;border:1px solid #FCA5A5;border-radius:10px;padding:.75rem 1rem;margin:.75rem 0;">
-      <div style="font-size:.85rem;font-weight:700;color:#991B1B;">🔴 Less than 48 hours notice — deposit forfeited</div>
-      ${depositNote}
+    feeHtml=`<div style="background:${pol.bgColor};border:1px solid ${pol.borderColor};border-radius:10px;padding:.75rem 1rem;margin:.75rem 0;">
+      <div style="font-size:.85rem;font-weight:700;color:${pol.color};">${pol.icon} No refund</div>
+      <div style="font-size:.75rem;color:${pol.color};margin-top:.25rem;">${pol.sublabel}</div>
+      ${depositAmount>0?`<div style="font-size:.75rem;color:${pol.color};margin-top:.35rem;">Your $${depositAmount.toFixed(2)} deposit will be retained per the cancellation policy.</div>`:'<div style="font-size:.75rem;color:'+pol.color+';margin-top:.35rem;">Any deposit paid will be retained per the cancellation policy.</div>'}
     </div>`;
   }
   const existing=document.getElementById('np-client-cancel-confirm');
@@ -7792,16 +8013,24 @@ function showCancellationPolicyModal(){
         <button onclick="document.getElementById('np-cancel-modal').remove()" style="background:none;border:none;cursor:pointer;font-size:1.3rem;color:#9CA3AF;line-height:1;" title="Close">×</button>
       </div>
       <div class="policy-modal-body">
-        <h3>Cancellation Notice</h3>
-        <p>Cancellations must be made at least <strong>48 hours</strong> before the scheduled drop-off time to receive a full refund of any pre-paid amounts. Cancellations made with less than 48 hours' notice will result in forfeiture of the deposit.</p>
+        <h3>Boarding Cancellation Policy</h3>
+        <p>Boarding reservations require a <strong>25% deposit</strong> at the time of booking to secure your spot. Refunds are issued based on how much notice is given before the scheduled check-in:</p>
+        <ul>
+          <li><strong>7+ days notice</strong> — full deposit refunded</li>
+          <li><strong>3–6 days notice</strong> — 50% of deposit refunded</li>
+          <li><strong>1–2 days notice</strong> — deposit forfeited (no refund)</li>
+        </ul>
+        <p>The remaining balance (75% of the booking total) is due at check-in.</p>
+        <h3>Daycare Policy</h3>
+        <p>Daycare sessions are <strong>non-refundable</strong>. If you need to cancel a daycare day, please contact Nigel's Place as early as possible and we'll do our best to arrange a session credit toward a future visit.</p>
+        <h3>Session Packages</h3>
+        <p>Daycare packages are paid in full at the time of purchase to lock in the per-session rate. Sessions never expire and are deducted each time you schedule a visit.</p>
         <h3>No-Show Policy</h3>
         <p>Clients who do not show up for a scheduled stay without prior notice will forfeit any deposit paid and may be charged a no-show fee equivalent to one night's boarding rate.</p>
-        <h3>Holiday &amp; Peak Period Cancellations</h3>
-        <p>During holiday and peak periods (major holidays, school breaks, and high-demand weekends), cancellations require <strong>7 days' notice</strong> for a full deposit refund. Cancellations within 7 days of the scheduled stay will forfeit the deposit in full.</p>
         <h3>Early Pick-Up</h3>
-        <p>If you pick up your pet earlier than the scheduled check-out date, the full originally-booked rate applies — no partial refunds are issued for unused nights.</p>
+        <p>If you pick up your pet earlier than the scheduled check-out date, the full originally-booked rate applies — no partial refunds for unused nights.</p>
         <h3>Emergency Exceptions</h3>
-        <p>Nigel's Place reviews cancellation exceptions on a case-by-case basis for genuine emergencies (medical, family, etc.). Please contact Nigel's Place as soon as possible if you need to cancel due to an emergency.</p>
+        <p>Nigel's Place reviews cancellation exceptions on a case-by-case basis for genuine emergencies (medical, family, etc.). Please reach out as soon as possible if your situation requires special consideration.</p>
         <h3>Pick-Up &amp; Drop-Off Times</h3>
         <p><strong>Drop-off:</strong> 8:00 AM – 10:00 AM &nbsp;·&nbsp; <strong>Pick-up:</strong> 4:00 PM – 6:00 PM</p>
         <p>Late pick-ups (after 6:00 PM) will incur an additional fee. If a different time is needed, please contact Nigel's Place in advance.</p>
@@ -7908,7 +8137,7 @@ async function loadKioskData(){
   const today=new Date().toISOString().split('T')[0];
   try{
     const[bR,dR,cR]=await Promise.all([
-      readRangeWithApiKey('Bookings!A2:L'),
+      readRangeWithApiKey('Bookings!A2:P'),
       readRangeWithApiKey('Dogs!A2:M'),
       readRangeWithApiKey('Clients!A2:E'),
     ]);
