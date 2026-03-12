@@ -3070,7 +3070,7 @@ function buildCalendarView(role){
             const canBook=!unavailable;
             return`
             <div class="day-cell border-b border-r p-2 relative ${wknd?'weekend-day':''}"
-                 style="${unavailable?'background:#F3F4F6;border-color:#E5E7EB;cursor:default;background-image:repeating-linear-gradient(135deg,transparent,transparent 6px,rgba(180,180,190,0.35) 6px,rgba(180,180,190,0.35) 7px);':''}"
+                 style="${clientPast?'background:#F3F4F6;border-color:#E5E7EB;cursor:default;':!clientPast&&unavailable?'background:#F3F4F6;border-color:#E5E7EB;cursor:default;background-image:repeating-linear-gradient(135deg,transparent,transparent 6px,rgba(180,180,190,0.35) 6px,rgba(180,180,190,0.35) 7px);':''}"
                  onclick="${canBook?'openDayModal(\''+ds+'\')':''}">
               <div class="flex items-start justify-between mb-1">
                 <span class="${unavailable?'text-sm font-medium text-gray-300':'text-sm font-medium text-gray-600'}">${day}</span>
@@ -5909,7 +5909,7 @@ function renderMiniCal(){
 
     if(isPast){
       bg='#F3F4F6';color='#D1D5DB';cursor='default';
-      stripeOverlay=`background-image:repeating-linear-gradient(135deg,transparent,transparent 5px,rgba(160,160,170,0.35) 5px,rgba(160,160,170,0.35) 6px);`;
+      // Solid grey only — hatching reserved for fully-booked future days
     } else if(isStart||isEnd){
       bg='#7B4015';color='#fff';
     } else if(inRange){
