@@ -2817,7 +2817,9 @@ function buildDashboard(){
   const weekEnd=new Date(now); weekEnd.setDate(weekEnd.getDate()+7);
   const weekEndStr=weekEnd.toISOString().split('T')[0];
   const monthPfx=TODAY.substring(0,7);
-  const weekRev=bookings.filter(b=>b.checkIn>=TODAY&&b.checkIn<=weekEndStr&&b.status==='confirmed').reduce((s,b)=>s+b.price,0);
+  const weekRevBookings=bookings.filter(b=>b.checkIn>=TODAY&&b.checkIn<=weekEndStr&&b.status==='confirmed');
+  const weekRevPackages=packages.filter(p=>p.purchaseDate>=TODAY&&p.purchaseDate<=weekEndStr);
+  const weekRev=weekRevBookings.reduce((s,b)=>s+(+b.price||0),0)+weekRevPackages.reduce((s,p)=>s+(+p.totalPaid||0),0);
   const monthBks=bookings.filter(b=>(b.checkIn||'').startsWith(monthPfx)&&b.status!=='cancelled').length;
   const overdue=invoices.filter(i=>i.status==='overdue').reduce((s,i)=>s+(i.amount-i.paid),0);
   const upcoming=bookings.filter(b=>String(b.checkIn||'')>TODAY&&b.status==='confirmed').sort((a,b)=>String(a.checkIn||'').localeCompare(String(b.checkIn||''))).slice(0,5);
@@ -2859,9 +2861,9 @@ function buildDashboard(){
         <div class="text-2xl font-bold text-gray-800">${activeDogs}</div>
         <div class="text-xs text-gray-400">Active Pets</div>
       </div>
-      <div class="stat-card"><div class="text-2xl mb-1">💵</div><div class="text-2xl font-bold text-gray-800">$${weekRev}</div><div class="text-xs text-gray-400">This Week Revenue</div></div>
+      <div class="stat-card cursor-pointer" onclick="showWeekRevenueBreakdown()" title="Click to see revenue breakdown" style="transition:box-shadow .15s;" onmouseover="this.style.boxShadow='0 4px 16px rgba(123,64,21,0.18)'" onmouseout="this.style.boxShadow=''"><div class="text-2xl mb-1">💵</div><div class="text-2xl font-bold text-gray-800">$${weekRev.toFixed(2)}</div><div class="text-xs text-gray-400">This Week Revenue</div><div class="text-xs mt-1" style="color:#7B4015;font-weight:500;">📊 tap for breakdown</div></div>
       <div class="stat-card"><div class="text-2xl mb-1">📅</div><div class="text-2xl font-bold text-gray-800">${monthBks}</div><div class="text-xs text-gray-400">${now.toLocaleString('default',{month:'long'})} Bookings</div></div>
-      <div class="stat-card"><div class="text-2xl mb-1">⚠️</div><div class="text-2xl font-bold text-red-500">$${overdue}</div><div class="text-xs text-gray-400">Overdue Balance</div></div>
+      <div class="stat-card"><div class="text-2xl mb-1">⚠️</div><div class="text-2xl font-bold text-red-500">$${overdue.toFixed(2)}</div><div class="text-xs text-gray-400">Overdue Balance</div></div>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
       <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100">
@@ -4225,6 +4227,58 @@ function buildClientAccount(){
       </div>
     </div>
 
+    <!-- My Packages -->
+    <div class="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <h2 class="font-semibold text-gray-700 flex items-center gap-2">🎫 Session Packages</h2>
+          <p class="text-xs text-gray-400 mt-0.5">Pre-purchase daycare sessions and save up to $20/session.</p>
+        </div>
+        <button onclick="showBuyPackageModal()" class="text-xs px-3 py-1.5 rounded-lg text-white font-semibold" style="background:#7B4015">+ Buy Sessions</button>
+      </div>
+      ${(()=>{
+        const myPkgs=packages.filter(p=>p.clientId===cl.id);
+        const totalRemaining=myPkgs.reduce((s,p)=>s+(+p.remaining||0),0);
+        if(myPkgs.length===0){
+          return`<div class="text-center py-5">
+            <div class="text-3xl mb-2">🎫</div>
+            <div class="text-sm text-gray-400 mb-1">No packages yet</div>
+            <div class="text-xs text-gray-300">Buy sessions in bulk and save up to $20/session</div>
+          </div>`;
+        }
+        return`
+        <div class="mb-3 flex items-center gap-3 p-3 rounded-xl" style="background:#FFFBEB;border:1px solid #FDE68A;">
+          <div class="text-2xl">💛</div>
+          <div>
+            <div class="font-bold text-amber-900">${totalRemaining} session${totalRemaining===1?'':'s'} available</div>
+            <div class="text-xs text-amber-700">Applied automatically when booking daycare</div>
+          </div>
+        </div>
+        <div class="space-y-2">
+          ${myPkgs.map(p=>`
+          <div class="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2.5 bg-gray-50">
+            <div>
+              <div class="text-sm font-semibold text-gray-700">${p.dogName}</div>
+              <div class="text-xs text-gray-400">Purchased ${fmtDateShort(p.purchaseDate)} · $${(+p.pricePerSession||0).toFixed(2)}/session</div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-bold ${p.remaining>0?'text-amber-800':'text-gray-400'}">${p.remaining} / ${p.qty}</div>
+              <div class="text-xs text-gray-400">remaining</div>
+            </div>
+          </div>`).join('')}
+        </div>`;
+      })()}
+      <div class="mt-3 rounded-xl p-3" style="background:#F9FAFB;border:1px solid #E5E7EB;">
+        <div class="text-xs font-semibold text-gray-500 mb-2">Bulk pricing tiers:</div>
+        <div class="grid grid-cols-2 gap-1.5 text-xs">
+          <div class="flex justify-between"><span class="text-gray-500">1–4 sessions</span><span class="font-medium text-gray-700">$55.00 each</span></div>
+          <div class="flex justify-between"><span class="text-gray-500">5–14 sessions</span><span class="font-medium text-amber-700">$45.00 each 💛</span></div>
+          <div class="flex justify-between"><span class="text-gray-500">15–19 sessions</span><span class="font-medium text-amber-700">$40.00 each ⭐</span></div>
+          <div class="flex justify-between"><span class="text-gray-500">20+ sessions</span><span class="font-medium text-amber-700">$35.00 each 🏆</span></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Sign Out -->
     <div class="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
       <h2 class="font-semibold text-gray-700 mb-1">🔐 Sign Out</h2>
@@ -5033,8 +5087,8 @@ function buildBookingModal(selectedDate){
             </div>
             <div class="p-3 space-y-3">
 
-              <!-- Schedule vs Package toggle (daycare-only) -->
-              <div id="bk-pkg-mode-row" style="display:${_bookingMain==='daycare'?'':'none'}">
+              <!-- Schedule vs Package toggle (daycare-only, admin direct mode only — clients buy packages from My Account) -->
+              <div id="bk-pkg-mode-row" style="display:${_bookingMain==='daycare'&&!(state.role==='client'||state.adminViewAsClient)?'':'none'}">
                 <div class="flex gap-2">
                   <button type="button" id="bk-mode-schedule" onclick="setDaycareMode('schedule')"
                     style="flex:1;padding:0.5rem;border-radius:0.65rem;border:2px solid ${_daycareMode==='schedule'?'#7B4015':'#E5E7EB'};background:${_daycareMode==='schedule'?'#7B4015':'#F9FAFB'};color:${_daycareMode==='schedule'?'#fff':'#6B7280'};cursor:pointer;text-align:center;transition:all 0.15s;">
@@ -6226,8 +6280,28 @@ function updateBookingPrice(){
   total+=addonTotal;
 
   lines.innerHTML=html;
-  totalEl.textContent=`Total: $${total}`;
+  totalEl.textContent=`Total: $${total.toFixed(2)}`;
   preview.classList.remove('hidden');
+  // ── Update submit button text with amount due ──────────────────────────────
+  const _isClientOrPreview=(state.role==='client'||state.adminViewAsClient);
+  const submitBtn=document.querySelector('form[onsubmit="submitBooking(event)"] button[type="submit"]');
+  if(submitBtn&&_isClientOrPreview){
+    if(_bookingMain==='boarding'||_bookingMain==='combo'){
+      const _ci=document.getElementById('bk-board-checkin')?.value||document.getElementById('bk-checkin')?.value;
+      const _co=document.getElementById('bk-board-checkout')?.value||document.getElementById('bk-checkout')?.value||_ci;
+      const _bSvc=services.find(s=>s.type==='base'&&s.active&&s.name.toLowerCase().includes('board'));
+      const _bRate=_bSvc?.price||state.settings.fullDayRate||55;
+      const _nights=(_ci&&_co)?Math.max(0,Math.round((new Date(_co+'T00:00:00')-new Date(_ci+'T00:00:00'))/864e5)):0;
+      const _dep=_nights>0?Math.ceil(_nights*_bRate*0.25*100)/100:0;
+      submitBtn.textContent=_dep>0?`🏠 Confirm & Pay $${_dep.toFixed(2)} Deposit →`:'✓ Confirm Boarding';
+    } else if(_daycareMode==='package'){
+      submitBtn.textContent=total>0?`🎫 Buy Package — $${total.toFixed(2)} →`:'🎫 Purchase Package';
+    } else if(_bookingMain==='daycare'||_bookingMain==='combo'){
+      submitBtn.textContent=total>0?`✅ Confirm & Pay $${total.toFixed(2)} →`:'✓ Confirm Booking';
+    } else {
+      submitBtn.textContent=total>0?`✅ Confirm & Pay $${total.toFixed(2)} →`:'✓ Confirm Booking';
+    }
+  }
 }
 function checkDateCapacity(){
   // Returns sorted array of fully-booked date strings in a range
@@ -6986,14 +7060,15 @@ async function submitBooking(e){
         try{
           const label=`${state.settings.businessName||"Nigel's Place"} — ${dogName} ${_sessionQty}-session package`;
           const ckRes=await proxyClientWrite('createCheckoutLink',{bookingId:pkg.id,amountDollars:totalPaid,label});
-          if(ckRes?.checkoutUrl)showPayNowBanner(ckRes.checkoutUrl,totalPaid,'Session Package');
-        }catch(sqErr){showToast(`Package saved! Square checkout: ${sqErr.message}`,'#F97316');}
+          if(ckRes?.checkoutUrl){showPayNowBanner(ckRes.checkoutUrl,totalPaid,'Session Package');}
+          else{console.warn('[PAY NOW] package checkout: no URL returned',JSON.stringify(ckRes));}
+        }catch(sqErr){console.error('[PAY NOW ERROR package]',sqErr);showToast(`Package saved! Square checkout: ${sqErr.message}`,'#EF4444');}
       }else if(state.settings.squareApiKey&&state.settings.squareLocationId){
         try{
           const label=`${state.settings.businessName||"Nigel's Place"} — ${dogName} ${_sessionQty}-session package`;
           const checkoutUrl=await createSquareCheckoutLink({id:pkg.id},totalPaid,label);
           if(checkoutUrl)showPayNowBanner(checkoutUrl,totalPaid,'Session Package');
-        }catch(sqErr){showToast(`Package saved! Square checkout: ${sqErr.message}`,'#F97316');}
+        }catch(sqErr){showToast(`Package saved! Square checkout: ${sqErr.message}`,'#EF4444');}
       }else{
         showToast('Package saved! 💡 Square API keys not configured in Settings — payment link skipped.','#F97316');
       }
@@ -7049,12 +7124,18 @@ async function submitBooking(e){
               if(state.role==='client'){
                 await proxyClientWrite('updateBooking',{id:newBk.id,checkoutUrl:ckRes.checkoutUrl,paymentStatus:'checkout_pending'});
               }else{
-                await persistBookings();
+                await persistBookings(); // admin or admin-as-client: direct sheet write
               }
             }catch(e){}
             showPayNowBanner(ckRes.checkoutUrl,depositAmt,'Boarding Deposit');
+          }else{
+            // Proxy returned ok but no checkout URL — show a gentle warning
+            console.warn('[PAY NOW] createCheckoutLink returned no URL. Response:', JSON.stringify(ckRes));
           }
-        }catch(sqErr){showToast(`Booking saved! Square checkout: ${sqErr.message}`,'#F97316');}
+        }catch(sqErr){
+          console.error('[PAY NOW ERROR]', sqErr);
+          showToast(`Booking saved! Square checkout: ${sqErr.message}`,'#EF4444');
+        }
       }else if(state.settings.squareApiKey&&state.settings.squareLocationId){
         // Fallback: direct browser call (proxy not configured — admin only)
         try{
@@ -7179,7 +7260,9 @@ async function submitBooking(e){
   const dcBk={id:nextId(bookings),clientId,dogId,dogName,clientName,
     checkIn:ci,checkOut:co,nights:days,status:'confirmed',service:svc,
     dailySchedule:{..._dailySchedule},
-    addons:addonNames.join(','),price:totalPrice};
+    addons:addonNames.join(','),price:totalPrice,
+    paymentStatus:(state.role==='client'||state.adminViewAsClient)?'checkout_pending':'',
+    checkoutUrl:''};
   bookings.push(dcBk);
   state.showModal=null;render();
   const dateStr=ci===co?fmtDate(ci):`${fmtDateShort(ci)} – ${fmtDateShort(co)} (${days} ${days===1?'day':'days'})`;
@@ -7188,6 +7271,30 @@ async function submitBooking(e){
     if(state.role==='client'){await proxyClientWrite('addBooking',{booking:dcBk});}
     else{await persistBookings();if(state.adminViewAsClient)await persistClients();}
   }catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+  // Trigger Square checkout for daycare (full amount due) — client and admin-as-client only
+  if(state.role==='client'||state.adminViewAsClient){
+    const _proxyUrl=(CONFIG.APPS_SCRIPT_URL||state.settings.appsScriptUrl||'').trim();
+    if(_proxyUrl){
+      try{
+        const label=`${state.settings.businessName||"Nigel's Place"} — ${dogName} daycare (${fmtDateShort(ci)}${ci!==co?'–'+fmtDateShort(co):''})`;
+        const ckRes=await proxyClientWrite('createCheckoutLink',{bookingId:dcBk.id,amountDollars:totalPrice,label});
+        if(ckRes?.checkoutUrl){
+          dcBk.checkoutUrl=ckRes.checkoutUrl;dcBk.paymentStatus='checkout_pending';
+          try{
+            if(state.role==='client'){await proxyClientWrite('updateBooking',{id:dcBk.id,checkoutUrl:ckRes.checkoutUrl,paymentStatus:'checkout_pending'});}
+            else{await persistBookings();}
+          }catch(e){}
+          showPayNowBanner(ckRes.checkoutUrl,totalPrice,'Daycare');
+        }else{console.warn('[PAY NOW] daycare checkout: no URL returned',JSON.stringify(ckRes));}
+      }catch(sqErr){console.error('[PAY NOW ERROR daycare]',sqErr);showToast(`Booking saved! Square: ${sqErr.message}`,'#EF4444');}
+    }else if(state.settings.squareApiKey&&state.settings.squareLocationId){
+      try{
+        const label=`${state.settings.businessName||"Nigel's Place"} — ${dogName} daycare (${fmtDateShort(ci)}${ci!==co?'–'+fmtDateShort(co):''})`;
+        const checkoutUrl=await createSquareCheckoutLink(dcBk,totalPrice,label);
+        if(checkoutUrl){dcBk.checkoutUrl=checkoutUrl;dcBk.paymentStatus='checkout_pending';try{await persistBookings();}catch(e){}showPayNowBanner(checkoutUrl,totalPrice,'Daycare');}
+      }catch(sqErr){showToast(`Booking saved! Square: ${sqErr.message}`,'#F97316');}
+    }
+  }
 }
 async function submitClient(e){
   e.preventDefault();
@@ -7935,6 +8042,171 @@ function showBookingWarningModal(checkInDateStr, daysUntil){
   });
 }
 
+// ─── Revenue Breakdown Lightbox ──────────────────────────────────────────────
+function showWeekRevenueBreakdown(){
+  const now=new Date();
+  const weekEnd=new Date(now);weekEnd.setDate(weekEnd.getDate()+7);
+  const weekEndStr=weekEnd.toISOString().split('T')[0];
+  const bks=bookings.filter(b=>b.checkIn>=TODAY&&b.checkIn<=weekEndStr&&b.status==='confirmed')
+    .sort((a,b)=>String(a.checkIn).localeCompare(String(b.checkIn)));
+  const pkgs=packages.filter(p=>p.purchaseDate>=TODAY&&p.purchaseDate<=weekEndStr)
+    .sort((a,b)=>String(a.purchaseDate).localeCompare(String(b.purchaseDate)));
+  const bkTotal=bks.reduce((s,b)=>s+(+b.price||0),0);
+  const pkgTotal=pkgs.reduce((s,p)=>s+(+p.totalPaid||0),0);
+  const grandTotal=bkTotal+pkgTotal;
+  const existing=document.getElementById('np-rev-breakdown');if(existing)existing.remove();
+  const ov=document.createElement('div');
+  ov.id='np-rev-breakdown';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:10000;display:flex;align-items:flex-start;justify-content:center;padding:2rem 1rem;overflow-y:auto;';
+  ov.onclick=function(e){if(e.target===ov)ov.remove();};
+  const rows=[
+    ...bks.map(b=>`<tr style="border-bottom:1px solid #F3F4F6;"><td style="padding:.45rem .65rem;font-size:.8rem;color:#6B7280;">${b.checkIn}</td><td style="padding:.45rem .65rem;font-size:.8rem;font-weight:500;color:#111827;">${b.clientName}</td><td style="padding:.45rem .65rem;font-size:.8rem;color:#374151;">${b.service||'Service'}</td><td style="padding:.45rem .65rem;font-size:.8rem;font-weight:600;color:#111827;text-align:right;">$${(+b.price||0).toFixed(2)}</td></tr>`),
+    ...pkgs.map(p=>`<tr style="border-bottom:1px solid #F3F4F6;background:#FFFBEB;"><td style="padding:.45rem .65rem;font-size:.8rem;color:#6B7280;">${p.purchaseDate}</td><td style="padding:.45rem .65rem;font-size:.8rem;font-weight:500;color:#111827;">${p.clientName}</td><td style="padding:.45rem .65rem;font-size:.8rem;color:#92400E;">🎫 Package · ${p.qty} sessions</td><td style="padding:.45rem .65rem;font-size:.8rem;font-weight:600;color:#111827;text-align:right;">$${(+p.totalPaid||0).toFixed(2)}</td></tr>`)
+  ].join('');
+  ov.innerHTML=`<div style="background:white;border-radius:20px;padding:1.75rem;max-width:580px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);margin-top:1rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;">
+      <div><h3 style="font-size:1.1rem;font-weight:700;color:#111827;margin:0 0 .15rem;">💵 Revenue This Week</h3>
+        <p style="font-size:.75rem;color:#9CA3AF;margin:0;">${TODAY} through ${weekEndStr}</p></div>
+      <button onclick="document.getElementById('np-rev-breakdown').remove()" style="background:none;border:none;cursor:pointer;font-size:1.6rem;color:#9CA3AF;line-height:1;padding:.2rem;">×</button>
+    </div>
+    ${rows?`<div style="overflow-x:auto;margin-bottom:1rem;"><table style="width:100%;border-collapse:collapse;">
+      <thead><tr style="background:#F9FAFB;border-bottom:2px solid #E5E7EB;">
+        <th style="padding:.45rem .65rem;font-size:.7rem;font-weight:700;color:#6B7280;text-align:left;white-space:nowrap;">Date</th>
+        <th style="padding:.45rem .65rem;font-size:.7rem;font-weight:700;color:#6B7280;text-align:left;">Client</th>
+        <th style="padding:.45rem .65rem;font-size:.7rem;font-weight:700;color:#6B7280;text-align:left;">Service</th>
+        <th style="padding:.45rem .65rem;font-size:.7rem;font-weight:700;color:#6B7280;text-align:right;">Amount</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`:`<p style="text-align:center;color:#9CA3AF;font-size:.875rem;padding:2rem 0;">No revenue recorded this week yet.</p>`}
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:.85rem 1rem;background:linear-gradient(90deg,#FEF3C7,#FFFBEB);border-radius:12px;border:1px solid #FDE68A;margin-bottom:${bkTotal>0&&pkgTotal>0?'.6rem':'1rem'};">
+      <span style="font-size:.9rem;font-weight:600;color:#92400E;">Grand Total This Week</span>
+      <span style="font-size:1.2rem;font-weight:800;color:#7B4015;">$${grandTotal.toFixed(2)}</span>
+    </div>
+    ${bkTotal>0&&pkgTotal>0?`<p style="font-size:.73rem;color:#9CA3AF;text-align:center;margin:0 0 .9rem;">Bookings: $${bkTotal.toFixed(2)} &nbsp;·&nbsp; Packages sold: $${pkgTotal.toFixed(2)}</p>`:''}
+    <button onclick="document.getElementById('np-rev-breakdown').remove()" style="width:100%;padding:.65rem;border:1px solid #E5E7EB;border-radius:12px;background:white;color:#374151;font-size:.875rem;font-weight:500;cursor:pointer;">Close</button>
+  </div>`;
+  document.body.appendChild(ov);
+}
+
+// ─── Buy Package from My Account ─────────────────────────────────────────────
+let _pkgModalQty=5;
+function showBuyPackageModal(){
+  const cl=clients.find(c=>c.id===state.currentClientId);
+  if(!cl){showToast('Please sign in to buy packages.','#EF4444');return;}
+  const activeDogs=cl.dogs.filter(d=>!d.deceased);
+  if(activeDogs.length===0){showToast('Please add a pet to your profile first.','#EF4444');return;}
+  document.getElementById('np-buy-pkg-modal')?.remove();
+  _pkgModalQty=5;
+  const ov=document.createElement('div');
+  ov.id='np-buy-pkg-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:10001;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  ov.innerHTML=`
+    <div style="background:#fff;border-radius:1.5rem;padding:1.5rem;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.35);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.1rem;">
+        <h2 style="font-weight:700;font-size:1.1rem;color:#1F2937;margin:0;">🎫 Buy Daycare Sessions</h2>
+        <button onclick="document.getElementById('np-buy-pkg-modal')?.remove()" style="font-size:1.6rem;line-height:1;background:none;border:none;color:#9CA3AF;cursor:pointer;padding:.1rem .3rem;">×</button>
+      </div>
+      ${activeDogs.length>1?`
+      <div style="margin-bottom:1rem;">
+        <label style="display:block;font-size:.73rem;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem;">For which pet?</label>
+        <select id="pkg-dog-select" style="width:100%;border:1px solid #E5E7EB;border-radius:.75rem;padding:.55rem .75rem;font-size:.9rem;outline:none;color:#111827;">
+          ${activeDogs.map(d=>`<option value="${d.id}">${d.name}</option>`).join('')}
+        </select>
+      </div>`:`<input id="pkg-dog-select" type="hidden" value="${activeDogs[0].id}">`}
+      <div style="margin-bottom:1rem;">
+        <label style="display:block;font-size:.73rem;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem;">Number of sessions</label>
+        <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:.875rem;padding:.85rem;">
+          <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;">
+            <button type="button" onclick="pkgModalStep(-1)" style="width:2.25rem;height:2.25rem;border-radius:50%;border:2px solid #D4A96B;color:#92400E;background:#fff;font-size:1.2rem;font-weight:700;cursor:pointer;line-height:1;flex-shrink:0;">−</button>
+            <span id="pkg-modal-qty" style="font-size:1.8rem;font-weight:800;color:#78350F;min-width:2.5rem;text-align:center;">${_pkgModalQty}</span>
+            <button type="button" onclick="pkgModalStep(1)" style="width:2.25rem;height:2.25rem;border-radius:50%;border:2px solid #D4A96B;color:#92400E;background:#fff;font-size:1.2rem;font-weight:700;cursor:pointer;line-height:1;flex-shrink:0;">+</button>
+            <div id="pkg-modal-tier" style="flex:1;font-size:.82rem;font-weight:600;color:#92400E;min-width:0;"></div>
+          </div>
+          <div style="display:flex;gap:.4rem;flex-wrap:wrap;" id="pkg-modal-pills"></div>
+        </div>
+      </div>
+      <div id="pkg-modal-total" style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:.875rem;padding:.85rem;text-align:center;margin-bottom:1.25rem;">
+        <div id="pkg-modal-price-display" style="font-size:1.4rem;font-weight:800;color:#15803D;"></div>
+        <div id="pkg-modal-savings-display" style="font-size:.73rem;color:#16A34A;margin-top:.15rem;"></div>
+      </div>
+      <button onclick="buyPackageFromProfile()" style="width:100%;padding:.8rem;background:#7B4015;color:#fff;border:none;border-radius:.875rem;font-weight:700;font-size:.95rem;cursor:pointer;letter-spacing:.01em;">
+        💳 Purchase Sessions via Square →
+      </button>
+      <p style="text-align:center;font-size:.68rem;color:#9CA3AF;margin:.5rem 0 0;line-height:1.4;">You'll be taken to Square's secure checkout to complete payment.</p>
+    </div>`;
+  document.body.appendChild(ov);
+  pkgModalRefresh();
+}
+function pkgModalStep(delta){
+  _pkgModalQty=Math.max(1,(_pkgModalQty||5)+delta);
+  pkgModalRefresh();
+}
+function pkgModalRefresh(){
+  const qty=_pkgModalQty||5;
+  const tier=getDaycareTier(qty);
+  const total=qty*tier.price;
+  const savings=(qty*55)-total;
+  const qtyEl=document.getElementById('pkg-modal-qty');
+  if(qtyEl)qtyEl.textContent=qty;
+  const tierEl=document.getElementById('pkg-modal-tier');
+  if(tierEl)tierEl.textContent=`$${tier.price}/session · ${tier.badge}`;
+  const priceEl=document.getElementById('pkg-modal-price-display');
+  if(priceEl)priceEl.textContent=`$${total.toFixed(2)} total`;
+  const savingsEl=document.getElementById('pkg-modal-savings-display');
+  if(savingsEl)savingsEl.textContent=savings>0?`Save $${savings.toFixed(2)} vs. drop-in rate 🎉`:'Sessions never expire';
+  const pillsEl=document.getElementById('pkg-modal-pills');
+  if(pillsEl){
+    pillsEl.innerHTML=[[1,4,55,'1–4'],[5,14,45,'5–14'],[15,19,40,'15–19'],[20,999,35,'20+']].map(([lo,hi,p,lbl])=>{
+      const active=qty>=lo&&qty<=hi;
+      return`<span style="padding:.2rem .55rem;border-radius:.45rem;font-size:.65rem;font-weight:600;background:${active?'#7B4015':'#F3F4F6'};color:${active?'#fff':'#6B7280'};border:1px solid ${active?'#7B4015':'#E5E7EB'};cursor:pointer;" onclick="pkgModalJump(${lo})">${lbl} → $${p}</span>`;
+    }).join('');
+  }
+}
+function pkgModalJump(qty){
+  _pkgModalQty=qty;pkgModalRefresh();
+}
+async function buyPackageFromProfile(){
+  const cl=clients.find(c=>c.id===state.currentClientId);
+  if(!cl)return;
+  const qty=_pkgModalQty||5;
+  const dogSelect=document.getElementById('pkg-dog-select');
+  const dogId=+(dogSelect?.value);
+  const dog=cl.dogs.find(d=>d.id===dogId);
+  if(!dog){showToast('Please select a pet.','#EF4444');return;}
+  const tier=getDaycareTier(qty);
+  const totalPaid=qty*tier.price;
+  document.getElementById('np-buy-pkg-modal')?.remove();
+  const pkg={id:nextId(packages),clientId:cl.id,dogId:dog.id,
+    clientName:cl.name,dogName:dog.name,
+    purchaseDate:TODAY,qty,remaining:qty,
+    pricePerSession:tier.price,totalPaid,notes:'Purchased from client profile'};
+  packages.push(pkg);
+  render();
+  showToast(`🎫 ${qty} session${qty===1?'':'s'} added! Completing payment…`);
+  try{
+    if(state.role==='client'){await proxyClientWrite('addPackage',{pkg});}
+    else{await persistPackages();}
+  }catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+  // Square checkout
+  const _proxyUrl=(CONFIG.APPS_SCRIPT_URL||state.settings.appsScriptUrl||'').trim();
+  if(_proxyUrl){
+    try{
+      const label=`${state.settings.businessName||"Nigel's Place"} — ${dog.name} ${qty}-session package`;
+      const ckRes=await proxyClientWrite('createCheckoutLink',{bookingId:pkg.id,amountDollars:totalPaid,label});
+      if(ckRes?.checkoutUrl){showPayNowBanner(ckRes.checkoutUrl,totalPaid,'Session Package');}
+      else{console.warn('[PAY NOW] profile pkg: no URL returned',JSON.stringify(ckRes));showToast('Package saved! Payment link unavailable — check Square settings in admin.','#F97316');}
+    }catch(sqErr){console.error('[PAY NOW ERROR profile pkg]',sqErr);showToast(`Package saved! Square: ${sqErr.message}`,'#EF4444');}
+  }else if(state.settings.squareApiKey&&state.settings.squareLocationId){
+    try{
+      const label=`${state.settings.businessName||"Nigel's Place"} — ${dog.name} ${qty}-session package`;
+      const checkoutUrl=await createSquareCheckoutLink({id:pkg.id},totalPaid,label);
+      if(checkoutUrl)showPayNowBanner(checkoutUrl,totalPaid,'Session Package');
+    }catch(sqErr){showToast(`Package saved! Square: ${sqErr.message}`,'#EF4444');}
+  }else{
+    showToast('🎫 Package saved! Configure Square in Settings to enable payment links.','#F97316');
+  }
+}
+
 // Shows a prominent "Pay Now" overlay banner after a booking that requires payment.
 function showPayNowBanner(checkoutUrl, amountDollars, description){
   const existing=document.getElementById('np-paynow-banner');if(existing)existing.remove();
@@ -7942,18 +8214,20 @@ function showPayNowBanner(checkoutUrl, amountDollars, description){
   ov.id='np-paynow-banner';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem;';
   ov.innerHTML=`
-    <div style="background:white;border-radius:20px;padding:2rem;max-width:380px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.35);">
+    <div style="background:white;border-radius:20px;padding:2rem;max-width:400px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.35);">
       <div style="font-size:2.8rem;margin-bottom:.5rem;">💳</div>
       <h3 style="font-size:1.15rem;font-weight:700;color:#111827;margin:0 0 .4rem;">Payment Due</h3>
       <p style="font-size:.875rem;color:#374151;margin:0 0 .25rem;">${description}</p>
-      <p style="font-size:1.5rem;font-weight:800;color:#7B4015;margin:.25rem 0 1rem;">$${Number(amountDollars).toFixed(2)}</p>
-      <p style="font-size:.75rem;color:#6B7280;margin:0 0 1.25rem;line-height:1.5;">You'll be taken to Square's secure checkout. Your booking is already saved — you can also pay later from your bookings page.</p>
-      <div style="display:flex;flex-direction:column;gap:.6rem;">
+      <p style="font-size:1.65rem;font-weight:800;color:#7B4015;margin:.25rem 0 .6rem;">$${Number(amountDollars).toFixed(2)}</p>
+      <p style="font-size:.75rem;color:#6B7280;margin:0 0 1.25rem;line-height:1.5;">Your booking is saved! Complete payment now to lock it in. You'll be taken to Square's secure checkout page.</p>
+      <div style="display:flex;flex-direction:column;gap:.5rem;">
         <a href="${checkoutUrl}" target="_blank" onclick="document.getElementById('np-paynow-banner').remove()"
-          style="display:block;padding:.75rem 1.5rem;background:#7B4015;color:white;border-radius:12px;font-size:.9rem;font-weight:700;text-decoration:none;">
-          Pay $${Number(amountDollars).toFixed(2)} via Square →
+          style="display:block;padding:.85rem 1.5rem;background:#7B4015;color:white;border-radius:14px;font-size:.95rem;font-weight:700;text-decoration:none;box-shadow:0 4px 12px rgba(123,64,21,0.3);">
+          💳 Pay $${Number(amountDollars).toFixed(2)} via Square →
         </a>
-        <button onclick="document.getElementById('np-paynow-banner').remove()" style="padding:.65rem 1.5rem;background:none;border:1px solid #D1D5DB;border-radius:12px;font-size:.875rem;font-weight:600;cursor:pointer;color:#374151;">Pay later</button>
+        <p style="font-size:.7rem;color:#9CA3AF;margin:.25rem 0 0;line-height:1.4;">
+          Or <button onclick="document.getElementById('np-paynow-banner').remove()" style="background:none;border:none;cursor:pointer;color:#7B4015;font-size:.7rem;text-decoration:underline;padding:0;">pay later from My Bookings</button> — your booking is already saved.
+        </p>
       </div>
     </div>`;
   document.body.appendChild(ov);
