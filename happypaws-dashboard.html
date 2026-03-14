@@ -9010,7 +9010,7 @@ function buildUnpaidBanner(){
 
 // Called from the unpaid banner when no checkoutUrl exists yet — generates one on the fly via Square.
 async function bannerPayNow(bookingId, amountDue){
-  const bk=bookings.find(b=>b.id===bookingId);
+  const bk=bookings.find(b=>String(b.id)===String(bookingId));
   if(!bk){showToast('Booking not found.','#EF4444');return;}
   // If a checkout URL was stored in the meantime, just open it
   if(bk.checkoutUrl){window.open(bk.checkoutUrl,'_blank');return;}
