@@ -3,6 +3,10 @@
 ## [Unreleased] — 2026-03-14
 
 ### Fixed
+- **Settings save reliability** — Two bugs that could cause "sheet sync failed" errors:
+  - `saveSettings()` still read courier form elements that no longer exist on the Settings page (moved to Services). The `courierEnabled` check always evaluated to `true`, potentially overwriting the real value. Removed stale courier reads; courier settings are now only saved via `saveCourierSettings()` on the Services page.
+  - Both `saveSettings()` and `saveCourierSettings()` called `render()` before `persistSettings()` completed. Since `render()` destroys and rebuilds the DOM, the async write could fail or race. Reordered to persist first, then render on completion.
+
 - **Invalid Date bug** — Booking dates from Google Sheets (via Apps Script proxy) were serialised as ISO datetime strings (e.g. `2026-03-15T07:00:00.000Z`). The `fmtDateShort` and `fmtDate` helpers appended `T00:00:00` to the already-timestamped string, producing `Invalid Date`. Fixed with:
   - `sheetDateStr()` now strips time from ISO datetime strings
   - New `_safeDate()` helper used by `fmtDate`/`fmtDateShort` — extracts date-only portion and returns `'—'` instead of `Invalid Date` for unparseable values

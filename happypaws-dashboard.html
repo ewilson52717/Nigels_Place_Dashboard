@@ -8508,16 +8508,7 @@ async function saveSettings(){
   const asUrl=v('set-apps-script-url')?.trim();if(asUrl!==undefined){state.settings.appsScriptUrl=asUrl;CONFIG.APPS_SCRIPT_URL=asUrl;try{if(asUrl)localStorage.setItem('np_apps_script_url',asUrl);else localStorage.removeItem('np_apps_script_url');}catch(e){}}
   const kpw=v('set-kiosk-password');if(kpw!==undefined)state.settings.kioskPassword=kpw.trim();
   const mpd=v('set-multi-pet-discount');if(mpd!==undefined)state.settings.multiPetDiscount=+mpd||10;
-  // Courier settings
-  state.settings.courierEnabled=document.getElementById('set-courier-enabled')?.checked!==false;
-  const ba=v('set-business-address')?.trim();if(ba!==undefined)state.settings.businessAddress=ba;
-  const cr=v('set-courier-radius');if(cr!==undefined)state.settings.courierRadiusMiles=+cr||15;
-  const cmd=v('set-courier-max-dogs');if(cmd!==undefined)state.settings.courierMaxDogs=+cmd||3;
-  const cow=v('set-courier-oneway');if(cow!==undefined)state.settings.courierOneWayPrice=+cow||25;
-  const crt=v('set-courier-roundtrip');if(crt!==undefined)state.settings.courierRoundTripPrice=+crt||40;
-  const cd=v('set-courier-days')?.trim();if(cd!==undefined)state.settings.courierDays=cd;
-  const cpw=v('set-courier-pickup')?.trim();if(cpw!==undefined)state.settings.courierPickupWindow=cpw;
-  const cdw=v('set-courier-dropoff')?.trim();if(cdw!==undefined)state.settings.courierDropoffWindow=cdw;
+  // Note: Courier settings are saved via saveCourierSettings() on the Services page
   const dfid=v('set-drive-folder')?.trim();
   if(dfid!==undefined){
     const changed=dfid!==state.settings.nigelsDriveFolderId;
@@ -8525,8 +8516,15 @@ async function saveSettings(){
     // Clear folder cache so new root ID takes effect immediately
     if(changed){try{_folderIdCache={};localStorage.removeItem('np_folder_cache');}catch(e){}}
   }
-  showToast('Settings saved!');render();
-  try{await persistSettings();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+  try{
+    await persistSettings();
+    showToast('Settings saved!');
+    render();
+  }catch(err){
+    console.error('[PawDesk] Settings save failed:', err);
+    showToast('Saved locally; sheet sync failed: '+err.message,'#F97316');
+    render();
+  }
 }
 
 async function saveCourierSettings(){
@@ -8540,8 +8538,16 @@ async function saveCourierSettings(){
   const cd=v('set-courier-days')?.trim();if(cd!==undefined)state.settings.courierDays=cd;
   const cpw=v('set-courier-pickup')?.trim();if(cpw!==undefined)state.settings.courierPickupWindow=cpw;
   const cdw=v('set-courier-dropoff')?.trim();if(cdw!==undefined)state.settings.courierDropoffWindow=cdw;
-  showToast('Courier settings saved!');render();
-  try{await persistSettings();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+  // Persist FIRST (before render destroys the form), then render on success
+  try{
+    await persistSettings();
+    showToast('Courier settings saved!');
+    render();
+  }catch(err){
+    console.error('[PawDesk] Courier settings save failed:', err);
+    showToast('Saved locally; sheet sync failed: '+err.message,'#F97316');
+    render();
+  }
 }
 
 // ═══════════════════════════════════════════════════
