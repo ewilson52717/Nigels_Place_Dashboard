@@ -6485,6 +6485,7 @@ function updateFamilyBookingUI(){
 // ═══════════════════════════════════════════════════
 let _courierChecking=false;
 let _courierDistanceResult=null; // {miles, ok, label}
+const _courierDistanceCache={}; // address → {miles, timestamp} — avoids re-checking same address
 function courierEnabled(){return state.settings.courierEnabled!==false;}
 function courierAllowedDays(){return(state.settings.courierDays||'Tue,Thu').split(',').map(d=>d.trim());}
 function courierAllowedServices(){return['boarding','daycare','combo'];} // full-day daycare + boarding only
@@ -6495,30 +6496,40 @@ function isCourierDay(dateStr){
   const dayName=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
   return courierAllowedDays().includes(dayName);
 }
-// Check distance using Google Maps Distance Matrix API
+// Check distance using Google Maps JS SDK (no CORS, works with HTTP referrer restriction)
+// Primary: DistanceMatrixService (driving distance) → Fallback: Geocoder + Haversine (straight line)
 async function checkCourierDistance(address){
   const origin=state.settings.businessAddress;
   if(!origin){return{ok:false,miles:0,label:'Business address not configured — contact us to arrange pickup.'};}
   const key=state.settings.googleMapsApiKey;
   if(!key){return{ok:false,miles:0,label:'Distance check unavailable — contact us to confirm service area.'};}
   const maxMiles=+(state.settings.courierRadiusMiles||15);
+  // Check cache first — results valid for 24 hours
+  const cacheKey=address.toLowerCase().trim();
+  const cached=_courierDistanceCache[cacheKey];
+  if(cached&&(Date.now()-cached.timestamp)<86400000){
+    const ok=cached.miles<=maxMiles;
+    const label=ok
+      ?`✅ ${cached.miles.toFixed(1)} miles away — within our ${maxMiles}-mile service area!`
+      :`❌ ${cached.miles.toFixed(1)} miles away — outside our ${maxMiles}-mile service area. Please contact us for special arrangements.`;
+    _courierDistanceResult={ok,miles:cached.miles,label};
+    return _courierDistanceResult;
+  }
   try{
     _courierChecking=true;
-    // Use Distance Matrix API via proxy to avoid CORS issues
-    // Fall back to direct fetch if proxy not available
-    const url=`https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origin)}&destinations=${encodeURIComponent(address)}&units=imperial&key=${encodeURIComponent(key)}`;
-    // Direct fetch may hit CORS — wrap in a try; fallback to Geocoding approach
+    // Ensure Maps JS SDK is loaded (same loader used by vet autocomplete)
+    await loadMapsApi();
     let miles=0;
+    // Primary: DistanceMatrixService (driving distance, most accurate)
     try{
-      const r=await fetch(url);
-      const data=await r.json();
-      if(data.rows&&data.rows[0]&&data.rows[0].elements&&data.rows[0].elements[0].status==='OK'){
-        miles=data.rows[0].elements[0].distance.value/1609.34; // meters to miles
-      }else{throw new Error('no_result');}
+      miles=await _distanceMatrixJS(origin,address);
     }catch(e){
-      // Fallback: geocode both addresses and compute straight-line distance
-      miles=await _geocodeDistanceFallback(origin,address,key);
+      console.warn('[Courier] DistanceMatrix failed, trying Geocoder fallback:', e.message);
+      // Fallback: Geocode both addresses + Haversine straight-line
+      miles=await _geocodeDistanceFallback(origin,address);
     }
+    // Cache the result
+    _courierDistanceCache[cacheKey]={miles,timestamp:Date.now()};
     const ok=miles<=maxMiles;
     const label=ok
       ?`✅ ${miles.toFixed(1)} miles away — within our ${maxMiles}-mile service area!`
@@ -6526,25 +6537,47 @@ async function checkCourierDistance(address){
     _courierDistanceResult={ok,miles,label};
     return _courierDistanceResult;
   }catch(err){
+    console.error('[Courier] Distance check failed:', err);
     _courierDistanceResult={ok:false,miles:0,label:'Distance check failed — please contact us to confirm service area.'};
     return _courierDistanceResult;
   }finally{_courierChecking=false;}
 }
-async function _geocodeDistanceFallback(origin,dest,key){
-  const geocode=async(addr)=>{
-    const r=await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addr)}&key=${encodeURIComponent(key)}`);
-    const d=await r.json();
-    if(d.results&&d.results[0])return d.results[0].geometry.location;
-    return null;
-  };
-  const[a,b]=await Promise.all([geocode(origin),geocode(dest)]);
-  if(!a||!b)return 999;
-  // Haversine formula
-  const R=3958.8; // Earth radius in miles
-  const dLat=(b.lat-a.lat)*Math.PI/180;
-  const dLng=(b.lng-a.lng)*Math.PI/180;
-  const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
-  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+// Uses the Maps JS SDK DistanceMatrixService — no CORS, no exposed API key in URL
+function _distanceMatrixJS(origin,dest){
+  return new Promise((resolve,reject)=>{
+    if(!window.google?.maps?.DistanceMatrixService){reject(new Error('DistanceMatrixService not available'));return;}
+    const svc=new google.maps.DistanceMatrixService();
+    svc.getDistanceMatrix({
+      origins:[origin],destinations:[dest],travelMode:google.maps.TravelMode.DRIVING,unitSystem:google.maps.UnitSystem.IMPERIAL,
+    },(response,status)=>{
+      if(status!=='OK'){reject(new Error('DM status: '+status));return;}
+      const el=response?.rows?.[0]?.elements?.[0];
+      if(!el||el.status!=='OK'){reject(new Error('DM element: '+(el?.status||'no data')));return;}
+      resolve(el.distance.value/1609.34); // meters → miles
+    });
+  });
+}
+// Fallback: Geocode both addresses via JS SDK, compute Haversine straight-line distance
+function _geocodeDistanceFallback(origin,dest){
+  return new Promise(async(resolve)=>{
+    if(!window.google?.maps?.Geocoder){resolve(999);return;}
+    const gc=new google.maps.Geocoder();
+    const geocode=(addr)=>new Promise(res=>{
+      gc.geocode({address:addr},(results,status)=>{
+        if(status==='OK'&&results[0])res(results[0].geometry.location);
+        else res(null);
+      });
+    });
+    const[a,b]=await Promise.all([geocode(origin),geocode(dest)]);
+    if(!a||!b){resolve(999);return;}
+    // Haversine
+    const R=3958.8; // Earth radius miles
+    const lat1=a.lat()*Math.PI/180,lat2=b.lat()*Math.PI/180;
+    const dLat=(b.lat()-a.lat())*Math.PI/180;
+    const dLng=(b.lng()-a.lng())*Math.PI/180;
+    const x=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
+    resolve(R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x)));
+  });
 }
 function getCourierPrice(){
   const tripType=document.getElementById('bk-courier-trip')?.value||'none';
