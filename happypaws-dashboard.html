@@ -3672,9 +3672,30 @@ async function deleteManualVetClinic(id){
   catch(e){showToast('Removed locally — sheet sync failed.','#F97316');}
 }
 
+// Track which service sections are collapsed (persists during session)
+const _svcCollapsed={base:false,addons:false,courier:false};
+function toggleSvcSection(key){
+  _svcCollapsed[key]=!_svcCollapsed[key];
+  const body=document.getElementById('svc-body-'+key);
+  const arrow=document.getElementById('svc-arrow-'+key);
+  if(body)body.style.display=_svcCollapsed[key]?'none':'';
+  if(arrow)arrow.textContent=_svcCollapsed[key]?'▸':'▾';
+}
 function buildServicesView(){
   const base=services.filter(s=>s.type==='base');
   const addons=services.filter(s=>s.type==='addon');
+  // Collapsible section builder
+  const secHead=(key,icon,title,subtitle,count)=>`
+    <button type="button" onclick="toggleSvcSection('${key}')"
+      class="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-gray-50 transition-colors rounded-t-2xl"
+      style="border-bottom:1px solid #F3F4F6;">
+      <span class="text-xl">${icon}</span>
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold text-gray-800">${title} <span class="text-xs font-normal text-gray-400 ml-1">${count!==undefined?'('+count+')':''}</span></div>
+        <div class="text-xs text-gray-400 mt-0.5">${subtitle}</div>
+      </div>
+      <span id="svc-arrow-${key}" class="text-gray-400 text-sm font-mono flex-shrink-0">${_svcCollapsed[key]?'▸':'▾'}</span>
+    </button>`;
   return`
   <div class="p-6 slide-in">
     <div class="flex items-center justify-between mb-6">
@@ -3684,53 +3705,131 @@ function buildServicesView(){
       </div>
       <button onclick="openAddServiceModal()" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ Add Service</button>
     </div>
-    <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 mb-5">
-      <h2 class="font-semibold text-gray-800 mb-1">Base Services</h2>
-      <p class="text-xs text-gray-400 mb-4">Charged per day · clients choose one when booking</p>
-      ${base.length===0?`<p class="text-gray-300 text-sm text-center py-4">No base services. Add one above.</p>`:`
-      <div class="space-y-2">
-        ${base.map(s=>`
-          <div class="flex items-center justify-between p-3 rounded-xl ${s.active?'bg-gray-50':'bg-gray-50 opacity-50'}">
-            <div class="flex items-center gap-3">
-              <span class="text-xl">🏠</span>
-              <div>
-                <div class="font-semibold text-sm text-gray-700">${s.name} ${!s.active?'<span class="text-xs text-gray-400">(disabled)</span>':''}</div>
-                <div class="text-xs text-gray-400">$${s.price} per day</div>
-              </div>
-            </div>
-            <div class="flex items-center gap-2">
-              <button onclick="openEditServiceModal(${s.id})" class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100">Edit</button>
-              <button onclick="toggleService(${s.id})" class="text-xs px-3 py-1.5 rounded-lg ${s.active?'bg-amber-50 text-amber-600 hover:bg-amber-100':'bg-green-50 text-green-600 hover:bg-green-100'}">${s.active?'Disable':'Enable'}</button>
-              <button onclick="deleteService(${s.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100">Delete</button>
-            </div>
-          </div>`).join('')}
-      </div>`}
-    </div>
-    <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-      <h2 class="font-semibold text-gray-800 mb-1">Add-Ons</h2>
-      <p class="text-xs text-gray-400 mb-4">Clients can select any combination when booking</p>
-      ${addons.length===0?`<div class="text-center py-8"><div class="text-4xl mb-2">✨</div><p class="text-gray-300 text-sm">No add-ons yet. Add your first one above!</p></div>`:`
-      <div class="space-y-2">
-        ${addons.map(s=>`
-          <div class="flex items-center justify-between p-3 rounded-xl ${s.active?'bg-gray-50':'bg-gray-50 opacity-50'}">
-            <div class="flex items-center gap-3">
-              <span class="text-xl">✨</span>
-              <div>
-                <div class="flex items-center gap-2">
-                  <span class="font-semibold text-sm text-gray-700">${s.name}</span>
-                  ${s.frequency==='qty'?'<span class="badge bg-amber-100 text-amber-700">qty selectable</span>':'<span class="badge bg-gray-100 text-gray-500">once per stay</span>'}
-                  ${!s.active?'<span class="text-xs text-gray-400">(hidden)</span>':''}
+
+    <!-- ── BASE SERVICES ───────────────────────────────────────── -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-4 overflow-hidden">
+      ${secHead('base','🏠','Base Services','Charged per day · clients choose one when booking',base.length)}
+      <div id="svc-body-base" style="display:${_svcCollapsed.base?'none':''}">
+        <div class="px-5 pb-5 pt-3">
+          ${base.length===0?`<p class="text-gray-300 text-sm text-center py-4">No base services. Add one above.</p>`:`
+          <div class="space-y-2">
+            ${base.map(s=>`
+              <div class="flex items-center justify-between p-3 rounded-xl ${s.active?'bg-gray-50':'bg-gray-50 opacity-50'}">
+                <div class="flex items-center gap-3">
+                  <span class="text-xl">🏠</span>
+                  <div>
+                    <div class="font-semibold text-sm text-gray-700">${s.name} ${!s.active?'<span class="text-xs text-gray-400">(disabled)</span>':''}</div>
+                    <div class="text-xs text-gray-400">$${s.price} per day</div>
+                  </div>
                 </div>
-                <div class="text-xs text-gray-400">$${s.price} per session</div>
-              </div>
+                <div class="flex items-center gap-2">
+                  <button onclick="openEditServiceModal(${s.id})" class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100">Edit</button>
+                  <button onclick="toggleService(${s.id})" class="text-xs px-3 py-1.5 rounded-lg ${s.active?'bg-amber-50 text-amber-600 hover:bg-amber-100':'bg-green-50 text-green-600 hover:bg-green-100'}">${s.active?'Disable':'Enable'}</button>
+                  <button onclick="deleteService(${s.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100">Delete</button>
+                </div>
+              </div>`).join('')}
+          </div>`}
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ADD-ONS ─────────────────────────────────────────────── -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-4 overflow-hidden">
+      ${secHead('addons','✨','Add-Ons','Clients can select any combination when booking',addons.length)}
+      <div id="svc-body-addons" style="display:${_svcCollapsed.addons?'none':''}">
+        <div class="px-5 pb-5 pt-3">
+          ${addons.length===0?`<div class="text-center py-6"><div class="text-3xl mb-2">✨</div><p class="text-gray-300 text-sm">No add-ons yet. Add your first one above!</p></div>`:`
+          <div class="space-y-2">
+            ${addons.map(s=>`
+              <div class="flex items-center justify-between p-3 rounded-xl ${s.active?'bg-gray-50':'bg-gray-50 opacity-50'}">
+                <div class="flex items-center gap-3">
+                  <span class="text-xl">✨</span>
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="font-semibold text-sm text-gray-700">${s.name}</span>
+                      ${s.frequency==='qty'?'<span class="badge bg-amber-100 text-amber-700">qty selectable</span>':'<span class="badge bg-gray-100 text-gray-500">once per stay</span>'}
+                      ${!s.active?'<span class="text-xs text-gray-400">(hidden)</span>':''}
+                    </div>
+                    <div class="text-xs text-gray-400">$${s.price} per session</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button onclick="openEditServiceModal(${s.id})" class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100">Edit</button>
+                  <button onclick="toggleService(${s.id})" class="text-xs px-3 py-1.5 rounded-lg ${s.active?'bg-amber-50 text-amber-600 hover:bg-amber-100':'bg-green-50 text-green-600 hover:bg-green-100'}">${s.active?'Hide':'Show'}</button>
+                  <button onclick="deleteService(${s.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100">Delete</button>
+                </div>
+              </div>`).join('')}
+          </div>`}
+        </div>
+      </div>
+    </div>
+
+    <!-- ── COURIER PICKUP & DROPOFF ────────────────────────────── -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-4 overflow-hidden">
+      ${secHead('courier','🚗','Courier Pickup & Dropoff',
+        state.settings.courierEnabled!==false
+          ?'Enabled · '+(state.settings.courierDays||'Tue,Thu').split(',').join(' & ')+' · $'+(state.settings.courierOneWayPrice||25)+' one-way / $'+(state.settings.courierRoundTripPrice||40)+' round trip'
+          :'Disabled')}
+      <div id="svc-body-courier" style="display:${_svcCollapsed.courier?'none':''}">
+        <div class="px-5 pb-5 pt-3 space-y-3">
+          <p class="text-xs text-gray-400">Offer pickup/dropoff for boarding & full-day daycare clients. Distance is verified against your business address using Google Maps.</p>
+          <div>
+            <label class="flex items-center gap-2.5 cursor-pointer">
+              <input type="checkbox" id="set-courier-enabled" ${state.settings.courierEnabled!==false?'checked':''} class="accent-amber-700 w-4 h-4">
+              <span class="text-sm font-semibold text-gray-700">Enable courier service</span>
+            </label>
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Business Address (courier origin)</label>
+            <input id="set-business-address" type="text" placeholder="123 Main St, Anytown, TX 75001" value="${state.settings.businessAddress||''}"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            <p class="text-xs text-gray-400 mt-1">Used as the origin for distance calculations. Must be a full street address.</p>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Service Radius (miles)</label>
+              <input id="set-courier-radius" type="number" value="${state.settings.courierRadiusMiles||15}" min="1" max="100"
+                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
             </div>
-            <div class="flex items-center gap-2">
-              <button onclick="openEditServiceModal(${s.id})" class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100">Edit</button>
-              <button onclick="toggleService(${s.id})" class="text-xs px-3 py-1.5 rounded-lg ${s.active?'bg-amber-50 text-amber-600 hover:bg-amber-100':'bg-green-50 text-green-600 hover:bg-green-100'}">${s.active?'Hide':'Show'}</button>
-              <button onclick="deleteService(${s.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100">Delete</button>
+            <div>
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Max Dogs Per Trip</label>
+              <input id="set-courier-max-dogs" type="number" value="${state.settings.courierMaxDogs||3}" min="1" max="10"
+                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
             </div>
-          </div>`).join('')}
-      </div>`}
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">One-Way Price ($)</label>
+              <input id="set-courier-oneway" type="number" value="${state.settings.courierOneWayPrice||25}" min="0" step="5"
+                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Round Trip Price ($)</label>
+              <input id="set-courier-roundtrip" type="number" value="${state.settings.courierRoundTripPrice||40}" min="0" step="5"
+                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            </div>
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Available Days</label>
+            <input id="set-courier-days" type="text" value="${state.settings.courierDays||'Tue,Thu'}" placeholder="Tue,Thu"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            <p class="text-xs text-gray-400 mt-1">Comma-separated short day names: Mon, Tue, Wed, Thu, Fri, Sat, Sun</p>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Pickup Window</label>
+              <input id="set-courier-pickup" type="text" value="${state.settings.courierPickupWindow||'10:00 AM – 12:00 PM'}"
+                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Dropoff Window</label>
+              <input id="set-courier-dropoff" type="text" value="${state.settings.courierDropoffWindow||'6:00 PM – 8:00 PM'}"
+                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            </div>
+          </div>
+          <button type="button" onclick="saveCourierSettings()" class="w-full py-2.5 text-white rounded-xl text-sm font-semibold mt-2" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">Save Courier Settings</button>
+        </div>
+      </div>
     </div>
   </div>`;
 }
@@ -3903,68 +4002,8 @@ function buildSettingsView(){
         <input id="set-multi-pet-discount" type="number" value="${state.settings.multiPetDiscount||10}" min="0" max="50" step="5" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
         <p class="text-xs text-gray-400 mt-1">Example: 10% means the 2nd &amp; 3rd dog each pay 90% of the per-dog rate.</p>
       </div>
-      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h2 class="font-semibold text-gray-800 mb-1">🚗 Courier Pickup & Dropoff</h2>
-        <p class="text-xs text-gray-400 mb-3">Offer pickup/dropoff service for boarding & full-day daycare clients. Distance is verified against your business address using Google Maps.</p>
-        <div class="space-y-3">
-          <div>
-            <label class="flex items-center gap-2.5 cursor-pointer">
-              <input type="checkbox" id="set-courier-enabled" ${state.settings.courierEnabled!==false?'checked':''} class="accent-amber-700 w-4 h-4">
-              <span class="text-sm font-semibold text-gray-700">Enable courier service</span>
-            </label>
-          </div>
-          <div>
-            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Business Address (courier origin)</label>
-            <input id="set-business-address" type="text" placeholder="123 Main St, Anytown, TX 75001" value="${state.settings.businessAddress||''}"
-              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-            <p class="text-xs text-gray-400 mt-1">Used as the origin for distance calculations. Must be a full street address.</p>
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Service Radius (miles)</label>
-              <input id="set-courier-radius" type="number" value="${state.settings.courierRadiusMiles||15}" min="1" max="100"
-                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-            </div>
-            <div>
-              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Max Dogs Per Trip</label>
-              <input id="set-courier-max-dogs" type="number" value="${state.settings.courierMaxDogs||3}" min="1" max="10"
-                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-            </div>
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">One-Way Price ($)</label>
-              <input id="set-courier-oneway" type="number" value="${state.settings.courierOneWayPrice||25}" min="0" step="5"
-                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-            </div>
-            <div>
-              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Round Trip Price ($)</label>
-              <input id="set-courier-roundtrip" type="number" value="${state.settings.courierRoundTripPrice||40}" min="0" step="5"
-                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-            </div>
-          </div>
-          <div>
-            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Available Days</label>
-            <input id="set-courier-days" type="text" value="${state.settings.courierDays||'Tue,Thu'}" placeholder="Tue,Thu"
-              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-            <p class="text-xs text-gray-400 mt-1">Comma-separated short day names: Mon, Tue, Wed, Thu, Fri, Sat, Sun</p>
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Pickup Window</label>
-              <input id="set-courier-pickup" type="text" value="${state.settings.courierPickupWindow||'10:00 AM – 12:00 PM'}"
-                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-            </div>
-            <div>
-              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Dropoff Window</label>
-              <input id="set-courier-dropoff" type="text" value="${state.settings.courierDropoffWindow||'6:00 PM – 8:00 PM'}"
-                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-            </div>
-          </div>
-        </div>
-      </div>
       <div class="bg-amber-50 rounded-xl p-4 border border-amber-100 text-sm text-amber-800">
-        🛎️ Service rates are managed in the <button onclick="setView('services')" class="underline font-semibold">Services</button> section.
+        🛎️ Service rates &amp; courier settings are managed in the <button onclick="setView('services')" class="underline font-semibold">Services</button> section.
       </div>
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
         <h2 class="font-semibold text-gray-800 mb-1">🖥️ Kiosk Mode Setup</h2>
@@ -8487,6 +8526,21 @@ async function saveSettings(){
     if(changed){try{_folderIdCache={};localStorage.removeItem('np_folder_cache');}catch(e){}}
   }
   showToast('Settings saved!');render();
+  try{await persistSettings();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+}
+
+async function saveCourierSettings(){
+  const v=id=>document.getElementById(id)?.value;
+  state.settings.courierEnabled=document.getElementById('set-courier-enabled')?.checked!==false;
+  const ba=v('set-business-address')?.trim();if(ba!==undefined)state.settings.businessAddress=ba;
+  const cr=v('set-courier-radius');if(cr!==undefined)state.settings.courierRadiusMiles=+cr||15;
+  const cmd=v('set-courier-max-dogs');if(cmd!==undefined)state.settings.courierMaxDogs=+cmd||3;
+  const cow=v('set-courier-oneway');if(cow!==undefined)state.settings.courierOneWayPrice=+cow||25;
+  const crt=v('set-courier-roundtrip');if(crt!==undefined)state.settings.courierRoundTripPrice=+crt||40;
+  const cd=v('set-courier-days')?.trim();if(cd!==undefined)state.settings.courierDays=cd;
+  const cpw=v('set-courier-pickup')?.trim();if(cpw!==undefined)state.settings.courierPickupWindow=cpw;
+  const cdw=v('set-courier-dropoff')?.trim();if(cdw!==undefined)state.settings.courierDropoffWindow=cdw;
+  showToast('Courier settings saved!');render();
   try{await persistSettings();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
 }
 
