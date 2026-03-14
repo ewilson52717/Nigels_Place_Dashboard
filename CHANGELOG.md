@@ -48,6 +48,20 @@
 
 - **Confirm & Pay Now flow refinement** — Client-initiated bookings show "Confirm & Pay Now" overlay; persistent unpaid banner reserved for admin-created (phone/manual) bookings only via `createdBy` tracking
 
+- **Courier Pickup & Dropoff service** (Phase 2):
+  - Available as an add-on to boarding, full-day daycare, and combo bookings
+  - Trip type selector: none / one-way ($25) / round trip ($40) — prices admin-configurable
+  - Google Maps distance checker: validates client address is within configurable service radius (default 15 miles) using Distance Matrix API with Geocoding fallback
+  - Day validation: warns if selected booking dates fall outside courier days (default Tue & Thu)
+  - Max dogs per courier trip (default 3) — enforced at booking time
+  - Separate Courier Service Terms & Conditions lightbox with full T&C text
+  - T&C agreement checkbox required before booking can proceed
+  - Courier fee appears in live price preview with trip type label
+  - `courierTrip` and `courierAddress` stored on booking record
+  - Day modal shows "🚗 Courier" badge on bookings with courier service
+  - Admin Settings panel: full courier configuration section with enable toggle, business address, radius, pricing, max dogs, available days, pickup/dropoff windows
+  - `courierConfig` JSON setting persisted in Settings sheet (row 20), synced to clients via proxy SAFE_KEYS
+
 ---
 
 ## [2026-03-13] — Commit e58eddb

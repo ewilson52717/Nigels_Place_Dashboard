@@ -312,7 +312,8 @@ function getClientData(ss, req, callerEmail) {
   // (vaccine scanning, vet lookup) when accessing the portal from their own browser.
   const SAFE_KEYS = ['businessName','dailyCapacity','fullDayRate','halfDayRate',
                      'groomingAddOn','venmoHandle','squareLink','capacityOverrides',
-                     'requiredVaccines','geminiApiKey','googleMapsApiKey','multiPetDiscount'];
+                     'requiredVaccines','geminiApiKey','googleMapsApiKey','multiPetDiscount',
+                     'courierConfig'];
   const settings = {};
   if (settingsSheet) {
     const settingRows = settingsSheet.getDataRange().getValues();

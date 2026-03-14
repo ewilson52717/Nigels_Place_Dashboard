@@ -278,6 +278,16 @@ const state={
     kioskPassword:'', // if set, kiosk ?kiosk URL requires this password before showing the lobby
     capacityOverrides:{}, // { 'YYYY-MM-DD': number } — per-date overrides (0 = closed/blocked)
     multiPetDiscount:10, // % discount for 2nd/3rd dog in family booking (default 10%)
+    // Courier / Pickup-Dropoff service
+    courierEnabled:true,
+    businessAddress:'', // origin for distance calculation
+    courierRadiusMiles:15, // max service radius
+    courierOneWayPrice:25,
+    courierRoundTripPrice:40,
+    courierMaxDogs:3, // max dogs per courier run
+    courierDays:'Tue,Thu', // comma-separated short day names
+    courierPickupWindow:'10:00 AM – 12:00 PM',
+    courierDropoffWindow:'6:00 PM – 8:00 PM',
     requiredVaccines:['Rabies','DHPP','Bordetella'], // Required vaccines — all dogs must have these current
     manualVetClinics:[], // [{id,name,phone,website,notes}] — manually added partner clinics
   },
@@ -1693,6 +1703,17 @@ async function loadAllData(){
     else if(k==='requiredVaccines'){try{const rv=JSON.parse(v);if(Array.isArray(rv))state.settings.requiredVaccines=rv;}catch(e){}}
     else if(k==='manualVetClinics'){try{const mv=JSON.parse(v);if(Array.isArray(mv))state.settings.manualVetClinics=mv;}catch(e){}}
     else if(k==='multiPetDiscount')state.settings.multiPetDiscount=+v||10;
+    else if(k==='courierConfig'){try{const cc=JSON.parse(v);if(cc){
+      state.settings.courierEnabled=cc.enabled!==false;
+      state.settings.businessAddress=cc.businessAddress||'';
+      state.settings.courierRadiusMiles=+cc.radiusMiles||15;
+      state.settings.courierOneWayPrice=+cc.oneWayPrice||25;
+      state.settings.courierRoundTripPrice=+cc.roundTripPrice||40;
+      state.settings.courierMaxDogs=+cc.maxDogs||3;
+      state.settings.courierDays=cc.days||'Tue,Thu';
+      state.settings.courierPickupWindow=cc.pickupWindow||'10:00 AM – 12:00 PM';
+      state.settings.courierDropoffWindow=cc.dropoffWindow||'6:00 PM – 8:00 PM';
+    }}catch(e){}}
   });
   services.length=0;
   if(svR&&svR.length>0){
@@ -2096,6 +2117,17 @@ async function loadClientDataViaProxy(){
     if(s.geminiApiKey&&!state.settings.geminiApiKey)state.settings.geminiApiKey=String(s.geminiApiKey);
     if(s.googleMapsApiKey&&!state.settings.googleMapsApiKey)state.settings.googleMapsApiKey=String(s.googleMapsApiKey);
     if(s.multiPetDiscount!==undefined)state.settings.multiPetDiscount=+s.multiPetDiscount||10;
+    if(s.courierConfig){try{const cc=typeof s.courierConfig==='string'?JSON.parse(s.courierConfig):s.courierConfig;if(cc){
+      state.settings.courierEnabled=cc.enabled!==false;
+      state.settings.businessAddress=cc.businessAddress||'';
+      state.settings.courierRadiusMiles=+cc.radiusMiles||15;
+      state.settings.courierOneWayPrice=+cc.oneWayPrice||25;
+      state.settings.courierRoundTripPrice=+cc.roundTripPrice||40;
+      state.settings.courierMaxDogs=+cc.maxDogs||3;
+      state.settings.courierDays=cc.days||'Tue,Thu';
+      state.settings.courierPickupWindow=cc.pickupWindow||'10:00 AM – 12:00 PM';
+      state.settings.courierDropoffWindow=cc.dropoffWindow||'6:00 PM – 8:00 PM';
+    }}catch(e){}}
 
     // Populate services from proxy response so clients see correct booking options
     // (including any custom "Other" services and add-ons configured by the admin).
@@ -2136,7 +2168,18 @@ async function persistSettings(){
   const overridesJson=JSON.stringify(state.settings.capacityOverrides||{});
   const vaccinesJson=JSON.stringify(state.settings.requiredVaccines||[]);
   const manualClinicsJson=JSON.stringify(state.settings.manualVetClinics||[]);
-  await writeRange('Settings!A1:B19',[
+  const courierJson=JSON.stringify({
+    enabled:state.settings.courierEnabled!==false,
+    businessAddress:state.settings.businessAddress||'',
+    radiusMiles:state.settings.courierRadiusMiles||15,
+    oneWayPrice:state.settings.courierOneWayPrice||25,
+    roundTripPrice:state.settings.courierRoundTripPrice||40,
+    maxDogs:state.settings.courierMaxDogs||3,
+    days:state.settings.courierDays||'Tue,Thu',
+    pickupWindow:state.settings.courierPickupWindow||'10:00 AM – 12:00 PM',
+    dropoffWindow:state.settings.courierDropoffWindow||'6:00 PM – 8:00 PM',
+  });
+  await writeRange('Settings!A1:B20',[
     ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
     ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
     ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',state.settings.venmoHandle||''],
@@ -2151,6 +2194,7 @@ async function persistSettings(){
     ['requiredVaccines',vaccinesJson],
     ['manualVetClinics',manualClinicsJson],
     ['multiPetDiscount',state.settings.multiPetDiscount||10],
+    ['courierConfig',courierJson],
   ]);
 }
 async function persistServices(){
@@ -3859,6 +3903,66 @@ function buildSettingsView(){
         <input id="set-multi-pet-discount" type="number" value="${state.settings.multiPetDiscount||10}" min="0" max="50" step="5" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
         <p class="text-xs text-gray-400 mt-1">Example: 10% means the 2nd &amp; 3rd dog each pay 90% of the per-dog rate.</p>
       </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <h2 class="font-semibold text-gray-800 mb-1">🚗 Courier Pickup & Dropoff</h2>
+        <p class="text-xs text-gray-400 mb-3">Offer pickup/dropoff service for boarding & full-day daycare clients. Distance is verified against your business address using Google Maps.</p>
+        <div class="space-y-3">
+          <div>
+            <label class="flex items-center gap-2.5 cursor-pointer">
+              <input type="checkbox" id="set-courier-enabled" ${state.settings.courierEnabled!==false?'checked':''} class="accent-amber-700 w-4 h-4">
+              <span class="text-sm font-semibold text-gray-700">Enable courier service</span>
+            </label>
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Business Address (courier origin)</label>
+            <input id="set-business-address" type="text" placeholder="123 Main St, Anytown, TX 75001" value="${state.settings.businessAddress||''}"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            <p class="text-xs text-gray-400 mt-1">Used as the origin for distance calculations. Must be a full street address.</p>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Service Radius (miles)</label>
+              <input id="set-courier-radius" type="number" value="${state.settings.courierRadiusMiles||15}" min="1" max="100"
+                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Max Dogs Per Trip</label>
+              <input id="set-courier-max-dogs" type="number" value="${state.settings.courierMaxDogs||3}" min="1" max="10"
+                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">One-Way Price ($)</label>
+              <input id="set-courier-oneway" type="number" value="${state.settings.courierOneWayPrice||25}" min="0" step="5"
+                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Round Trip Price ($)</label>
+              <input id="set-courier-roundtrip" type="number" value="${state.settings.courierRoundTripPrice||40}" min="0" step="5"
+                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            </div>
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Available Days</label>
+            <input id="set-courier-days" type="text" value="${state.settings.courierDays||'Tue,Thu'}" placeholder="Tue,Thu"
+              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            <p class="text-xs text-gray-400 mt-1">Comma-separated short day names: Mon, Tue, Wed, Thu, Fri, Sat, Sun</p>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Pickup Window</label>
+              <input id="set-courier-pickup" type="text" value="${state.settings.courierPickupWindow||'10:00 AM – 12:00 PM'}"
+                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Dropoff Window</label>
+              <input id="set-courier-dropoff" type="text" value="${state.settings.courierDropoffWindow||'6:00 PM – 8:00 PM'}"
+                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="bg-amber-50 rounded-xl p-4 border border-amber-100 text-sm text-amber-800">
         🛎️ Service rates are managed in the <button onclick="setView('services')" class="underline font-semibold">Services</button> section.
       </div>
@@ -4936,6 +5040,7 @@ function buildDayModal(ds){
               :`<div class="text-xs text-gray-500 mt-0.5">${svcIcon} ${svcLabel}${b.price?` · <span class="font-semibold">$${(+b.price).toFixed(2)}</span>`:''}</div>`}
             ${b.checkIn!==b.checkOut?`<div class="text-xs text-amber-700 mt-0.5">📅 ${fmtDateShort(b.checkIn)} → ${fmtDateShort(b.checkOut)} (${b.nights} ${b.nights===1?'night':'nights'})</div>`:''}
             ${b.addons?`<div class="text-xs text-gray-400 mt-0.5">✨ ${b.addons}</div>`:''}
+            ${b.courierTrip&&b.courierTrip!=='none'?`<div class="text-xs text-blue-600 mt-0.5">🚗 Courier: ${b.courierTrip==='roundtrip'?'Round trip':'One-way'}</div>`:''}
           </div>
           <div class="flex flex-col items-end gap-1">
             ${isAdm?'<span class="text-sm text-gray-600 font-medium whitespace-nowrap">$'+(+b.price).toFixed(2)+'</span>':''}
@@ -5053,6 +5158,7 @@ function setBkMain(type){
       pn.innerHTML='';
     }
   }
+  updateCourierUI();
   updateBookingPrice();
 }
 function setDaycareMode(mode){
@@ -5352,6 +5458,48 @@ function buildBookingModal(selectedDate){
             }).join('')}
           </div>
         </div>`:''}
+
+        <!-- ⑥b COURIER PICKUP/DROPOFF ─────────────────────────────── -->
+        <div id="bk-courier-section" style="display:${courierEnabled()&&courierAllowedServices().includes(_bookingMain)&&!(_bookingMain==='daycare'&&_daycareMode==='package')?'':'none'}">
+          <div class="rounded-xl border overflow-hidden" style="border-color:#BFDBFE;background:#F0F7FF;">
+            <div class="px-3 py-2 flex items-center gap-2" style="background:#DBEAFE;border-bottom:1px solid #BFDBFE;">
+              <span class="text-sm">🚗</span>
+              <span class="text-xs font-bold text-blue-900 uppercase tracking-wider">Courier Pickup / Dropoff</span>
+              <button type="button" onclick="showCourierTerms()" class="ml-auto text-xs text-blue-600 hover:text-blue-800 underline font-medium">View Terms</button>
+            </div>
+            <div class="p-3 space-y-3">
+              <div class="text-xs text-blue-800" style="line-height:1.5;">
+                Available <strong>${(state.settings.courierDays||'Tue,Thu').split(',').join(' & ')}</strong> · Boarding & full-day daycare only<br>
+                Pickup: <strong>${state.settings.courierPickupWindow||'10:00 AM – 12:00 PM'}</strong> · Dropoff: <strong>${state.settings.courierDropoffWindow||'6:00 PM – 8:00 PM'}</strong>
+              </div>
+              <div>
+                <label class="text-xs font-semibold text-blue-900 block mb-1">Trip Type</label>
+                <select id="bk-courier-trip" onchange="updateCourierUI();updateBookingPrice()" class="w-full border border-blue-200 rounded-xl px-3 py-2 text-sm bg-white">
+                  <option value="none">No courier needed</option>
+                  <option value="oneway">One-way — $${state.settings.courierOneWayPrice||25} (pickup OR dropoff)</option>
+                  <option value="roundtrip">Round trip — $${state.settings.courierRoundTripPrice||40} (pickup AND dropoff)</option>
+                </select>
+              </div>
+              <div id="bk-courier-details" style="display:none;" class="space-y-2.5">
+                <div>
+                  <label class="text-xs font-semibold text-blue-900 block mb-1">Your Address</label>
+                  <input type="text" id="bk-courier-address" placeholder="123 Main St, City, State ZIP"
+                    class="w-full border border-blue-200 rounded-xl px-3 py-2 text-sm bg-white">
+                </div>
+                <div class="flex gap-2">
+                  <button type="button" id="bk-courier-check-btn" onclick="handleCourierAddressCheck()"
+                    class="px-3 py-2 rounded-xl text-xs font-semibold text-white" style="background:#2563EB;">📍 Check Distance</button>
+                </div>
+                <div id="bk-courier-distance-result" class="text-xs min-h-[1.2rem]"></div>
+                <div id="bk-courier-day-warn" style="display:none;" class="p-2 rounded-lg bg-amber-50 border border-amber-200"></div>
+                <label class="flex items-start gap-2.5 cursor-pointer">
+                  <input type="checkbox" id="bk-courier-tc-agree" class="mt-0.5 accent-blue-700 w-4 h-4 flex-shrink-0">
+                  <span class="text-xs text-blue-800 leading-relaxed">I agree to the <button type="button" onclick="showCourierTerms()" class="underline font-semibold text-blue-700">Courier Service Terms & Conditions</button></span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <!-- ⑦ POLICY NOTICE (dynamic — updated by setBkMain) ────── -->
         <div id="bk-policy-notice"></div>
@@ -6331,6 +6479,162 @@ function updateFamilyBookingUI(){
   updateBookingPrice();
   checkDogVaccWarning();
 }
+
+// ═══════════════════════════════════════════════════
+//  COURIER / PICKUP-DROPOFF HELPERS
+// ═══════════════════════════════════════════════════
+let _courierChecking=false;
+let _courierDistanceResult=null; // {miles, ok, label}
+function courierEnabled(){return state.settings.courierEnabled!==false;}
+function courierAllowedDays(){return(state.settings.courierDays||'Tue,Thu').split(',').map(d=>d.trim());}
+function courierAllowedServices(){return['boarding','daycare','combo'];} // full-day daycare + boarding only
+function isCourierDay(dateStr){
+  if(!dateStr)return false;
+  const d=new Date(dateStr+'T00:00:00');
+  if(isNaN(d))return false;
+  const dayName=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+  return courierAllowedDays().includes(dayName);
+}
+// Check distance using Google Maps Distance Matrix API
+async function checkCourierDistance(address){
+  const origin=state.settings.businessAddress;
+  if(!origin){return{ok:false,miles:0,label:'Business address not configured — contact us to arrange pickup.'};}
+  const key=state.settings.googleMapsApiKey;
+  if(!key){return{ok:false,miles:0,label:'Distance check unavailable — contact us to confirm service area.'};}
+  const maxMiles=+(state.settings.courierRadiusMiles||15);
+  try{
+    _courierChecking=true;
+    // Use Distance Matrix API via proxy to avoid CORS issues
+    // Fall back to direct fetch if proxy not available
+    const url=`https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origin)}&destinations=${encodeURIComponent(address)}&units=imperial&key=${encodeURIComponent(key)}`;
+    // Direct fetch may hit CORS — wrap in a try; fallback to Geocoding approach
+    let miles=0;
+    try{
+      const r=await fetch(url);
+      const data=await r.json();
+      if(data.rows&&data.rows[0]&&data.rows[0].elements&&data.rows[0].elements[0].status==='OK'){
+        miles=data.rows[0].elements[0].distance.value/1609.34; // meters to miles
+      }else{throw new Error('no_result');}
+    }catch(e){
+      // Fallback: geocode both addresses and compute straight-line distance
+      miles=await _geocodeDistanceFallback(origin,address,key);
+    }
+    const ok=miles<=maxMiles;
+    const label=ok
+      ?`✅ ${miles.toFixed(1)} miles away — within our ${maxMiles}-mile service area!`
+      :`❌ ${miles.toFixed(1)} miles away — outside our ${maxMiles}-mile service area. Please contact us for special arrangements.`;
+    _courierDistanceResult={ok,miles,label};
+    return _courierDistanceResult;
+  }catch(err){
+    _courierDistanceResult={ok:false,miles:0,label:'Distance check failed — please contact us to confirm service area.'};
+    return _courierDistanceResult;
+  }finally{_courierChecking=false;}
+}
+async function _geocodeDistanceFallback(origin,dest,key){
+  const geocode=async(addr)=>{
+    const r=await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addr)}&key=${encodeURIComponent(key)}`);
+    const d=await r.json();
+    if(d.results&&d.results[0])return d.results[0].geometry.location;
+    return null;
+  };
+  const[a,b]=await Promise.all([geocode(origin),geocode(dest)]);
+  if(!a||!b)return 999;
+  // Haversine formula
+  const R=3958.8; // Earth radius in miles
+  const dLat=(b.lat-a.lat)*Math.PI/180;
+  const dLng=(b.lng-a.lng)*Math.PI/180;
+  const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+function getCourierPrice(){
+  const tripType=document.getElementById('bk-courier-trip')?.value||'none';
+  if(tripType==='oneway')return+(state.settings.courierOneWayPrice||25);
+  if(tripType==='roundtrip')return+(state.settings.courierRoundTripPrice||40);
+  return 0;
+}
+async function handleCourierAddressCheck(){
+  const addr=document.getElementById('bk-courier-address')?.value?.trim();
+  const resultEl=document.getElementById('bk-courier-distance-result');
+  const btn=document.getElementById('bk-courier-check-btn');
+  if(!addr){if(resultEl)resultEl.innerHTML='<span class="text-red-500">Please enter your address.</span>';return;}
+  if(btn){btn.disabled=true;btn.textContent='Checking…';}
+  if(resultEl)resultEl.innerHTML='<span class="text-gray-400">📍 Checking distance…</span>';
+  const result=await checkCourierDistance(addr);
+  if(resultEl)resultEl.innerHTML=`<span class="${result.ok?'text-green-700':'text-red-600'} font-semibold">${result.label}</span>`;
+  if(btn){btn.disabled=false;btn.textContent='📍 Check Distance';}
+  updateBookingPrice();
+}
+function updateCourierUI(){
+  const sec=document.getElementById('bk-courier-section');
+  if(!sec)return;
+  if(!courierEnabled()){sec.style.display='none';return;}
+  // Only show for boarding, daycare (not package), and combo
+  const allowed=courierAllowedServices().includes(_bookingMain);
+  const isPackage=_bookingMain==='daycare'&&_daycareMode==='package';
+  sec.style.display=(allowed&&!isPackage)?'':'none';
+  // Show/hide details based on trip type
+  const tripSel=document.getElementById('bk-courier-trip');
+  const details=document.getElementById('bk-courier-details');
+  if(details&&tripSel)details.style.display=(tripSel.value!=='none')?'':'none';
+  // Check if selected dates are courier days
+  const dayWarn=document.getElementById('bk-courier-day-warn');
+  if(dayWarn&&tripSel&&tripSel.value!=='none'){
+    let checkDate=null;
+    if(_bookingMain==='boarding'||_bookingMain==='combo')checkDate=document.getElementById('bk-board-checkin')?.value;
+    else if(_bookingMain==='daycare')checkDate=document.getElementById('bk-checkin')?.value;
+    if(checkDate&&!isCourierDay(checkDate)){
+      dayWarn.style.display='block';
+      dayWarn.innerHTML=`<span class="text-amber-700 text-xs">📅 Courier is available on <strong>${courierAllowedDays().join(' & ')}</strong> only. Your selected date falls on a different day.</span>`;
+    }else{dayWarn.style.display='none';}
+  }else if(dayWarn){dayWarn.style.display='none';}
+  updateBookingPrice();
+}
+function showCourierTerms(){
+  const maxMi=state.settings.courierRadiusMiles||15;
+  const oneWay=state.settings.courierOneWayPrice||25;
+  const roundTrip=state.settings.courierRoundTripPrice||40;
+  const maxDogs=state.settings.courierMaxDogs||3;
+  const days=state.settings.courierDays||'Tue,Thu';
+  const pickup=state.settings.courierPickupWindow||'10:00 AM – 12:00 PM';
+  const dropoff=state.settings.courierDropoffWindow||'6:00 PM – 8:00 PM';
+  const biz=state.settings.businessName||"Nigel's Place";
+  const existing=document.getElementById('np-courier-tc-modal');if(existing)existing.remove();
+  const ov=document.createElement('div');
+  ov.id='np-courier-tc-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:10001;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  ov.innerHTML=`
+    <div style="background:white;border-radius:20px;padding:1.75rem;max-width:460px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:85vh;overflow-y:auto;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:1.2rem;">
+        <div style="width:38px;height:38px;background:linear-gradient(135deg,#7B4015,#D4A96B);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">🚗</div>
+        <div>
+          <div style="font-weight:800;font-size:1.1rem;color:#111827;">Courier Service Terms</div>
+          <div style="font-size:.72rem;color:#9CA3AF;">${biz} Pickup & Dropoff</div>
+        </div>
+        <button onclick="document.getElementById('np-courier-tc-modal').remove()" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:1.4rem;color:#9CA3AF;">×</button>
+      </div>
+      <div style="font-size:.82rem;color:#374151;line-height:1.65;">
+        <p style="margin-bottom:.8rem;"><strong>1. Service Availability</strong><br>
+        Courier pickup and dropoff is available on <strong>${days.split(',').join(' & ')}</strong> only, for boarding and full-day daycare bookings. Pickup window: <strong>${pickup}</strong>. Dropoff window: <strong>${dropoff}</strong>.</p>
+        <p style="margin-bottom:.8rem;"><strong>2. Service Area</strong><br>
+        We serve addresses within a <strong>${maxMi}-mile radius</strong> of ${biz}. Use the distance checker in the booking form to verify your address. Addresses outside the service area may be accommodated on a case-by-case basis — please contact us.</p>
+        <p style="margin-bottom:.8rem;"><strong>3. Pricing</strong><br>
+        One-way (pickup OR dropoff): <strong>$${oneWay}</strong><br>
+        Round trip (pickup AND dropoff): <strong>$${roundTrip}</strong><br>
+        Courier fees are charged per trip, not per dog. Up to <strong>${maxDogs} dogs</strong> from the same family may share one courier trip at no extra per-dog charge.</p>
+        <p style="margin-bottom:.8rem;"><strong>4. Scheduling & Cancellation</strong><br>
+        Courier trips must be booked at least 24 hours in advance. Cancellations made less than 24 hours before the scheduled pickup are subject to a 50% courier fee. No-shows are charged the full courier fee.</p>
+        <p style="margin-bottom:.8rem;"><strong>5. Pet Safety</strong><br>
+        All dogs must be leashed and ready at the door at the scheduled pickup time. Our courier will wait up to 5 minutes. Aggressive or un-leashed dogs may be refused transport. Dogs must be current on all required vaccinations.</p>
+        <p style="margin-bottom:.8rem;"><strong>6. Liability</strong><br>
+        ${biz} exercises reasonable care during transport. However, we are not liable for incidents caused by pet behavior (e.g., escape, aggression). Pet owners are responsible for ensuring their dog is comfortable with car travel.</p>
+      </div>
+      <button onclick="document.getElementById('np-courier-tc-modal').remove()"
+        style="width:100%;padding:.7rem;background:#7B4015;color:white;border:none;border-radius:12px;font-size:.9rem;font-weight:700;cursor:pointer;margin-top:.5rem;">
+        I Understand
+      </button>
+    </div>`;
+  document.body.appendChild(ov);
+}
 function updateBookingPrice(){
   const preview=document.getElementById('price-preview');
   const lines=document.getElementById('price-lines');
@@ -6473,6 +6777,14 @@ function updateBookingPrice(){
   stayEls.forEach(el=>{html+=`<div>+ ${el.value}: $${el.dataset.price}</div>`;});
   qtyEls.forEach(el=>{const qty=+el.value||0;if(qty>0)html+=`<div>+ ${el.dataset.svcname}: ${qty} × $${el.dataset.price} = $${qty*(+el.dataset.price||0)}</div>`;});
   total+=addonTotal;
+
+  // Courier fee
+  const _courierFee=getCourierPrice();
+  if(_courierFee>0){
+    const tripLabel=document.getElementById('bk-courier-trip')?.value==='roundtrip'?'Round trip':'One-way';
+    html+=`<div class="mt-1" style="color:#1E40AF;">🚗 Courier ${tripLabel}: $${_courierFee}</div>`;
+    total+=_courierFee;
+  }
 
   lines.innerHTML=html;
   totalEl.textContent=`Total: $${total.toFixed(2)}`;
@@ -7225,6 +7537,29 @@ async function submitBooking(e){
   });
   const notes=document.getElementById('bk-notes')?.value||'';
 
+  // ── COURIER VALIDATION ──────────────────────────────────────────────────
+  const _courierTrip=document.getElementById('bk-courier-trip')?.value||'none';
+  let _courierFee=0;
+  let _courierAddress='';
+  if(_courierTrip!=='none'&&courierEnabled()&&courierAllowedServices().includes(_bookingMain)){
+    _courierAddress=document.getElementById('bk-courier-address')?.value?.trim()||'';
+    if(!_courierAddress){showToast('Please enter your pickup/dropoff address for the courier service.','#EF4444');return;}
+    // Check T&C agreement
+    const tcAgree=document.getElementById('bk-courier-tc-agree')?.checked;
+    if(!tcAgree){showToast('Please agree to the Courier Service Terms & Conditions.','#EF4444');return;}
+    // Check distance result
+    if(!_courierDistanceResult||!_courierDistanceResult.ok){
+      if(!_courierDistanceResult){showToast('Please click "Check Distance" to verify your address is in our service area.','#EF4444');return;}
+      if(!_courierDistanceResult.ok){showToast('Your address is outside our courier service area. Please contact us for special arrangements.','#EF4444');return;}
+    }
+    // Check max dogs
+    const maxDogs=+(state.settings.courierMaxDogs||3);
+    if(_familyDogCount>maxDogs){showToast(`Maximum ${maxDogs} dogs per courier trip.`,'#EF4444');return;}
+    _courierFee=getCourierPrice();
+    addonTotal+=_courierFee;
+    addonNames.push(`Courier (${_courierTrip==='roundtrip'?'round trip':'one-way'})`);
+  }
+
   // ── PRE-SUBMIT CANCELLATION POLICY WARNING ─────────────────────────────
   // Only for bookings with a specific date (boarding / daycare single / combo)
   // Skip for packages (no date yet) and custom services
@@ -7305,7 +7640,7 @@ async function submitBooking(e){
       checkIn:ci,checkOut:co,nights,status:'confirmed',service:svcLabel,
       addons:addonNames.join(','),price:totalPrice,
       paymentStatus:'deposit_due',depositAmount:depositAmt,squarePaymentId:'',checkoutUrl:'',
-      createdBy:bookingCreator(),familyDogIds:_familyDogCount>1?_familyDogIds.join(','):''};
+      createdBy:bookingCreator(),familyDogIds:_familyDogCount>1?_familyDogIds.join(','):'',courierTrip:_courierTrip||'none',courierAddress:_courierAddress||''};
     bookings.push(newBk);
     state.showModal=null;render();
     showToast(`🏡 Boarding booked for ${dogName} · ${fmtDateShort(ci)} – ${fmtDateShort(co)} (${nights} ${nights===1?'night':'nights'})`);
@@ -7380,7 +7715,7 @@ async function submitBooking(e){
       const bTotal=Math.round(familyPrice(perDogBoard,_familyDogCount)*100)/100;
       bookings.push({id:nextId(bookings),clientId,dogId,dogName,clientName,
         checkIn:bCi,checkOut:bCo,nights,status:'confirmed',service:boardingSvc?.name||'Boarding',
-        addons:'',price:bTotal,createdBy:bookingCreator(),familyDogIds:_familyDogCount>1?_familyDogIds.join(','):''});
+        addons:'',price:bTotal,createdBy:bookingCreator(),familyDogIds:_familyDogCount>1?_familyDogIds.join(','):'',courierTrip:_courierTrip||'none',courierAddress:_courierAddress||''});
       boardingBooked=true;
     }
     // Daycare portion: all entries in _dailySchedule
@@ -7400,7 +7735,7 @@ async function submitBooking(e){
       const dcSvc=typeSet.length===1?typeSet[0]:'Mixed';
       bookings.push({id:nextId(bookings),clientId,dogId,dogName,clientName,
         checkIn:dcFirst,checkOut:dcLast,nights:dcDates.length,status:'confirmed',
-        service:dcSvc,dailySchedule:dcSched,addons:addonNames.join(','),price:dcTotal+addonTotal,createdBy:bookingCreator(),familyDogIds:_familyDogCount>1?_familyDogIds.join(','):''});
+        service:dcSvc,dailySchedule:dcSched,addons:addonNames.join(','),price:dcTotal+addonTotal,createdBy:bookingCreator(),familyDogIds:_familyDogCount>1?_familyDogIds.join(','):'',courierTrip:_courierTrip||'none',courierAddress:_courierAddress||''});
     } else if(boardingBooked){
       // No daycare days — attach add-ons to the boarding booking
       const lastBk=bookings[bookings.length-1];
@@ -7436,7 +7771,7 @@ async function submitBooking(e){
     const totalPrice=basePrice+addonTotal;
     const customBk={id:nextId(bookings),clientId,dogId,dogName,clientName,
       checkIn:dt,checkOut:dt,nights:1,status:'confirmed',service:svcName,
-      addons:addonNames.join(','),price:totalPrice,createdBy:bookingCreator(),familyDogIds:_familyDogCount>1?_familyDogIds.join(','):''};
+      addons:addonNames.join(','),price:totalPrice,createdBy:bookingCreator(),familyDogIds:_familyDogCount>1?_familyDogIds.join(','):'',courierTrip:_courierTrip||'none',courierAddress:_courierAddress||''};
     bookings.push(customBk);
     state.showModal=null;render();
     showToast(`✨ ${svcName} booked for ${dogName} on ${fmtDate(dt)}!`);
@@ -7472,7 +7807,7 @@ async function submitBooking(e){
     dailySchedule:{..._dailySchedule},
     addons:addonNames.join(','),price:totalPrice,
     paymentStatus:(state.role==='client'||state.adminViewAsClient)?'checkout_pending':'',
-    checkoutUrl:'',createdBy:bookingCreator(),familyDogIds:_familyDogCount>1?_familyDogIds.join(','):''};
+    checkoutUrl:'',createdBy:bookingCreator(),familyDogIds:_familyDogCount>1?_familyDogIds.join(','):'',courierTrip:_courierTrip||'none',courierAddress:_courierAddress||''};
   bookings.push(dcBk);
   state.showModal=null;render();
   const dateStr=ci===co?fmtDate(ci):`${fmtDateShort(ci)} – ${fmtDateShort(co)} (${days} ${days===1?'day':'days'})`;
@@ -8101,6 +8436,16 @@ async function saveSettings(){
   const asUrl=v('set-apps-script-url')?.trim();if(asUrl!==undefined){state.settings.appsScriptUrl=asUrl;CONFIG.APPS_SCRIPT_URL=asUrl;try{if(asUrl)localStorage.setItem('np_apps_script_url',asUrl);else localStorage.removeItem('np_apps_script_url');}catch(e){}}
   const kpw=v('set-kiosk-password');if(kpw!==undefined)state.settings.kioskPassword=kpw.trim();
   const mpd=v('set-multi-pet-discount');if(mpd!==undefined)state.settings.multiPetDiscount=+mpd||10;
+  // Courier settings
+  state.settings.courierEnabled=document.getElementById('set-courier-enabled')?.checked!==false;
+  const ba=v('set-business-address')?.trim();if(ba!==undefined)state.settings.businessAddress=ba;
+  const cr=v('set-courier-radius');if(cr!==undefined)state.settings.courierRadiusMiles=+cr||15;
+  const cmd=v('set-courier-max-dogs');if(cmd!==undefined)state.settings.courierMaxDogs=+cmd||3;
+  const cow=v('set-courier-oneway');if(cow!==undefined)state.settings.courierOneWayPrice=+cow||25;
+  const crt=v('set-courier-roundtrip');if(crt!==undefined)state.settings.courierRoundTripPrice=+crt||40;
+  const cd=v('set-courier-days')?.trim();if(cd!==undefined)state.settings.courierDays=cd;
+  const cpw=v('set-courier-pickup')?.trim();if(cpw!==undefined)state.settings.courierPickupWindow=cpw;
+  const cdw=v('set-courier-dropoff')?.trim();if(cdw!==undefined)state.settings.courierDropoffWindow=cdw;
   const dfid=v('set-drive-folder')?.trim();
   if(dfid!==undefined){
     const changed=dfid!==state.settings.nigelsDriveFolderId;
