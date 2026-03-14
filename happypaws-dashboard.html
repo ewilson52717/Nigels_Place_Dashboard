@@ -2101,7 +2101,7 @@ async function loadClientDataViaProxy(){
       }
     });
 
-    // Apply settings subset from proxy (includes API keys needed for client features)
+    // Apply safe settings subset from proxy
     const s=result.settings||{};
     if(s.businessName)state.settings.businessName=String(s.businessName);
     if(s.dailyCapacity)state.settings.dailyCapacity=+s.dailyCapacity||state.settings.dailyCapacity;
@@ -2110,10 +2110,6 @@ async function loadClientDataViaProxy(){
     if(s.groomingAddOn!==undefined)state.settings.groomingAddOn=+s.groomingAddOn||0;
     if(s.venmoHandle)state.settings.venmoHandle=String(s.venmoHandle);
     if(s.squareLink)state.settings.squareLink=String(s.squareLink);
-    // Square payment keys — needed for client-side Pay Now checkout link generation
-    if(s.squareApiKey)state.settings.squareApiKey=String(s.squareApiKey);
-    if(s.squareLocationId)state.settings.squareLocationId=String(s.squareLocationId);
-    if(s.squareSandbox!==undefined)state.settings.squareSandbox=(s.squareSandbox===true||s.squareSandbox==='true');
     if(s.capacityOverrides){try{state.settings.capacityOverrides=JSON.parse(s.capacityOverrides)||{};}catch(e){}}
     if(s.requiredVaccines){try{const rv=JSON.parse(s.requiredVaccines);if(Array.isArray(rv))state.settings.requiredVaccines=rv;}catch(e){}}
     // Accept API keys from server — only set if not already configured locally so admin
@@ -9012,25 +9008,45 @@ function buildUnpaidBanner(){
   </style>`;
 }
 
-// Called from the unpaid banner when no checkoutUrl exists yet — generates one on the fly via Square.
+// Called from the unpaid banner / booking cards when no checkoutUrl exists yet.
+// Routes through the Apps Script proxy (server-side) to avoid CORS issues with Square API.
+// Falls back to direct API call if in admin mode (admin has sheet access, not CORS-restricted
+// because admin booking paths use the same createSquareCheckoutLink).
 async function bannerPayNow(bookingId, amountDue){
   const bk=bookings.find(b=>String(b.id)===String(bookingId));
   if(!bk){showToast('Booking not found.','#EF4444');return;}
   // If a checkout URL was stored in the meantime, just open it
   if(bk.checkoutUrl){window.open(bk.checkoutUrl,'_blank');return;}
-  const btn=document.querySelector('#np-unpaid-alert button');
+  const btn=event?.target||document.querySelector('#np-unpaid-alert button');
   const origText=btn?.innerHTML||'';
   if(btn){btn.innerHTML='⏳ Creating link...';btn.disabled=true;}
   try{
     const svc=(bk.service||'Daycare');
     const label=`${bk.dogName} – ${svc}`;
-    const checkoutUrl=await createSquareCheckoutLink(bk, amountDue, label);
+    let checkoutUrl='';
+    // Client mode: use the proxy (server-side Square call — no CORS)
+    if(state.currentClientId&&state.accessToken){
+      const res=await proxyClientWrite('createCheckoutLink',{
+        bookingId:String(bk.id),
+        amountDollars:amountDue,
+        label:label
+      });
+      checkoutUrl=res.checkoutUrl||'';
+    }else{
+      // Admin mode: direct API call (runs in admin context)
+      checkoutUrl=await createSquareCheckoutLink(bk, amountDue, label);
+    }
     if(checkoutUrl){
       bk.checkoutUrl=checkoutUrl;
       bk.paymentStatus='checkout_pending';
-      try{await persistBookings();}catch(e){}
+      // Persist the checkout URL so it's available next time
+      if(state.currentClientId&&state.accessToken){
+        try{await proxyClientWrite('updateBooking',{bookingId:String(bk.id),checkoutUrl,paymentStatus:'checkout_pending'});}catch(e){}
+      }else{
+        try{await persistBookings();}catch(e){}
+      }
       window.open(checkoutUrl,'_blank');
-      render(); // re-render so banner now has the direct link
+      render();
     }else{
       showToast('Could not create payment link — check Square settings.','#F97316');
       if(btn){btn.innerHTML=origText;btn.disabled=false;}

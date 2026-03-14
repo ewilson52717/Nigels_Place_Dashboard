@@ -311,8 +311,7 @@ function getClientData(ss, req, callerEmail) {
   // geminiApiKey and googleMapsApiKey are included so clients can use AI features
   // (vaccine scanning, vet lookup) when accessing the portal from their own browser.
   const SAFE_KEYS = ['businessName','dailyCapacity','fullDayRate','halfDayRate',
-                     'groomingAddOn','venmoHandle','squareLink','squareApiKey',
-                     'squareLocationId','squareSandbox','capacityOverrides',
+                     'groomingAddOn','venmoHandle','squareLink','capacityOverrides',
                      'requiredVaccines','geminiApiKey','googleMapsApiKey','multiPetDiscount',
                      'courierConfig'];
   const settings = {};
