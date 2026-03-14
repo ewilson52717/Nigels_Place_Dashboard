@@ -312,7 +312,7 @@ function getClientData(ss, req, callerEmail) {
   // (vaccine scanning, vet lookup) when accessing the portal from their own browser.
   const SAFE_KEYS = ['businessName','dailyCapacity','fullDayRate','halfDayRate',
                      'groomingAddOn','venmoHandle','squareLink','capacityOverrides',
-                     'requiredVaccines','geminiApiKey','googleMapsApiKey'];
+                     'requiredVaccines','geminiApiKey','googleMapsApiKey','multiPetDiscount'];
   const settings = {};
   if (settingsSheet) {
     const settingRows = settingsSheet.getDataRange().getValues();
@@ -652,9 +652,9 @@ function addBooking(ss, req, callerEmail) {
   }
   const safeId = Math.max(Number(booking.id) || 0, maxId + 1);
 
-  // Append using the 16-column schema: id, clientId, dogId, dogName, clientName,
+  // Append using the 18-column schema: id, clientId, dogId, dogName, clientName,
   // checkIn, checkOut, nights, status, service, addons, price,
-  // paymentStatus, depositAmount, squarePaymentId, checkoutUrl
+  // paymentStatus, depositAmount, squarePaymentId, checkoutUrl, createdBy, familyDogIds
   bookingsSheet.appendRow([
     safeId,
     booking.clientId,
@@ -672,6 +672,8 @@ function addBooking(ss, req, callerEmail) {
     booking.depositAmount   || 0,
     booking.squarePaymentId || '',
     booking.checkoutUrl     || '',
+    booking.createdBy       || 'client',
+    booking.familyDogIds    || '',
   ]);
 
   return respond({ ok: true, id: safeId });

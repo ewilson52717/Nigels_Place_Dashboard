@@ -28,6 +28,26 @@
   - Forfeiture policy for unpaid bookings
   - Updated both the in-app terms modal and the standalone `terms-of-service.html`
 
+- **Multi-dog family booking** — Clients with multiple dogs can select 2–3 dogs for a single booking that shares 1 kennel/capacity slot:
+  - Multi-dog checkbox UI replaces single-dog dropdown when client has >1 active dog
+  - Max 3 dogs per family booking (shared kennel limit)
+  - `familyDogIds` stored as comma-separated string on the booking record (column R)
+  - Family pricing applied across all service paths: boarding, daycare, combo, and custom
+  - Vaccine check validates all selected dogs before booking
+  - Price preview updates live as dogs are checked/unchecked
+  - Day modal shows "🐾 family" tag on family bookings
+  - `booksForDate()` already counts family bookings as 1 slot (single record)
+
+- **Multi-pet discount** — First dog pays full price, additional dogs get a configurable % off:
+  - `familyPrice(basePricePerDog, dogCount)` helper calculates family total
+  - Default discount: 10% off each additional dog
+  - Admin-configurable via Settings → Multi-Pet Family Booking → "Discount for Additional Dogs (%)"
+  - `multiPetDiscount` setting persisted in Settings sheet (row 19) and synced to clients via proxy
+
+- **Booking detail enhancements for client day modal** — Clients now see service type, icon, price, date range, and add-ons in the calendar day modal (previously only dog name was shown)
+
+- **Confirm & Pay Now flow refinement** — Client-initiated bookings show "Confirm & Pay Now" overlay; persistent unpaid banner reserved for admin-created (phone/manual) bookings only via `createdBy` tracking
+
 ---
 
 ## [2026-03-13] — Commit e58eddb

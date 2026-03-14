@@ -277,6 +277,7 @@ const state={
     appsScriptUrl:'', // Google Apps Script proxy URL — lets new clients write to the sheet securely
     kioskPassword:'', // if set, kiosk ?kiosk URL requires this password before showing the lobby
     capacityOverrides:{}, // { 'YYYY-MM-DD': number } — per-date overrides (0 = closed/blocked)
+    multiPetDiscount:10, // % discount for 2nd/3rd dog in family booking (default 10%)
     requiredVaccines:['Rabies','DHPP','Bordetella'], // Required vaccines — all dogs must have these current
     manualVetClinics:[], // [{id,name,phone,website,notes}] — manually added partner clinics
   },
@@ -622,6 +623,8 @@ function requestVaccInfoLinks(cl,dog){
   return{smsHref,emailHref};
 }
 function nextId(arr){return arr.length>0?Math.max(...arr.map(x=>x.id))+1:1;}
+// Returns 'client' or 'admin' depending on who is creating the booking
+function bookingCreator(){return(state.role==='client'&&!state.adminViewAsClient)?'client':'admin';}
 function showToast(msg,color='#059669'){
   const t=document.createElement('div');
   t.style.cssText=`position:fixed;bottom:1.25rem;right:1.25rem;background:${color};color:white;padding:.75rem 1.25rem;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.15);z-index:100;font-size:14px;animation:fadeUp .25s ease;`;
@@ -1575,7 +1578,7 @@ async function initSheetHeaders(){
   await Promise.all([
     writeRange('Clients!A1:E1', [['id','name','email','phone','photoConsent']]),
     writeRange('Dogs!A1:T1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit','deceased','vaccOverride','vetName','vetPhone','vetWebsite']]),
-    writeRange('Bookings!A1:L1',[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price']]),
+    writeRange('Bookings!A1:R1',[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price','paymentStatus','depositAmount','squarePaymentId','checkoutUrl','createdBy','familyDogIds']]),
     writeRange('Invoices!A1:K1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items','externalPaid','paymentNote']]),
     writeRange('Settings!A1:B17',[
       ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
@@ -1600,7 +1603,7 @@ async function ensurePackagesSheet(){
 }
 async function loadAllData(){
   const[cR,dR,bR,iR,sR]=await Promise.all([
-    readRangeSafe('Clients!A2:E'),readRangeSafe('Dogs!A2:T'),readRangeSafe('Bookings!A2:P'),
+    readRangeSafe('Clients!A2:E'),readRangeSafe('Dogs!A2:T'),readRangeSafe('Bookings!A2:R'),
     readRangeSafe('Invoices!A2:K'),readRangeSafe('Settings!A2:B'),
   ]);
   const svR=await readRangeSafe('Services!A2:F');
@@ -1649,7 +1652,7 @@ async function loadAllData(){
       bookings.push({id:+r[0],clientId:+r[1],dogId:+r[2],dogName:String(r[3]||''),clientName:String(r[4]||''),
         checkIn:ci5,checkOut:sheetDateStr(r[6])||ci5,nights:+r[7]||1,status:String(r[8]||'confirmed'),
         service:String(r[9]||'Full Day'),addons:String(r[10]||''),price:+r[11]||0,
-        paymentStatus:String(r[12]||''),depositAmount:+r[13]||0,squarePaymentId:String(r[14]||''),checkoutUrl:String(r[15]||'')});
+        paymentStatus:String(r[12]||''),depositAmount:+r[13]||0,squarePaymentId:String(r[14]||''),checkoutUrl:String(r[15]||''),createdBy:String(r[16]||''),familyDogIds:String(r[17]||'')});
     }
   });
   // ── Orphan booking cleanup ──────────────────────────────────────────────────
@@ -1689,6 +1692,7 @@ async function loadAllData(){
     else if(k==='capacityOverrides'){try{state.settings.capacityOverrides=JSON.parse(v)||{};}catch(e){}}
     else if(k==='requiredVaccines'){try{const rv=JSON.parse(v);if(Array.isArray(rv))state.settings.requiredVaccines=rv;}catch(e){}}
     else if(k==='manualVetClinics'){try{const mv=JSON.parse(v);if(Array.isArray(mv))state.settings.manualVetClinics=mv;}catch(e){}}
+    else if(k==='multiPetDiscount')state.settings.multiPetDiscount=+v||10;
   });
   services.length=0;
   if(svR&&svR.length>0){
@@ -1713,11 +1717,11 @@ async function persistPackages(){
 }
 async function persistBookings(){
   if(state.mode!=='live')return;
-  const rows=[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price','paymentStatus','depositAmount','squarePaymentId','checkoutUrl'],
-    ...bookings.map(b=>[b.id,b.clientId,b.dogId,b.dogName,b.clientName,b.checkIn,b.checkOut,b.nights,b.status,b.service,b.addons||'',b.price,b.paymentStatus||'',b.depositAmount||0,b.squarePaymentId||'',b.checkoutUrl||''])];
+  const rows=[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price','paymentStatus','depositAmount','squarePaymentId','checkoutUrl','createdBy','familyDogIds'],
+    ...bookings.map(b=>[b.id,b.clientId,b.dogId,b.dogName,b.clientName,b.checkIn,b.checkOut,b.nights,b.status,b.service,b.addons||'',b.price,b.paymentStatus||'',b.depositAmount||0,b.squarePaymentId||'',b.checkoutUrl||'',b.createdBy||'',b.familyDogIds||''])];
   // Write first (data always present), then clear any leftover rows below
-  await writeRange(`Bookings!A1:P${rows.length}`,rows);
-  if(rows.length<9999)await clearRange(`Bookings!A${rows.length+1}:P9999`);
+  await writeRange(`Bookings!A1:R${rows.length}`,rows);
+  if(rows.length<9999)await clearRange(`Bookings!A${rows.length+1}:R9999`);
 }
 async function persistClients(){
   if(state.mode!=='live')return;
@@ -2072,7 +2076,7 @@ async function loadClientDataViaProxy(){
         bookings.push({id:+r[0],clientId:+r[1],dogId:+r[2],dogName:String(r[3]||''),clientName:String(r[4]||''),
           checkIn:ci5,checkOut:sheetDateStr(r[6])||ci5,nights:+r[7]||1,status:String(r[8]||'confirmed'),
           service:String(r[9]||'Full Day'),addons:String(r[10]||''),price:+r[11]||0,
-          paymentStatus:String(r[12]||''),depositAmount:+r[13]||0,squarePaymentId:String(r[14]||''),checkoutUrl:String(r[15]||'')});
+          paymentStatus:String(r[12]||''),depositAmount:+r[13]||0,squarePaymentId:String(r[14]||''),checkoutUrl:String(r[15]||''),createdBy:String(r[16]||''),familyDogIds:String(r[17]||'')});
       }
     });
 
@@ -2091,6 +2095,7 @@ async function loadClientDataViaProxy(){
     // overrides from localStorage take precedence, but clients get keys via proxy.
     if(s.geminiApiKey&&!state.settings.geminiApiKey)state.settings.geminiApiKey=String(s.geminiApiKey);
     if(s.googleMapsApiKey&&!state.settings.googleMapsApiKey)state.settings.googleMapsApiKey=String(s.googleMapsApiKey);
+    if(s.multiPetDiscount!==undefined)state.settings.multiPetDiscount=+s.multiPetDiscount||10;
 
     // Populate services from proxy response so clients see correct booking options
     // (including any custom "Other" services and add-ons configured by the admin).
@@ -2131,7 +2136,7 @@ async function persistSettings(){
   const overridesJson=JSON.stringify(state.settings.capacityOverrides||{});
   const vaccinesJson=JSON.stringify(state.settings.requiredVaccines||[]);
   const manualClinicsJson=JSON.stringify(state.settings.manualVetClinics||[]);
-  await writeRange('Settings!A1:B18',[
+  await writeRange('Settings!A1:B19',[
     ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
     ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
     ['groomingAddOn',state.settings.groomingAddOn],['venmoHandle',state.settings.venmoHandle||''],
@@ -2145,6 +2150,7 @@ async function persistSettings(){
     ['capacityOverrides',overridesJson],
     ['requiredVaccines',vaccinesJson],
     ['manualVetClinics',manualClinicsJson],
+    ['multiPetDiscount',state.settings.multiPetDiscount||10],
   ]);
 }
 async function persistServices(){
@@ -3846,6 +3852,13 @@ function buildSettingsView(){
           <p class="text-xs text-amber-800 flex-1 min-w-0">For <strong>Days Off &amp; Capacity</strong>, head to the <button onclick="setView('calendar')" class="underline font-semibold text-amber-900 hover:text-amber-700">Calendar section</button> and tap <strong>Days Off ▾</strong> at the top.</p>
         </div>
       </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <h2 class="font-semibold text-gray-800 mb-1">🐾 Multi-Pet Family Booking</h2>
+        <p class="text-xs text-gray-400 mb-3">Clients with multiple dogs can book them together sharing 1 kennel slot (max 3). The first dog pays full price; additional dogs get a discount.</p>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Discount for Additional Dogs (%)</label>
+        <input id="set-multi-pet-discount" type="number" value="${state.settings.multiPetDiscount||10}" min="0" max="50" step="5" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+        <p class="text-xs text-gray-400 mt-1">Example: 10% means the 2nd &amp; 3rd dog each pay 90% of the per-dog rate.</p>
+      </div>
       <div class="bg-amber-50 rounded-xl p-4 border border-amber-100 text-sm text-amber-800">
         🛎️ Service rates are managed in the <button onclick="setView('services')" class="underline font-semibold">Services</button> section.
       </div>
@@ -4911,18 +4924,23 @@ function buildDayModal(ds){
         </div>
       </div>
       ${visibleBks.length>0?`<div class="space-y-1.5 mb-4 max-h-52 overflow-y-auto">
-        ${visibleBks.map(b=>`<div class="flex items-start gap-2.5 p-2.5 bg-gray-50 rounded-xl">
+        ${visibleBks.map(b=>{
+          const svcIcon=b.service&&b.service.toLowerCase().includes('board')?'🏡':b.service&&b.service.toLowerCase().includes('half')?'⛅':'☀️';
+          const svcLabel=b.service||'Daycare';
+          return`<div class="flex items-start gap-2.5 p-2.5 bg-gray-50 rounded-xl">
           <span class="text-lg mt-0.5">🐶</span>
           <div class="flex-1 min-w-0">
             <span class="text-sm font-semibold text-gray-700">${b.dogName}</span>
-            ${isAdm?`<span class="text-xs text-gray-400 ml-1.5">${b.clientName} · ${b.service}</span>`:''}
-            ${b.checkIn!==b.checkOut?`<div class="text-xs text-amber-700 mt-0.5">📅 ${fmtDateShort(b.checkIn)} → ${fmtDateShort(b.checkOut)} (${b.nights} days)</div>`:''}
-            ${b.addons?`<div class="text-xs text-gray-400">✨ ${b.addons}</div>`:''}
+            ${b.familyDogIds?'<span class="text-xs text-amber-600 ml-1">🐾 family</span>':''}
+            ${isAdm?`<span class="text-xs text-gray-400 ml-1.5">${b.clientName} · ${svcLabel}</span>`
+              :`<div class="text-xs text-gray-500 mt-0.5">${svcIcon} ${svcLabel}${b.price?` · <span class="font-semibold">$${(+b.price).toFixed(2)}</span>`:''}</div>`}
+            ${b.checkIn!==b.checkOut?`<div class="text-xs text-amber-700 mt-0.5">📅 ${fmtDateShort(b.checkIn)} → ${fmtDateShort(b.checkOut)} (${b.nights} ${b.nights===1?'night':'nights'})</div>`:''}
+            ${b.addons?`<div class="text-xs text-gray-400 mt-0.5">✨ ${b.addons}</div>`:''}
           </div>
           <div class="flex flex-col items-end gap-1">
-            ${isAdm?`<span class="text-sm text-gray-600 font-medium whitespace-nowrap">$${b.price}</span>`:''}
-            ${isAdm&&b.paymentStatus==='paid'?`<span class="text-xs font-semibold text-green-600">✓ Paid</span>`:''}
-            ${isAdm&&(b.paymentStatus==='deposit_paid')?`<span class="text-xs font-semibold text-blue-600">🔐 Deposit paid</span>`:''}
+            ${isAdm?'<span class="text-sm text-gray-600 font-medium whitespace-nowrap">$'+(+b.price).toFixed(2)+'</span>':''}
+            ${isAdm&&b.paymentStatus==='paid'?'<span class="text-xs font-semibold text-green-600">✓ Paid</span>':''}
+            ${isAdm&&(b.paymentStatus==='deposit_paid')?'<span class="text-xs font-semibold text-blue-600">🔐 Deposit paid</span>':''}
             ${isAdm&&(b.paymentStatus==='deposit_due'||b.paymentStatus==='checkout_pending')?(()=>{
               const ciDate=new Date((b.checkIn||'')+'T00:00:00');
               const daysUntil=isNaN(ciDate)?999:Math.round((ciDate-new Date(TODAY+'T00:00:00'))/864e5);
@@ -4933,13 +4951,13 @@ function buildDayModal(ds){
                 ?'<span class="text-xs font-bold text-red-600" style="animation:npBlinkIcon 2s ease-in-out infinite;">⚠️ At Risk — unpaid</span>'
                 :'<span class="text-xs font-semibold text-amber-600">💳 Awaiting payment</span>';
             })():''}
-            ${isAdm?`<button onclick="cancelBooking(${b.id})" class="text-xs text-red-400 hover:text-red-600 whitespace-nowrap" title="Cancel booking">✕ Cancel</button>`:''}
-            ${!isAdm&&b.paymentStatus==='paid'?`<span class="text-xs font-semibold text-green-600">✓ Paid</span>`:''}
-            ${!isAdm&&b.paymentStatus==='deposit_paid'?`<span class="text-xs font-semibold text-blue-600">🔐 Deposit paid</span>`:''}
-            ${!isAdm&&(b.paymentStatus==='deposit_due'||b.paymentStatus==='checkout_pending')&&b.checkoutUrl?`<a href="${b.checkoutUrl}" target="_blank" class="text-xs font-semibold text-white px-2 py-1 rounded-lg whitespace-nowrap" style="background:#7B4015">💳 Pay Now</a>`:''}
-            ${!isAdm?`<button onclick="closeModal();showClientCancelConfirm(${b.id})" class="text-xs text-red-400 hover:text-red-600 whitespace-nowrap mt-1" title="Cancel booking">✕ Cancel</button>`:''}
+            ${isAdm?'<button onclick="cancelBooking('+b.id+')" class="text-xs text-red-400 hover:text-red-600 whitespace-nowrap" title="Cancel booking">✕ Cancel</button>':''}
+            ${!isAdm&&b.paymentStatus==='paid'?'<span class="text-xs font-semibold text-green-600">✓ Paid</span>':''}
+            ${!isAdm&&b.paymentStatus==='deposit_paid'?'<span class="text-xs font-semibold text-blue-600">🔐 Deposit paid</span>':''}
+            ${!isAdm&&(b.paymentStatus==='deposit_due'||b.paymentStatus==='checkout_pending')&&b.checkoutUrl?'<a href="'+b.checkoutUrl+'" target="_blank" class="text-xs font-semibold text-white px-2 py-1 rounded-lg whitespace-nowrap" style="background:#7B4015">💳 Pay Now</a>':''}
+            ${!isAdm?'<button onclick="closeModal();showClientCancelConfirm('+b.id+')" class="text-xs text-red-400 hover:text-red-600 whitespace-nowrap mt-1" title="Cancel booking">✕ Cancel</button>':''}
           </div>
-        </div>`).join('')}</div>`
+        </div>`;}).join('')}</div>`
         :!isAdm&&!isClosed&&!full?''  /* client: no own bookings — just fall through to book button */
         :`<p class="text-gray-300 text-sm text-center py-4 mb-4">No bookings yet.</p>`}
       ${(()=>{
@@ -5073,6 +5091,7 @@ function buildBookingModal(selectedDate){
   const isClient=state.role==='client'||state.adminViewAsClient;
   const minBookDate=isClient?MIN_BOOKING_DATE:TODAY;
   const cl=isClient?clients.find(c=>c.id===state.currentClientId):null;
+  const activeDogs=(cl?.dogs||[]).filter(d=>!d.deceased);
   const activeAddons=services.filter(s=>s.type==='addon'&&s.active);
   // Extra base services that aren't Full Day / Half Day / Boarding — shown as 4th "Other" tile
   const extraSvcs=services.filter(s=>s.type==='base'&&s.active&&!['full day','half day','boarding'].some(n=>s.name.toLowerCase().includes(n)));
@@ -5126,10 +5145,21 @@ function buildBookingModal(selectedDate){
           </div>
         </div>`
         :`<div>
-          <label class="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Pet</label>
+          <label class="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Pet${activeDogs.length>1?'s':''}</label>
+          ${activeDogs.length>1?`
+          <div class="space-y-1.5" id="bk-dog-checkboxes">
+            ${activeDogs.map((d,i)=>`<label class="flex items-center gap-2.5 px-3 py-2 rounded-xl border border-gray-200 cursor-pointer hover:bg-amber-50 transition-colors">
+              <input type="checkbox" name="bk-dogs" value="${d.id}" ${i===0?'checked':''} onchange="updateFamilyBookingUI()" class="w-4 h-4 rounded accent-amber-700">
+              <span class="text-sm font-medium text-gray-700">${d.name}</span>
+              <span class="text-xs text-gray-400">${d.breed||'Mixed'}</span>
+            </label>`).join('')}
+            <div id="bk-family-info" class="text-xs text-amber-700 mt-1 px-1" style="display:none;"></div>
+          </div>
+          <input type="hidden" id="bk-dog" value="${activeDogs[0]?.id||''}">
+          `:`
           <select id="bk-dog" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white" onchange="checkDogVaccWarning()">
-            ${(cl?.dogs||[]).filter(d=>!d.deceased).map(d=>`<option value="${d.id}">${d.name} (${d.breed})</option>`).join('')||'<option>No active pets on file</option>'}
-          </select>
+            ${activeDogs.map(d=>`<option value="${d.id}">${d.name} (${d.breed})</option>`).join('')||'<option>No active pets on file</option>'}
+          </select>`}
           ${pkgBalance>0?`<div class="flex items-center gap-2 mt-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
             🎫 You have <strong class="mx-1">${pkgBalance} session${pkgBalance===1?'':'s'}</strong> in your package.
           </div>`:''}
@@ -6259,6 +6289,48 @@ function stepAddon(inputId,delta){
   el.value=Math.max(0,(+el.value||0)+delta);
   updateBookingPrice();
 }
+// Returns array of selected dog IDs for family booking (multi-dog checkboxes)
+function getSelectedDogIds(){
+  const checks=[...document.querySelectorAll('input[name="bk-dogs"]:checked')];
+  if(checks.length>0)return checks.map(c=>+c.value);
+  const sel=document.getElementById('bk-dog');
+  return sel?[+sel.value]:[];
+}
+// Returns the multi-pet discount rate. First dog = full price, additional dogs get % off.
+function multiPetDiscount(){return+(state.settings.multiPetDiscount||10);}
+// Calculate price for N dogs: first dog full, others discounted
+function familyPrice(basePricePerDog,dogCount){
+  if(dogCount<=1)return basePricePerDog;
+  const disc=multiPetDiscount()/100;
+  return basePricePerDog+(dogCount-1)*basePricePerDog*(1-disc);
+}
+// Update the family booking info badge when dog checkboxes change
+function updateFamilyBookingUI(){
+  const ids=getSelectedDogIds();
+  const info=document.getElementById('bk-family-info');
+  // Also update the hidden bk-dog field to the first selected dog (for compatibility)
+  const hiddenDog=document.getElementById('bk-dog');
+  if(hiddenDog&&ids.length>0)hiddenDog.value=ids[0];
+  if(!info)return;
+  if(ids.length>3){
+    // Max 3 dogs per kennel
+    info.style.display='block';
+    info.innerHTML='<span class="text-red-600 font-semibold">⚠️ Maximum 3 dogs per family booking (shared kennel limit)</span>';
+    // Uncheck the last one
+    const checks=[...document.querySelectorAll('input[name="bk-dogs"]:checked')];
+    if(checks.length>3)checks[checks.length-1].checked=false;
+    return;
+  }
+  if(ids.length>1){
+    const disc=multiPetDiscount();
+    info.style.display='block';
+    info.innerHTML=`🐾 <strong>Family booking: ${ids.length} dogs</strong> sharing 1 kennel slot · ${disc}% off additional pet${ids.length>2?'s':''}`;
+  }else{
+    info.style.display='none';
+  }
+  updateBookingPrice();
+  checkDogVaccWarning();
+}
 function updateBookingPrice(){
   const preview=document.getElementById('price-preview');
   const lines=document.getElementById('price-lines');
@@ -6267,6 +6339,11 @@ function updateBookingPrice(){
 
   let html='';
   let total=0;
+  const _dogIds=getSelectedDogIds();
+  const _dogCount=_dogIds.length||1;
+  const _disc=multiPetDiscount();
+  const _cl=clients.find(c=>c.id===state.currentClientId);
+  const _dogNames=_dogIds.map(id=>{const d=(_cl?.dogs||[]).find(x=>x.id===id);return d?d.name:'Dog';});
 
   if(_bookingMain==='boarding'){
     // Boarding: price from boarding service, nights = checkout - checkin (not +1)
@@ -6277,8 +6354,13 @@ function updateBookingPrice(){
     const boardingRate=boardingSvc?.price||state.settings.fullDayRate||55;
     const a=new Date(ci+'T00:00:00'),b=new Date(co+'T00:00:00');
     const nights=Math.max(0,Math.round((b-a)/864e5));
-    const baseTotal=nights*boardingRate;
-    html+=`<div>🏡 ${nights} ${nights===1?'night':'nights'} boarding · $${boardingRate}/night = $${baseTotal}</div>`;
+    const perDogTotal=nights*boardingRate;
+    const baseTotal=Math.round(familyPrice(perDogTotal,_dogCount)*100)/100;
+    html+=`<div>🏡 ${nights} ${nights===1?'night':'nights'} boarding · $${boardingRate}/night</div>`;
+    if(_dogCount>1){
+      html+=`<div class="text-xs text-amber-700">🐾 ${_dogNames.join(', ')} (${_dogCount} dogs) · 1st dog: $${perDogTotal} · ${_dogCount-1} more at ${_disc}% off</div>`;
+    }
+    html+=`<div class="font-medium">Subtotal: $${baseTotal.toFixed(2)}</div>`;
     const deposit=Math.ceil(baseTotal*0.25*100)/100;
     html+=`<div class="mt-1 font-semibold" style="color:#7B4015;">🔐 25% deposit due now: <strong>$${deposit.toFixed(2)}</strong></div>`;
     html+=`<div style="color:#9CA3AF;font-size:.7rem;">Remaining $${(baseTotal-deposit).toFixed(2)} due at check-in</div>`;
@@ -6293,9 +6375,14 @@ function updateBookingPrice(){
       const boardingRate=boardingSvc?.price||state.settings.fullDayRate||55;
       const nights=Math.max(0,Math.round((new Date(co+'T00:00:00')-new Date(ci+'T00:00:00'))/864e5));
       if(nights>0){
-        const bTotal=nights*boardingRate;
+        const perDogBoard=nights*boardingRate;
+        const bTotal=Math.round(familyPrice(perDogBoard,_dogCount)*100)/100;
         const bDeposit=Math.ceil(bTotal*0.25*100)/100;
-        html+=`<div>🏡 ${nights} ${nights===1?'night':'nights'} boarding · $${boardingRate}/night = $${bTotal}</div>`;
+        html+=`<div>🏡 ${nights} ${nights===1?'night':'nights'} boarding · $${boardingRate}/night</div>`;
+        if(_dogCount>1){
+          html+=`<div class="text-xs text-amber-700">🐾 ${_dogNames.join(', ')} (${_dogCount} dogs) · 1st dog: $${perDogBoard} · ${_dogCount-1} more at ${_disc}% off</div>`;
+        }
+        html+=`<div>Boarding subtotal: $${bTotal.toFixed(2)}</div>`;
         html+=`<div class="mt-0.5 font-semibold" style="color:#7B4015;">🔐 25% deposit due now: <strong>$${bDeposit.toFixed(2)}</strong></div>`;
         total+=bTotal;
         hasContent=true;
@@ -6303,14 +6390,20 @@ function updateBookingPrice(){
     }
     const dcEntries=Object.entries(_dailySchedule);
     if(dcEntries.length>0){
+      let dcPerDog=0;
       const counts={};
       dcEntries.forEach(([,svc])=>{counts[svc]=(counts[svc]||0)+1;});
       Object.entries(counts).forEach(([svcName,cnt])=>{
         const price=getServicePrice(svcName);
         const em=svcName.toLowerCase().includes('half')?'½':'☀️';
         html+=`<div>${em} ${cnt} ${svcName} ${cnt===1?'day':'days'} · $${price}/day = $${cnt*price}</div>`;
-        total+=cnt*price;
+        dcPerDog+=cnt*price;
       });
+      const dcTotal=Math.round(familyPrice(dcPerDog,_dogCount)*100)/100;
+      if(_dogCount>1){
+        html+=`<div class="text-xs text-amber-700">🐾 Family pricing: $${dcTotal.toFixed(2)} (${_disc}% off additional pets)</div>`;
+      }
+      total+=dcTotal;
       hasContent=true;
     }
     if(!hasContent){preview.classList.add('hidden');return;}
@@ -6322,8 +6415,12 @@ function updateBookingPrice(){
     const svcOpt=sel.options[sel.selectedIndex];
     const svcName=svcOpt?svcOpt.text.split(' — ')[0]:'Service';
     const svcPrice=parseFloat(sel.options[sel.selectedIndex]?.getAttribute('data-price'))||0;
+    const customBase=Math.round(familyPrice(svcPrice,_dogCount)*100)/100;
     html+=`<div>✨ ${svcName} · $${svcPrice}</div>`;
-    total=svcPrice;
+    if(_dogCount>1){
+      html+=`<div class="text-xs text-amber-700">🐾 ${_dogNames.join(', ')} (${_dogCount} dogs) · ${_disc}% off additional pets = $${customBase.toFixed(2)}</div>`;
+    }
+    total=customBase;
   } else if(_daycareMode==='package'){
     // Package purchase — no dates needed
     const tier=getDaycareTier(_sessionQty);
@@ -6336,6 +6433,7 @@ function updateBookingPrice(){
     // Daycare scheduled — use per-day schedule
     if(Object.keys(_dailySchedule).length===0){preview.classList.add('hidden');return;}
     // Group by service name for display
+    let dcPerDogTotal=0;
     const counts={};
     Object.values(_dailySchedule).forEach(svcName=>{counts[svcName]=(counts[svcName]||0)+1;});
     Object.entries(counts).forEach(([svcName,cnt])=>{
@@ -6343,14 +6441,20 @@ function updateBookingPrice(){
       const isBoarding=svcName.toLowerCase().includes('board');
       const em=isBoarding?'🏡':svcName.toLowerCase().includes('half')?'½':'☀️';
       html+=`<div>${em} ${cnt} ${svcName} ${cnt===1?(isBoarding?'night':'day'):(isBoarding?'nights':'days')} · $${price}/${isBoarding?'nt':'day'} = $${cnt*price}</div>`;
-      total+=cnt*price;
+      dcPerDogTotal+=cnt*price;
     });
+    const dcFamilyTotal=Math.round(familyPrice(dcPerDogTotal,_dogCount)*100)/100;
+    if(_dogCount>1){
+      html+=`<div class="text-xs text-amber-700">🐾 ${_dogNames.join(', ')} (${_dogCount} dogs) · 1st dog: $${dcPerDogTotal} · ${_dogCount-1} more at ${_disc}% off</div>`;
+      html+=`<div class="font-medium">Subtotal: $${dcFamilyTotal.toFixed(2)}</div>`;
+    }
+    total=dcFamilyTotal;
     // Daycare tier pricing applied based on total session count
     const tier=getDaycareTier(_sessionQty||Object.keys(_dailySchedule).length);
     if(tier.price<55){
       const days=Object.keys(_dailySchedule).length;
       const regularTotal=days*55;
-      if(total<regularTotal){
+      if(dcPerDogTotal<regularTotal){
         html+=`<div class="text-green-600">🎉 Package discount applied (${tier.label})!</div>`;
       }
     }
@@ -7070,19 +7174,28 @@ function clearDogDetail(){ state.selectedDogId=null; render(); }
 async function submitBooking(e){
   e.preventDefault();
 
-  // ── Resolve client / dog ───────────────────────────────────────────────
+  // ── Resolve client / dog(s) ─────────────────────────────────────────────
   let clientId,dogId,dogName,clientName;
+  let _familyDogIds=[];  // Multi-dog family booking: array of dog IDs sharing 1 slot
+  let _familyDogCount=1; // How many dogs in this family booking
   if(state.role==='client'||state.adminViewAsClient){
-    // Client path — also used when admin is previewing a client (adminViewAsClient=true),
-    // since #bk-client dropdown doesn't exist in the client modal layout.
     clientId=state.currentClientId;
-    dogId=parseInt(document.getElementById('bk-dog')?.value);
-    const cl=clients.find(c=>c.id===clientId),dg=cl?.dogs.find(d=>d.id===dogId);
-    dogName=dg?.name||'Pet';clientName=cl?.name||'Client';
-    const _vaccOvActive=(()=>{if(!dg?.vaccOverride)return false;try{const ov=JSON.parse(dg.vaccOverride);if(!ov||!ov.until)return false;if(ov.until==='indefinite')return true;return ov.until>=TODAY;}catch(e){return false;}})();
-    if(!_vaccOvActive&&dg&&vaccStatus(dg)==='expired'){
-      showToast(`🚩 ${dg.name}'s vaccines are expired. Please contact ${state.settings.businessName||"Nigel's Place"} to update records before booking.`,'#EF4444');
-      return;
+    const cl=clients.find(c=>c.id===clientId);
+    clientName=cl?.name||'Client';
+    // Multi-dog selection (family booking)
+    _familyDogIds=getSelectedDogIds();
+    _familyDogCount=_familyDogIds.length||1;
+    if(_familyDogCount>3){showToast('Maximum 3 dogs per family booking (shared kennel).','#EF4444');return;}
+    dogId=_familyDogIds[0]||parseInt(document.getElementById('bk-dog')?.value);
+    const dogObjs=_familyDogIds.map(id=>(cl?.dogs||[]).find(d=>d.id===id)).filter(Boolean);
+    dogName=dogObjs.length>1?dogObjs.map(d=>d.name).join(', '):dogObjs[0]?.name||'Pet';
+    // Vaccine check for ALL selected dogs
+    for(const dg of dogObjs){
+      const _vaccOvActive=(()=>{if(!dg?.vaccOverride)return false;try{const ov=JSON.parse(dg.vaccOverride);if(!ov||!ov.until)return false;if(ov.until==='indefinite')return true;return ov.until>=TODAY;}catch(e){return false;}})();
+      if(!_vaccOvActive&&vaccStatus(dg)==='expired'){
+        showToast(`🚩 ${dg.name}'s vaccines are expired. Please contact ${state.settings.businessName||"Nigel's Place"} to update records before booking.`,'#EF4444');
+        return;
+      }
     }
     const photoConsent=document.getElementById('bk-photo')?.checked||false;
     if(cl)cl.photoConsent=photoConsent;
@@ -7183,14 +7296,16 @@ async function submitBooking(e){
       const ds=d.toISOString().split('T')[0];
       if(booksForDate(ds).length>=getEffectiveCap(ds)){showToast(`${fmtDate(ds)} is fully booked!`,'#EF4444');return;}
     }
-    const baseTotal=nights*boardingRate;
+    const perDogBase=nights*boardingRate;
+    const baseTotal=Math.round(familyPrice(perDogBase,_familyDogCount)*100)/100;
     const totalPrice=baseTotal+addonTotal;
     const depositAmt=Math.ceil(baseTotal*0.25*100)/100;
     const svcLabel=boardingSvc?.name||'Boarding';
     const newBk={id:nextId(bookings),clientId,dogId,dogName,clientName,
       checkIn:ci,checkOut:co,nights,status:'confirmed',service:svcLabel,
       addons:addonNames.join(','),price:totalPrice,
-      paymentStatus:'deposit_due',depositAmount:depositAmt,squarePaymentId:'',checkoutUrl:''};
+      paymentStatus:'deposit_due',depositAmount:depositAmt,squarePaymentId:'',checkoutUrl:'',
+      createdBy:bookingCreator(),familyDogIds:_familyDogCount>1?_familyDogIds.join(','):''};
     bookings.push(newBk);
     state.showModal=null;render();
     showToast(`🏡 Boarding booked for ${dogName} · ${fmtDateShort(ci)} – ${fmtDateShort(co)} (${nights} ${nights===1?'night':'nights'})`);
@@ -7261,10 +7376,11 @@ async function submitBooking(e){
         const ds=d.toISOString().split('T')[0];
         if(booksForDate(ds).length>=getEffectiveCap(ds)){showToast(`${fmtDate(ds)} is fully booked!`,'#EF4444');return;}
       }
-      const bTotal=nights*boardingRate;
+      const perDogBoard=nights*boardingRate;
+      const bTotal=Math.round(familyPrice(perDogBoard,_familyDogCount)*100)/100;
       bookings.push({id:nextId(bookings),clientId,dogId,dogName,clientName,
         checkIn:bCi,checkOut:bCo,nights,status:'confirmed',service:boardingSvc?.name||'Boarding',
-        addons:'',price:bTotal});
+        addons:'',price:bTotal,createdBy:bookingCreator(),familyDogIds:_familyDogCount>1?_familyDogIds.join(','):''});
       boardingBooked=true;
     }
     // Daycare portion: all entries in _dailySchedule
@@ -7276,14 +7392,15 @@ async function submitBooking(e){
       for(const ds of dcDates){
         if(booksForDate(ds).length>=getEffectiveCap(ds)){showToast(`${fmtDate(ds)} is fully booked!`,'#EF4444');return;}
       }
-      let dcTotal=0;
-      dcEntries.forEach(([,svcName])=>{dcTotal+=getServicePrice(svcName);});
+      let dcPerDog=0;
+      dcEntries.forEach(([,svcName])=>{dcPerDog+=getServicePrice(svcName);});
+      const dcTotal=Math.round(familyPrice(dcPerDog,_familyDogCount)*100)/100;
       const dcSched=Object.fromEntries(dcEntries);
       const typeSet=[...new Set(Object.values(dcSched))];
       const dcSvc=typeSet.length===1?typeSet[0]:'Mixed';
       bookings.push({id:nextId(bookings),clientId,dogId,dogName,clientName,
         checkIn:dcFirst,checkOut:dcLast,nights:dcDates.length,status:'confirmed',
-        service:dcSvc,dailySchedule:dcSched,addons:addonNames.join(','),price:dcTotal+addonTotal});
+        service:dcSvc,dailySchedule:dcSched,addons:addonNames.join(','),price:dcTotal+addonTotal,createdBy:bookingCreator(),familyDogIds:_familyDogCount>1?_familyDogIds.join(','):''});
     } else if(boardingBooked){
       // No daycare days — attach add-ons to the boarding booking
       const lastBk=bookings[bookings.length-1];
@@ -7315,10 +7432,11 @@ async function submitBooking(e){
     const svcPrice=parseFloat(svcOpt?.getAttribute('data-price'))||0;
     // Capacity check
     if(booksForDate(dt).length>=getEffectiveCap(dt)){showToast(`${fmtDate(dt)} is fully booked!`,'#EF4444');return;}
-    const totalPrice=svcPrice+addonTotal;
+    const basePrice=Math.round(familyPrice(svcPrice,_familyDogCount)*100)/100;
+    const totalPrice=basePrice+addonTotal;
     const customBk={id:nextId(bookings),clientId,dogId,dogName,clientName,
       checkIn:dt,checkOut:dt,nights:1,status:'confirmed',service:svcName,
-      addons:addonNames.join(','),price:totalPrice};
+      addons:addonNames.join(','),price:totalPrice,createdBy:bookingCreator(),familyDogIds:_familyDogCount>1?_familyDogIds.join(','):''};
     bookings.push(customBk);
     state.showModal=null;render();
     showToast(`✨ ${svcName} booked for ${dogName} on ${fmtDate(dt)}!`);
@@ -7347,13 +7465,14 @@ async function submitBooking(e){
   const typeSet=[...new Set(Object.values(_dailySchedule))];
   const svc=typeSet.length===1?typeSet[0]:'Mixed';
   Object.values(_dailySchedule).forEach(svcName=>{perDayTotal+=getServicePrice(svcName);});
-  const totalPrice=perDayTotal+addonTotal;
+  const baseTotal=Math.round(familyPrice(perDayTotal,_familyDogCount)*100)/100;
+  const totalPrice=baseTotal+addonTotal;
   const dcBk={id:nextId(bookings),clientId,dogId,dogName,clientName,
     checkIn:ci,checkOut:co,nights:days,status:'confirmed',service:svc,
     dailySchedule:{..._dailySchedule},
     addons:addonNames.join(','),price:totalPrice,
     paymentStatus:(state.role==='client'||state.adminViewAsClient)?'checkout_pending':'',
-    checkoutUrl:''};
+    checkoutUrl:'',createdBy:bookingCreator(),familyDogIds:_familyDogCount>1?_familyDogIds.join(','):''};
   bookings.push(dcBk);
   state.showModal=null;render();
   const dateStr=ci===co?fmtDate(ci):`${fmtDateShort(ci)} – ${fmtDateShort(co)} (${days} ${days===1?'day':'days'})`;
@@ -7981,6 +8100,7 @@ async function saveSettings(){
   const gmk=v('set-maps-key')?.trim();if(gmk!==undefined)state.settings.googleMapsApiKey=gmk;
   const asUrl=v('set-apps-script-url')?.trim();if(asUrl!==undefined){state.settings.appsScriptUrl=asUrl;CONFIG.APPS_SCRIPT_URL=asUrl;try{if(asUrl)localStorage.setItem('np_apps_script_url',asUrl);else localStorage.removeItem('np_apps_script_url');}catch(e){}}
   const kpw=v('set-kiosk-password');if(kpw!==undefined)state.settings.kioskPassword=kpw.trim();
+  const mpd=v('set-multi-pet-discount');if(mpd!==undefined)state.settings.multiPetDiscount=+mpd||10;
   const dfid=v('set-drive-folder')?.trim();
   if(dfid!==undefined){
     const changed=dfid!==state.settings.nigelsDriveFolderId;
@@ -8323,12 +8443,15 @@ function getUnpaidBookings(clientId){
     .sort((a,b)=>a.deadlineDays-b.deadlineDays); // most urgent first
 }
 
-// Persistent red/amber banner shown at the top of the client portal when they have unpaid bookings.
-// Cannot be dismissed — stays until all bookings are paid.
+// Persistent red/amber banner shown at the top of the client portal for admin-created unpaid bookings.
+// Only shows for bookings that were manually added by an admin (phone/walk-in bookings).
+// Client-initiated bookings show "Confirm & Pay Now" at booking time instead.
+// Cannot be dismissed — stays until all admin-created bookings are paid.
 function buildUnpaidBanner(){
   const cid=state.currentClientId;
   if(!cid)return'';
-  const unpaid=getUnpaidBookings(cid);
+  // Only show persistent banner for admin-created bookings (manual bookings on behalf of client)
+  const unpaid=getUnpaidBookings(cid).filter(b=>b.createdBy==='admin'||!b.createdBy);
   if(unpaid.length===0)return'';
   const totalDue=unpaid.reduce((s,b)=>s+b.amountDue,0);
   const hasOverdue=unpaid.some(b=>b.urgency==='overdue');
@@ -8381,17 +8504,17 @@ function showPayNowBanner(checkoutUrl, amountDollars, description){
   ov.innerHTML=`
     <div style="background:white;border-radius:20px;padding:2rem;max-width:400px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.35);">
       <div style="font-size:2.8rem;margin-bottom:.5rem;">💳</div>
-      <h3 style="font-size:1.15rem;font-weight:700;color:#111827;margin:0 0 .4rem;">Payment Due</h3>
+      <h3 style="font-size:1.15rem;font-weight:700;color:#111827;margin:0 0 .4rem;">Confirm & Pay Now</h3>
       <p style="font-size:.875rem;color:#374151;margin:0 0 .25rem;">${description}</p>
       <p style="font-size:1.65rem;font-weight:800;color:#7B4015;margin:.25rem 0 .6rem;">$${Number(amountDollars).toFixed(2)}</p>
-      <p style="font-size:.75rem;color:#6B7280;margin:0 0 1.25rem;line-height:1.5;">Your booking is saved! Complete payment now to lock it in. You'll be taken to Square's secure checkout page.</p>
+      <p style="font-size:.75rem;color:#6B7280;margin:0 0 1.25rem;line-height:1.5;">Complete payment now to confirm your booking. You'll be taken to Square's secure checkout page.</p>
       <div style="display:flex;flex-direction:column;gap:.5rem;">
         <a href="${checkoutUrl}" target="_blank" onclick="document.getElementById('np-paynow-banner').remove()"
           style="display:block;padding:.85rem 1.5rem;background:#7B4015;color:white;border-radius:14px;font-size:.95rem;font-weight:700;text-decoration:none;box-shadow:0 4px 12px rgba(123,64,21,0.3);">
-          💳 Pay $${Number(amountDollars).toFixed(2)} via Square →
+          💳 Confirm & Pay $${Number(amountDollars).toFixed(2)} →
         </a>
         <p style="font-size:.7rem;color:#9CA3AF;margin:.25rem 0 0;line-height:1.4;">
-          Or <button onclick="document.getElementById('np-paynow-banner').remove()" style="background:none;border:none;cursor:pointer;color:#7B4015;font-size:.7rem;text-decoration:underline;padding:0;">pay later from My Bookings</button> — your booking is already saved.
+          Or <button onclick="document.getElementById('np-paynow-banner').remove()" style="background:none;border:none;cursor:pointer;color:#7B4015;font-size:.7rem;text-decoration:underline;padding:0;">pay later from My Account</button> — your booking is saved but unpaid bookings may be subject to our payment policy.
         </p>
       </div>
     </div>`;
@@ -8707,7 +8830,7 @@ async function loadKioskData(){
   const today=new Date().toISOString().split('T')[0];
   try{
     const[bR,dR,cR]=await Promise.all([
-      readRangeWithApiKey('Bookings!A2:P'),
+      readRangeWithApiKey('Bookings!A2:R'),
       readRangeWithApiKey('Dogs!A2:M'),
       readRangeWithApiKey('Clients!A2:E'),
     ]);
