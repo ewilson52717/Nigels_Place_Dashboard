@@ -3673,7 +3673,7 @@ async function deleteManualVetClinic(id){
 }
 
 // Track which service sections are collapsed (persists during session)
-const _svcCollapsed={base:false,addons:false,courier:false};
+const _svcCollapsed={base:true,addons:true,courier:true};
 function toggleSvcSection(key){
   _svcCollapsed[key]=!_svcCollapsed[key];
   const body=document.getElementById('svc-body-'+key);
@@ -3722,14 +3722,14 @@ function buildServicesView(){
   // Collapsible section builder
   const secHead=(key,icon,title,subtitle,count)=>`
     <button type="button" onclick="toggleSvcSection('${key}')"
-      class="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-gray-50 transition-colors rounded-t-2xl"
-      style="border-bottom:1px solid #F3F4F6;">
-      <span class="text-xl">${icon}</span>
+      class="w-full flex items-center gap-3 px-5 py-4 text-left transition-colors"
+      style="background:linear-gradient(135deg,#FFFBF5 0%,#FFF7ED 100%);border-bottom:2px solid #F5E6D3;border-left:4px solid #7B4015;">
+      <span class="text-2xl">${icon}</span>
       <div class="flex-1 min-w-0">
-        <div class="font-semibold text-gray-800">${title} <span class="text-xs font-normal text-gray-400 ml-1">${count!==undefined?'('+count+')':''}</span></div>
+        <div class="text-base font-bold text-gray-800">${title} <span class="text-xs font-medium text-amber-600 ml-1">${count!==undefined?'('+count+')':''}</span></div>
         <div class="text-xs text-gray-400 mt-0.5">${subtitle}</div>
       </div>
-      <span id="svc-arrow-${key}" class="text-gray-400 text-sm font-mono flex-shrink-0">${_svcCollapsed[key]?'▸':'▾'}</span>
+      <span id="svc-arrow-${key}" class="text-gray-400 text-lg font-mono flex-shrink-0">${_svcCollapsed[key]?'▸':'▾'}</span>
     </button>`;
   return`
   <div class="p-6 slide-in">
@@ -3745,15 +3745,15 @@ function buildServicesView(){
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-4 overflow-hidden">
       ${secHead('base','🏠','Base Services','Charged per day · clients choose one when booking',base.length)}
       <div id="svc-body-base" style="display:${_svcCollapsed.base?'none':''}">
-        <div class="px-5 pb-5 pt-3">
+        <div class="pb-3 pt-2" style="margin-left:16px;border-left:2px solid #F0E4D6;">
           ${base.length===0?`<p class="text-gray-300 text-sm text-center py-4">No base services. Add one above.</p>`:`
-          <div class="space-y-2">
+          <div class="space-y-1 px-4">
             ${base.map(s=>`
-              <div class="flex items-center justify-between p-3 rounded-xl ${s.active?'bg-gray-50':'bg-gray-50 opacity-50'}">
+              <div class="flex items-center justify-between px-4 py-3 rounded-xl transition-colors ${s.active?'bg-white hover:bg-gray-50 border border-gray-100':'bg-gray-50 opacity-50 border border-gray-100'}">
                 <div class="flex items-center gap-3">
-                  <span class="text-xl">🏠</span>
+                  <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm" style="background:#FFF7ED">🏠</div>
                   <div>
-                    <div class="font-semibold text-sm text-gray-700">${s.name} ${!s.active?'<span class="text-xs text-gray-400">(disabled)</span>':''}</div>
+                    <div class="font-medium text-sm text-gray-700">${s.name} ${!s.active?'<span class="text-xs text-gray-400">(disabled)</span>':''}</div>
                     <div class="text-xs text-gray-400">$${s.price} per day</div>
                   </div>
                 </div>
@@ -3772,16 +3772,16 @@ function buildServicesView(){
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-4 overflow-hidden">
       ${secHead('addons','✨','Add-Ons','Clients can select any combination when booking',addons.length)}
       <div id="svc-body-addons" style="display:${_svcCollapsed.addons?'none':''}">
-        <div class="px-5 pb-5 pt-3">
+        <div class="pb-3 pt-2" style="margin-left:16px;border-left:2px solid #F0E4D6;">
           ${addons.length===0?`<div class="text-center py-6"><div class="text-3xl mb-2">✨</div><p class="text-gray-300 text-sm">No add-ons yet. Add your first one above!</p></div>`:`
-          <div class="space-y-2">
+          <div class="space-y-1 px-4">
             ${addons.map(s=>`
-              <div class="flex items-center justify-between p-3 rounded-xl ${s.active?'bg-gray-50':'bg-gray-50 opacity-50'}">
+              <div class="flex items-center justify-between px-4 py-3 rounded-xl transition-colors ${s.active?'bg-white hover:bg-gray-50 border border-gray-100':'bg-gray-50 opacity-50 border border-gray-100'}">
                 <div class="flex items-center gap-3">
-                  <span class="text-xl">✨</span>
+                  <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm" style="background:#FFF7ED">✨</div>
                   <div>
                     <div class="flex items-center gap-2">
-                      <span class="font-semibold text-sm text-gray-700">${s.name}</span>
+                      <span class="font-medium text-sm text-gray-700">${s.name}</span>
                       ${s.frequency==='qty'?'<span class="badge bg-amber-100 text-amber-700">qty selectable</span>':'<span class="badge bg-gray-100 text-gray-500">once per stay</span>'}
                       ${!s.active?'<span class="text-xs text-gray-400">(hidden)</span>':''}
                     </div>
@@ -3806,7 +3806,7 @@ function buildServicesView(){
           ?'Enabled · '+(state.settings.courierDays||'Tue,Thu').split(',').join(' & ')+' · $'+(state.settings.courierOneWayPrice||25)+' one-way / $'+(state.settings.courierRoundTripPrice||40)+' round trip'
           :'Disabled')}
       <div id="svc-body-courier" style="display:${_svcCollapsed.courier?'none':''}">
-        <div class="px-5 pb-5 pt-3 space-y-3">
+        <div class="pb-4 pt-2 space-y-3" style="margin-left:16px;padding-left:20px;padding-right:20px;border-left:2px solid #F0E4D6;">
           <p class="text-xs text-gray-400">Offer pickup/dropoff for boarding & full-day daycare clients. Distance is verified against your business address using Google Maps.</p>
           <div>
             <label class="flex items-center gap-2.5 cursor-pointer">
