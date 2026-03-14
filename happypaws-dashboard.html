@@ -8961,12 +8961,14 @@ function buildUnpaidBanner(){
   const textColor=hasOverdue?'#991B1B':hasUrgent?'#9A3412':'#92400E';
   const iconColor=hasOverdue?'#DC2626':hasUrgent?'#EA580C':'#D97706';
   const label=hasOverdue?'Payment Overdue':hasUrgent?'Payment Due Soon':'Payment Required';
+  // Find the first unpaid booking with a checkout URL for the Pay Now button
+  const payable=unpaid.find(b=>b.checkoutUrl);
   // Build summary of each unpaid booking
   const items=unpaid.slice(0,3).map(b=>{
     const svc=b.isBoarding?'Boarding':'Daycare';
     const dateStr=b.checkIn!==b.checkOut?`${fmtDateShort(b.checkIn)}–${fmtDateShort(b.checkOut)}`:`${fmtDateShort(b.checkIn)}`;
     const deadlineNote=b.urgency==='overdue'?'⚠️ Past deadline':`Due in ${b.deadlineDays} day${b.deadlineDays===1?'':'s'}`;
-    return`<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:${textColor};">
+    return`<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:${textColor};flex-wrap:wrap;">
       <span style="font-weight:600;">${b.dogName}</span>
       <span style="opacity:0.7;">· ${svc} · ${dateStr}</span>
       <span style="opacity:0.7;">· $${b.amountDue.toFixed(2)}</span>
@@ -8974,8 +8976,16 @@ function buildUnpaidBanner(){
     </div>`;
   }).join('');
   const moreCount=unpaid.length>3?unpaid.length-3:0;
+  // Determine the top offset — sits below the sticky header (and admin banner if present)
+  const topOffset=state.adminViewAsClient?'34px':'0';
+  const headerH='57px'; // approximate sticky header height
+  const stickyTop=state.adminViewAsClient?`calc(34px + ${headerH})`:`${headerH}`;
+  // Pay Now button: link to Square checkout if available, otherwise fall back to account page
+  const payBtn=payable
+    ?`<a href="${payable.checkoutUrl}" target="_blank" style="flex-shrink:0;background:${iconColor};color:white;border:none;padding:7px 18px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;box-shadow:0 2px 8px ${iconColor}44;animation:npBlinkBtn 2s ease-in-out infinite;display:inline-block;">💳 Pay Now →</a>`
+    :`<button onclick="setClientView('bookings')" style="flex-shrink:0;background:${iconColor};color:white;border:none;padding:7px 18px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px ${iconColor}44;animation:npBlinkBtn 2s ease-in-out infinite;">View Details →</button>`;
   return`
-  <div id="np-unpaid-alert" style="background:${bgColor};border-bottom:2px solid ${borderColor};padding:10px 16px;animation:npPulseAlert 3s ease-in-out infinite;">
+  <div id="np-unpaid-alert" style="position:sticky;top:${stickyTop};z-index:9;background:${bgColor};border-bottom:2px solid ${borderColor};padding:10px 16px;animation:npPulseAlert 3s ease-in-out infinite;">
     <div style="max-width:64rem;margin:0 auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
         <span style="font-size:1.1rem;animation:npBlinkIcon 2s ease-in-out infinite;">💳</span>
@@ -8983,9 +8993,7 @@ function buildUnpaidBanner(){
         <span style="font-weight:800;font-size:14px;color:${iconColor};">$${totalDue.toFixed(2)}</span>
       </div>
       <div style="flex:1;min-width:200px;">${items}${moreCount?`<div style="font-size:11px;color:${textColor};opacity:0.7;">+ ${moreCount} more</div>`:''}</div>
-      <button onclick="setClientView('account')" style="flex-shrink:0;background:${iconColor};color:white;border:none;padding:7px 18px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px ${iconColor}44;animation:npBlinkBtn 2s ease-in-out infinite;">
-        Pay Now →
-      </button>
+      ${payBtn}
     </div>
   </div>
   <style>
