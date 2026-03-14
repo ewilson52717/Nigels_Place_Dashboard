@@ -4357,16 +4357,17 @@ function buildClientBookings(){
           <div class="text-right"><div class="font-bold text-gray-800">$${b.price}</div>
             <span class="badge ${sCls[b.status]||'bg-gray-100 text-gray-600'}">${b.status}</span>${pmtBadge}</div>
         </div>
-        ${(b.paymentStatus==='deposit_due'||b.paymentStatus==='checkout_pending')&&b.checkoutUrl&&isUpcoming?`
+        ${(b.paymentStatus==='deposit_due'||b.paymentStatus==='checkout_pending')&&isUpcoming?`
         <div class="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2">
-          <a href="${b.checkoutUrl}" target="_blank" style="flex:1;display:block;text-align:center;padding:.5rem;background:#7B4015;color:white;border-radius:10px;font-size:.75rem;font-weight:700;text-decoration:none;">💳 Pay ${b.depositAmount?`$${b.depositAmount.toFixed(2)} Deposit`:'Now'} via Square</a>
+          ${b.checkoutUrl
+            ?`<a href="${b.checkoutUrl}" target="_blank" style="flex:1;display:block;text-align:center;padding:.5rem;background:#7B4015;color:white;border-radius:10px;font-size:.75rem;font-weight:700;text-decoration:none;">💳 Pay ${b.depositAmount?'$'+b.depositAmount.toFixed(2)+' Deposit':'Now'} via Square</a>`
+            :`<button onclick="bannerPayNow('${b.id}',${b.depositAmount||b.price||0})" style="flex:1;text-align:center;padding:.5rem;background:#7B4015;color:white;border:none;border-radius:10px;font-size:.75rem;font-weight:700;cursor:pointer;">💳 Pay ${b.depositAmount?'$'+b.depositAmount.toFixed(2)+' Deposit':'Now'} via Square</button>`}
+        </div>
+        <div class="mt-1.5 flex justify-end">
+          <button onclick="showClientCancelConfirm('${b.id}')" style="background:none;border:none;padding:0;font-size:.68rem;color:#9CA3AF;cursor:pointer;text-decoration:underline;">Cancel booking</button>
         </div>`:
         isUpcoming?`<div class="mt-3 pt-3 border-t border-gray-100">
           <button onclick="showClientCancelConfirm('${b.id}')" style="background:none;border:1px solid #FCA5A5;border-radius:8px;padding:.3rem .8rem;font-size:.72rem;color:#DC2626;cursor:pointer;font-weight:600;">Cancel booking</button>
-        </div>`:''}
-        ${(b.paymentStatus==='deposit_due'||b.paymentStatus==='checkout_pending')&&b.checkoutUrl&&isUpcoming?`
-        <div class="mt-1.5 flex justify-end">
-          <button onclick="showClientCancelConfirm('${b.id}')" style="background:none;border:none;padding:0;font-size:.68rem;color:#9CA3AF;cursor:pointer;text-decoration:underline;">Cancel booking</button>
         </div>`:''}
       </div>`;
     }).join('')}</div>`}
@@ -5155,7 +5156,11 @@ function buildDayModal(ds){
             ${isAdm?'<button onclick="cancelBooking('+b.id+')" class="text-xs text-red-400 hover:text-red-600 whitespace-nowrap" title="Cancel booking">✕ Cancel</button>':''}
             ${!isAdm&&b.paymentStatus==='paid'?'<span class="text-xs font-semibold text-green-600">✓ Paid</span>':''}
             ${!isAdm&&b.paymentStatus==='deposit_paid'?'<span class="text-xs font-semibold text-blue-600">🔐 Deposit paid</span>':''}
-            ${!isAdm&&(b.paymentStatus==='deposit_due'||b.paymentStatus==='checkout_pending')&&b.checkoutUrl?'<a href="'+b.checkoutUrl+'" target="_blank" class="text-xs font-semibold text-white px-2 py-1 rounded-lg whitespace-nowrap" style="background:#7B4015">💳 Pay Now</a>':''}
+            ${!isAdm&&(b.paymentStatus==='deposit_due'||b.paymentStatus==='checkout_pending')
+              ?(b.checkoutUrl
+                ?'<a href="'+b.checkoutUrl+'" target="_blank" class="text-xs font-semibold text-white px-2 py-1 rounded-lg whitespace-nowrap" style="background:#7B4015">💳 Pay Now</a>'
+                :'<button onclick="bannerPayNow(\''+b.id+'\','+(b.depositAmount||b.price||0)+')" class="text-xs font-semibold text-white px-2 py-1 rounded-lg whitespace-nowrap" style="background:#7B4015">💳 Pay Now</button>')
+              :''}
             ${!isAdm?'<button onclick="closeModal();showClientCancelConfirm('+b.id+')" class="text-xs text-red-400 hover:text-red-600 whitespace-nowrap mt-1" title="Cancel booking">✕ Cancel</button>':''}
           </div>
         </div>`;}).join('')}</div>`
@@ -8961,8 +8966,8 @@ function buildUnpaidBanner(){
   const textColor=hasOverdue?'#991B1B':hasUrgent?'#9A3412':'#92400E';
   const iconColor=hasOverdue?'#DC2626':hasUrgent?'#EA580C':'#D97706';
   const label=hasOverdue?'Payment Overdue':hasUrgent?'Payment Due Soon':'Payment Required';
-  // Find the first unpaid booking with a checkout URL for the Pay Now button
-  const payable=unpaid.find(b=>b.checkoutUrl);
+  // Use the most urgent unpaid booking for the Pay Now button
+  const mostUrgent=unpaid[0]; // already sorted by urgency
   // Build summary of each unpaid booking
   const items=unpaid.slice(0,3).map(b=>{
     const svc=b.isBoarding?'Boarding':'Daycare';
@@ -8980,10 +8985,10 @@ function buildUnpaidBanner(){
   const topOffset=state.adminViewAsClient?'34px':'0';
   const headerH='57px'; // approximate sticky header height
   const stickyTop=state.adminViewAsClient?`calc(34px + ${headerH})`:`${headerH}`;
-  // Pay Now button: link to Square checkout if available, otherwise fall back to account page
-  const payBtn=payable
-    ?`<a href="${payable.checkoutUrl}" target="_blank" style="flex-shrink:0;background:${iconColor};color:white;border:none;padding:7px 18px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;box-shadow:0 2px 8px ${iconColor}44;animation:npBlinkBtn 2s ease-in-out infinite;display:inline-block;">💳 Pay Now →</a>`
-    :`<button onclick="setClientView('bookings')" style="flex-shrink:0;background:${iconColor};color:white;border:none;padding:7px 18px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px ${iconColor}44;animation:npBlinkBtn 2s ease-in-out infinite;">View Details →</button>`;
+  // Pay Now button: link to Square checkout if URL exists, otherwise generate one on demand
+  const payBtn=mostUrgent.checkoutUrl
+    ?`<a href="${mostUrgent.checkoutUrl}" target="_blank" style="flex-shrink:0;background:${iconColor};color:white;border:none;padding:7px 18px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;box-shadow:0 2px 8px ${iconColor}44;animation:npBlinkBtn 2s ease-in-out infinite;display:inline-block;">💳 Pay Now →</a>`
+    :`<button onclick="bannerPayNow('${mostUrgent.id}',${mostUrgent.amountDue})" style="flex-shrink:0;background:${iconColor};color:white;border:none;padding:7px 18px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px ${iconColor}44;animation:npBlinkBtn 2s ease-in-out infinite;">💳 Pay Now →</button>`;
   return`
   <div id="np-unpaid-alert" style="position:sticky;top:${stickyTop};z-index:9;background:${bgColor};border-bottom:2px solid ${borderColor};padding:10px 16px;animation:npPulseAlert 3s ease-in-out infinite;">
     <div style="max-width:64rem;margin:0 auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
@@ -9001,6 +9006,36 @@ function buildUnpaidBanner(){
     @keyframes npBlinkIcon{0%,100%{opacity:1}50%{opacity:0.4}}
     @keyframes npBlinkBtn{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.03);opacity:0.85}}
   </style>`;
+}
+
+// Called from the unpaid banner when no checkoutUrl exists yet — generates one on the fly via Square.
+async function bannerPayNow(bookingId, amountDue){
+  const bk=bookings.find(b=>b.id===bookingId);
+  if(!bk){showToast('Booking not found.','#EF4444');return;}
+  // If a checkout URL was stored in the meantime, just open it
+  if(bk.checkoutUrl){window.open(bk.checkoutUrl,'_blank');return;}
+  const btn=document.querySelector('#np-unpaid-alert button');
+  const origText=btn?.innerHTML||'';
+  if(btn){btn.innerHTML='⏳ Creating link...';btn.disabled=true;}
+  try{
+    const svc=(bk.service||'Daycare');
+    const label=`${bk.dogName} – ${svc}`;
+    const checkoutUrl=await createSquareCheckoutLink(bk, amountDue, label);
+    if(checkoutUrl){
+      bk.checkoutUrl=checkoutUrl;
+      bk.paymentStatus='checkout_pending';
+      try{await persistBookings();}catch(e){}
+      window.open(checkoutUrl,'_blank');
+      render(); // re-render so banner now has the direct link
+    }else{
+      showToast('Could not create payment link — check Square settings.','#F97316');
+      if(btn){btn.innerHTML=origText;btn.disabled=false;}
+    }
+  }catch(err){
+    console.error('[PAY NOW banner]',err);
+    showToast('Payment link error: '+err.message,'#EF4444');
+    if(btn){btn.innerHTML=origText;btn.disabled=false;}
+  }
 }
 
 // Shows a prominent "Pay Now" overlay banner after a booking that requires payment.
