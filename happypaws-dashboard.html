@@ -3681,6 +3681,41 @@ function toggleSvcSection(key){
   if(body)body.style.display=_svcCollapsed[key]?'none':'';
   if(arrow)arrow.textContent=_svcCollapsed[key]?'▸':'▾';
 }
+
+/* ── Courier settings UI helpers ── */
+function toggleCourierDay(btn,day){
+  const active=btn.getAttribute('data-active')==='true';
+  const nowActive=!active;
+  btn.setAttribute('data-active',String(nowActive));
+  if(nowActive){
+    btn.className='px-3.5 py-1.5 rounded-full text-sm font-medium transition-all cursor-pointer select-none text-white shadow-sm';
+    btn.style.background='#7B4015';
+  }else{
+    btn.className='px-3.5 py-1.5 rounded-full text-sm font-medium transition-all cursor-pointer select-none bg-gray-100 text-gray-500 hover:bg-gray-200';
+    btn.style.background='';
+  }
+}
+function _getSelectedCourierDays(){
+  const chips=document.querySelectorAll('#set-courier-days-chips button[data-active="true"]');
+  return Array.from(chips).map(b=>b.getAttribute('data-day')).join(',');
+}
+function _parseCourierWindow(str){
+  // Parse "10:00 AM – 12:00 PM" → {start:'10:00 AM', end:'12:00 PM'}
+  const parts=(str||'').split(/\s*[–—-]\s*/);
+  return{start:(parts[0]||'').trim(),end:(parts[1]||'').trim()};
+}
+function _courierTimeOptions(selected){
+  const times=[];
+  for(let h=6;h<=21;h++){
+    for(let m=0;m<60;m+=30){
+      const hr12=h===0?12:h>12?h-12:h;
+      const ampm=h<12?'AM':'PM';
+      const label=hr12+':'+(m<10?'0':'')+m+' '+ampm;
+      times.push(label);
+    }
+  }
+  return times.map(t=>`<option value="${t}"${t===selected?' selected':''}>${t}</option>`).join('');
+}
 function buildServicesView(){
   const base=services.filter(s=>s.type==='base');
   const addons=services.filter(s=>s.type==='addon');
@@ -3810,21 +3845,43 @@ function buildServicesView(){
             </div>
           </div>
           <div>
-            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Available Days</label>
-            <input id="set-courier-days" type="text" value="${state.settings.courierDays||'Tue,Thu'}" placeholder="Tue,Thu"
-              class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-            <p class="text-xs text-gray-400 mt-1">Comma-separated short day names: Mon, Tue, Wed, Thu, Fri, Sat, Sun</p>
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Available Days</label>
+            <div id="set-courier-days-chips" class="flex flex-wrap gap-2">
+              ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>{
+                const active=(state.settings.courierDays||'Tue,Thu').split(',').map(s=>s.trim()).includes(d);
+                return`<button type="button" onclick="toggleCourierDay(this,'${d}')"
+                  class="px-3.5 py-1.5 rounded-full text-sm font-medium transition-all cursor-pointer select-none
+                  ${active?'text-white shadow-sm':'bg-gray-100 text-gray-500 hover:bg-gray-200'}"
+                  style="${active?'background:#7B4015':''}"
+                  data-day="${d}" data-active="${active}">${d}</button>`;
+              }).join('')}
+            </div>
+            <p class="text-xs text-gray-400 mt-1.5">Tap days to toggle availability</p>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Pickup Window</label>
-              <input id="set-courier-pickup" type="text" value="${state.settings.courierPickupWindow||'10:00 AM – 12:00 PM'}"
-                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+              <div class="flex items-center gap-2">
+                <select id="set-courier-pickup-start" class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm">
+                  ${_courierTimeOptions((_parseCourierWindow(state.settings.courierPickupWindow||'10:00 AM – 12:00 PM')).start)}
+                </select>
+                <span class="text-gray-400 text-sm">to</span>
+                <select id="set-courier-pickup-end" class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm">
+                  ${_courierTimeOptions((_parseCourierWindow(state.settings.courierPickupWindow||'10:00 AM – 12:00 PM')).end)}
+                </select>
+              </div>
             </div>
             <div>
               <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Dropoff Window</label>
-              <input id="set-courier-dropoff" type="text" value="${state.settings.courierDropoffWindow||'6:00 PM – 8:00 PM'}"
-                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+              <div class="flex items-center gap-2">
+                <select id="set-courier-dropoff-start" class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm">
+                  ${_courierTimeOptions((_parseCourierWindow(state.settings.courierDropoffWindow||'6:00 PM – 8:00 PM')).start)}
+                </select>
+                <span class="text-gray-400 text-sm">to</span>
+                <select id="set-courier-dropoff-end" class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm">
+                  ${_courierTimeOptions((_parseCourierWindow(state.settings.courierDropoffWindow||'6:00 PM – 8:00 PM')).end)}
+                </select>
+              </div>
             </div>
           </div>
           <button type="button" onclick="saveCourierSettings()" class="w-full py-2.5 text-white rounded-xl text-sm font-semibold mt-2" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">Save Courier Settings</button>
@@ -8535,9 +8592,14 @@ async function saveCourierSettings(){
   const cmd=v('set-courier-max-dogs');if(cmd!==undefined)state.settings.courierMaxDogs=+cmd||3;
   const cow=v('set-courier-oneway');if(cow!==undefined)state.settings.courierOneWayPrice=+cow||25;
   const crt=v('set-courier-roundtrip');if(crt!==undefined)state.settings.courierRoundTripPrice=+crt||40;
-  const cd=v('set-courier-days')?.trim();if(cd!==undefined)state.settings.courierDays=cd;
-  const cpw=v('set-courier-pickup')?.trim();if(cpw!==undefined)state.settings.courierPickupWindow=cpw;
-  const cdw=v('set-courier-dropoff')?.trim();if(cdw!==undefined)state.settings.courierDropoffWindow=cdw;
+  // Days — read from chip buttons
+  const days=_getSelectedCourierDays();
+  if(days)state.settings.courierDays=days;
+  // Time windows — read from start/end dropdowns
+  const ps=v('set-courier-pickup-start'),pe=v('set-courier-pickup-end');
+  if(ps&&pe)state.settings.courierPickupWindow=ps+' – '+pe;
+  const ds=v('set-courier-dropoff-start'),de=v('set-courier-dropoff-end');
+  if(ds&&de)state.settings.courierDropoffWindow=ds+' – '+de;
   // Persist FIRST (before render destroys the form), then render on success
   try{
     await persistSettings();
