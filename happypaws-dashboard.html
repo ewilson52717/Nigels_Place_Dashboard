@@ -2101,7 +2101,7 @@ async function loadClientDataViaProxy(){
       }
     });
 
-    // Apply safe settings subset (no API keys returned)
+    // Apply settings subset from proxy (includes API keys needed for client features)
     const s=result.settings||{};
     if(s.businessName)state.settings.businessName=String(s.businessName);
     if(s.dailyCapacity)state.settings.dailyCapacity=+s.dailyCapacity||state.settings.dailyCapacity;
@@ -2110,6 +2110,10 @@ async function loadClientDataViaProxy(){
     if(s.groomingAddOn!==undefined)state.settings.groomingAddOn=+s.groomingAddOn||0;
     if(s.venmoHandle)state.settings.venmoHandle=String(s.venmoHandle);
     if(s.squareLink)state.settings.squareLink=String(s.squareLink);
+    // Square payment keys — needed for client-side Pay Now checkout link generation
+    if(s.squareApiKey)state.settings.squareApiKey=String(s.squareApiKey);
+    if(s.squareLocationId)state.settings.squareLocationId=String(s.squareLocationId);
+    if(s.squareSandbox!==undefined)state.settings.squareSandbox=(s.squareSandbox===true||s.squareSandbox==='true');
     if(s.capacityOverrides){try{state.settings.capacityOverrides=JSON.parse(s.capacityOverrides)||{};}catch(e){}}
     if(s.requiredVaccines){try{const rv=JSON.parse(s.requiredVaccines);if(Array.isArray(rv))state.settings.requiredVaccines=rv;}catch(e){}}
     // Accept API keys from server — only set if not already configured locally so admin
