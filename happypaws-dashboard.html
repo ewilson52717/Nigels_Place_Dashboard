@@ -372,7 +372,11 @@ function sheetDateStr(v){
     const d=new Date(Math.round((v-25569)*864e5));
     return d.toISOString().split('T')[0];
   }
-  return String(v);
+  // Normalise ISO datetime strings (e.g. "2026-03-15T07:00:00.000Z" from Apps Script
+  // JSON serialisation of Date objects) → "2026-03-15"
+  const s=String(v);
+  if(s.length>=10&&s[4]==='-'&&s[7]==='-'&&s.includes('T'))return s.slice(0,10);
+  return s;
 }
 const _tTom=new Date(_tNow);_tTom.setDate(_tTom.getDate()+1);
 const TOMORROW=`${_tTom.getFullYear()}-${String(_tTom.getMonth()+1).padStart(2,'0')}-${String(_tTom.getDate()).padStart(2,'0')}`;
@@ -399,8 +403,16 @@ function capColor(n,cap){
   if(p>=0.5) return{bar:'#EAB308',bg:'#FEFCE8',txt:'#CA8A04',label:'Filling Up'};
   return         {bar:'#10B981',bg:'#F0FDF4',txt:'#059669',label:'Available'};
 }
-function fmtDate(ds){return new Date(ds+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});}
-function fmtDateShort(ds){return new Date(ds+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});}
+function _safeDate(ds){
+  if(!ds)return null;
+  // If already ISO datetime (e.g. "2026-03-15T07:00:00.000Z"), extract the date part
+  const s=String(ds);
+  const dateOnly=(s.length>=10&&s[4]==='-'&&s[7]==='-'&&s.includes('T'))?s.slice(0,10):s;
+  const d=new Date(dateOnly+'T00:00:00');
+  return isNaN(d.getTime())?null:d;
+}
+function fmtDate(ds){const d=_safeDate(ds);return d?d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'}):'—';}
+function fmtDateShort(ds){const d=_safeDate(ds);return d?d.toLocaleDateString('en-US',{month:'short',day:'numeric'}):'—';}
 // Returns a human-readable age string like "6 mo", "1 yr 3 mo", "3 yrs"
 // Prefers birthday-based calculation when birthday is provided.
 function fmtAge(age, birthday){
@@ -2051,14 +2063,16 @@ async function loadClientDataViaProxy(){
       if(!r[0])return;
       const isOld=statusWords.includes(String(r[6]).toLowerCase());
       if(isOld){
-        bookings.push({id:+r[0],clientId:+r[1],dogId:+r[2],dogName:r[3]||'',clientName:r[4]||'',
-          checkIn:r[5]||'',checkOut:r[5]||'',nights:1,status:r[6]||'confirmed',
-          service:r[7]||'Full Day',addons:'',price:+r[8]||0});
+        const ci5=sheetDateStr(r[5]);
+        bookings.push({id:+r[0],clientId:+r[1],dogId:+r[2],dogName:String(r[3]||''),clientName:String(r[4]||''),
+          checkIn:ci5,checkOut:ci5,nights:1,status:String(r[6]||'confirmed'),
+          service:String(r[7]||'Full Day'),addons:'',price:+r[8]||0});
       }else{
-        bookings.push({id:+r[0],clientId:+r[1],dogId:+r[2],dogName:r[3]||'',clientName:r[4]||'',
-          checkIn:r[5]||'',checkOut:r[6]||r[5]||'',nights:+r[7]||1,status:r[8]||'confirmed',
-          service:r[9]||'Full Day',addons:r[10]||'',price:+r[11]||0,
-          paymentStatus:r[12]||'',depositAmount:+r[13]||0,squarePaymentId:r[14]||'',checkoutUrl:r[15]||''});
+        const ci5=sheetDateStr(r[5]);
+        bookings.push({id:+r[0],clientId:+r[1],dogId:+r[2],dogName:String(r[3]||''),clientName:String(r[4]||''),
+          checkIn:ci5,checkOut:sheetDateStr(r[6])||ci5,nights:+r[7]||1,status:String(r[8]||'confirmed'),
+          service:String(r[9]||'Full Day'),addons:String(r[10]||''),price:+r[11]||0,
+          paymentStatus:String(r[12]||''),depositAmount:+r[13]||0,squarePaymentId:String(r[14]||''),checkoutUrl:String(r[15]||'')});
       }
     });
 
@@ -2798,6 +2812,7 @@ function buildClientLayout(){
         <button onclick="signOut()" class="text-xs text-gray-400 hover:text-red-500 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors hidden sm:inline-block" title="Sign out">Sign out</button>
       </div>
     </header>
+    ${buildUnpaidBanner()}
     <div class="max-w-5xl mx-auto p-3 sm:p-5">
       ${state.clientView==='home'?buildClientHome():state.clientView==='mydog'?buildClientDog():state.clientView==='account'?buildClientAccount():buildClientBookings()}
     </div>
@@ -4215,6 +4230,73 @@ function buildClientAccount(){
       </form>
     </div>
 
+    <!-- Payables / Outstanding Balances -->
+    ${(()=>{
+      const unpaid=getUnpaidBookings(cl.id);
+      const totalDue=unpaid.reduce((s,b)=>s+b.amountDue,0);
+      // Also gather paid bookings for payment history
+      const paidBks=bookings.filter(b=>b.clientId===cl.id&&b.paymentStatus==='paid')
+        .sort((a,b)=>(b.checkIn||'').localeCompare(a.checkIn||'')).slice(0,10);
+      if(unpaid.length===0&&paidBks.length===0)return'';
+      return`
+    <div class="rounded-2xl border ${unpaid.length>0?'border-red-200':'border-gray-100'} bg-white p-5 shadow-sm">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <h2 class="font-semibold text-gray-700 flex items-center gap-2">💳 Payments & Balances</h2>
+          <p class="text-xs text-gray-400 mt-0.5">Outstanding balances and recent payment history.</p>
+        </div>
+        ${totalDue>0?`<div class="text-right">
+          <div class="text-lg font-extrabold text-red-600">$${totalDue.toFixed(2)}</div>
+          <div class="text-xs text-red-500 font-semibold">Amount Due</div>
+        </div>`:'<div class="text-xs font-semibold text-green-600 bg-green-50 px-3 py-1.5 rounded-full">✓ All Paid</div>'}
+      </div>
+      ${unpaid.length>0?`
+      <div class="mb-4">
+        <div class="text-xs font-bold text-red-700 uppercase tracking-wide mb-2">Outstanding</div>
+        <div class="space-y-2">
+          ${unpaid.map(b=>{
+            const svc=b.isBoarding?'Boarding':'Daycare';
+            const dateStr=b.checkIn!==b.checkOut?fmtDateShort(b.checkIn)+'–'+fmtDateShort(b.checkOut):fmtDateShort(b.checkIn);
+            const urgBg=b.urgency==='overdue'?'bg-red-50 border-red-200':b.urgency==='urgent'?'bg-orange-50 border-orange-200':'bg-amber-50 border-amber-200';
+            const urgText=b.urgency==='overdue'?'text-red-700':b.urgency==='urgent'?'text-orange-700':'text-amber-700';
+            const urgLabel=b.urgency==='overdue'?'⚠️ Past deadline':b.urgency==='urgent'?'⏰ Due soon':'📅 Upcoming';
+            const payBtnBg=b.urgency==='overdue'?'#DC2626':b.urgency==='urgent'?'#EA580C':'#D97706';
+            return`<div class="flex items-center justify-between rounded-xl border ${urgBg} px-3 py-2.5">
+              <div>
+                <div class="text-sm font-semibold text-gray-700">${b.dogName} · ${svc}</div>
+                <div class="text-xs text-gray-500">${dateStr} · $${b.amountDue.toFixed(2)} ${b.isBoarding?'(deposit)':''}</div>
+                <div class="text-xs font-semibold ${urgText} mt-0.5">${urgLabel}${b.deadlineDays>0?' — '+b.deadlineDays+' day'+(b.deadlineDays===1?'':'s')+' left':''}</div>
+              </div>
+              ${b.checkoutUrl?`<a href="${b.checkoutUrl}" target="_blank" style="flex-shrink:0;background:${payBtnBg};color:white;border:none;padding:8px 16px;border-radius:10px;font-size:12px;font-weight:700;text-decoration:none;cursor:pointer;animation:npBlinkBtn 2s ease-in-out infinite;">💳 Pay Now</a>`
+              :`<span class="text-xs text-gray-400 italic">Payment link pending</span>`}
+            </div>`;
+          }).join('')}
+        </div>
+        <div class="mt-3 p-3 rounded-xl bg-gray-50 border border-gray-200">
+          <div class="text-xs text-gray-500 leading-relaxed">
+            <strong>Payment Policy:</strong> Boarding deposits are due 7 days before check-in. Daycare payments are due 24 hours before the session. Unpaid bookings past their deadline may be released to other clients.
+          </div>
+        </div>
+      </div>
+      `:''}
+      ${paidBks.length>0?`
+      <div>
+        <div class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Recent Payments</div>
+        <div class="space-y-1.5">
+          ${paidBks.slice(0,5).map(b=>{
+            const svc=(b.service||'Daycare');
+            const dateStr=b.checkIn!==b.checkOut?fmtDateShort(b.checkIn)+'–'+fmtDateShort(b.checkOut):fmtDateShort(b.checkIn);
+            return`<div class="flex items-center justify-between text-xs py-1.5 px-2 rounded-lg bg-gray-50">
+              <div class="text-gray-600"><span class="font-medium">${b.dogName}</span> · ${svc} · ${dateStr}</div>
+              <div class="font-semibold text-green-600">✓ $${(+b.price||0).toFixed(2)}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+      `:''}
+    </div>`;
+    })()}
+
     <!-- My Pets -->
     <div>
       <div class="flex items-center justify-between mb-3">
@@ -4841,7 +4923,16 @@ function buildDayModal(ds){
             ${isAdm?`<span class="text-sm text-gray-600 font-medium whitespace-nowrap">$${b.price}</span>`:''}
             ${isAdm&&b.paymentStatus==='paid'?`<span class="text-xs font-semibold text-green-600">✓ Paid</span>`:''}
             ${isAdm&&(b.paymentStatus==='deposit_paid')?`<span class="text-xs font-semibold text-blue-600">🔐 Deposit paid</span>`:''}
-            ${isAdm&&(b.paymentStatus==='deposit_due'||b.paymentStatus==='checkout_pending')?`<span class="text-xs font-semibold text-amber-600">💳 Awaiting payment</span>`:''}
+            ${isAdm&&(b.paymentStatus==='deposit_due'||b.paymentStatus==='checkout_pending')?(()=>{
+              const ciDate=new Date((b.checkIn||'')+'T00:00:00');
+              const daysUntil=isNaN(ciDate)?999:Math.round((ciDate-new Date(TODAY+'T00:00:00'))/864e5);
+              const isBrd=b.service&&b.service.toLowerCase().includes('board');
+              const deadline=isBrd?7:1;
+              const pastDeadline=daysUntil<=deadline;
+              return pastDeadline
+                ?'<span class="text-xs font-bold text-red-600" style="animation:npBlinkIcon 2s ease-in-out infinite;">⚠️ At Risk — unpaid</span>'
+                :'<span class="text-xs font-semibold text-amber-600">💳 Awaiting payment</span>';
+            })():''}
             ${isAdm?`<button onclick="cancelBooking(${b.id})" class="text-xs text-red-400 hover:text-red-600 whitespace-nowrap" title="Cancel booking">✕ Cancel</button>`:''}
             ${!isAdm&&b.paymentStatus==='paid'?`<span class="text-xs font-semibold text-green-600">✓ Paid</span>`:''}
             ${!isAdm&&b.paymentStatus==='deposit_paid'?`<span class="text-xs font-semibold text-blue-600">🔐 Deposit paid</span>`:''}
@@ -8207,6 +8298,80 @@ async function buyPackageFromProfile(){
   }
 }
 
+// ─── UNPAID BOOKING DETECTION & ALERT SYSTEM ──────────────────────────────────
+// Returns an array of booking objects that are unpaid/deposit-due for a given client.
+// Each entry includes a computed "urgency" field and days until deadline.
+function getUnpaidBookings(clientId){
+  const now=new Date(TODAY+'T00:00:00');
+  return bookings
+    .filter(b=>b.clientId===clientId&&b.status==='confirmed'&&
+      (!b.paymentStatus||b.paymentStatus==='deposit_due'||b.paymentStatus==='checkout_pending'))
+    .map(b=>{
+      const ci=new Date((b.checkIn||'')+'T00:00:00');
+      if(isNaN(ci.getTime()))return null;
+      const daysUntil=Math.round((ci-now)/864e5);
+      const isBoarding=b.service&&b.service.toLowerCase().includes('board');
+      const deadline=isBoarding?7:1; // boarding: 7 days, daycare: 24 hrs (1 day)
+      const deadlineDays=daysUntil-deadline; // days until payment deadline (negative = overdue)
+      let urgency='normal'; // well ahead of deadline
+      if(deadlineDays<=0)urgency='overdue'; // past payment deadline
+      else if(deadlineDays<=2)urgency='urgent'; // within 2 days of deadline
+      const amountDue=isBoarding?(b.depositAmount||Math.ceil((b.price||0)*0.25*100)/100):(b.price||0);
+      return{...b,daysUntil,deadlineDays,isBoarding,deadline,urgency,amountDue};
+    })
+    .filter(Boolean)
+    .sort((a,b)=>a.deadlineDays-b.deadlineDays); // most urgent first
+}
+
+// Persistent red/amber banner shown at the top of the client portal when they have unpaid bookings.
+// Cannot be dismissed — stays until all bookings are paid.
+function buildUnpaidBanner(){
+  const cid=state.currentClientId;
+  if(!cid)return'';
+  const unpaid=getUnpaidBookings(cid);
+  if(unpaid.length===0)return'';
+  const totalDue=unpaid.reduce((s,b)=>s+b.amountDue,0);
+  const hasOverdue=unpaid.some(b=>b.urgency==='overdue');
+  const hasUrgent=unpaid.some(b=>b.urgency==='urgent');
+  const bgColor=hasOverdue?'#FEF2F2':hasUrgent?'#FFF7ED':'#FFFBEB';
+  const borderColor=hasOverdue?'#FECACA':hasUrgent?'#FED7AA':'#FDE68A';
+  const textColor=hasOverdue?'#991B1B':hasUrgent?'#9A3412':'#92400E';
+  const iconColor=hasOverdue?'#DC2626':hasUrgent?'#EA580C':'#D97706';
+  const label=hasOverdue?'Payment Overdue':hasUrgent?'Payment Due Soon':'Payment Required';
+  // Build summary of each unpaid booking
+  const items=unpaid.slice(0,3).map(b=>{
+    const svc=b.isBoarding?'Boarding':'Daycare';
+    const dateStr=b.checkIn!==b.checkOut?`${fmtDateShort(b.checkIn)}–${fmtDateShort(b.checkOut)}`:`${fmtDateShort(b.checkIn)}`;
+    const deadlineNote=b.urgency==='overdue'?'⚠️ Past deadline':`Due in ${b.deadlineDays} day${b.deadlineDays===1?'':'s'}`;
+    return`<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:${textColor};">
+      <span style="font-weight:600;">${b.dogName}</span>
+      <span style="opacity:0.7;">· ${svc} · ${dateStr}</span>
+      <span style="opacity:0.7;">· $${b.amountDue.toFixed(2)}</span>
+      <span style="font-weight:600;font-size:11px;">${deadlineNote}</span>
+    </div>`;
+  }).join('');
+  const moreCount=unpaid.length>3?unpaid.length-3:0;
+  return`
+  <div id="np-unpaid-alert" style="background:${bgColor};border-bottom:2px solid ${borderColor};padding:10px 16px;animation:npPulseAlert 3s ease-in-out infinite;">
+    <div style="max-width:64rem;margin:0 auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <span style="font-size:1.1rem;animation:npBlinkIcon 2s ease-in-out infinite;">💳</span>
+        <span style="font-weight:700;font-size:13px;color:${textColor};">${label}</span>
+        <span style="font-weight:800;font-size:14px;color:${iconColor};">$${totalDue.toFixed(2)}</span>
+      </div>
+      <div style="flex:1;min-width:200px;">${items}${moreCount?`<div style="font-size:11px;color:${textColor};opacity:0.7;">+ ${moreCount} more</div>`:''}</div>
+      <button onclick="setClientView('account')" style="flex-shrink:0;background:${iconColor};color:white;border:none;padding:7px 18px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px ${iconColor}44;animation:npBlinkBtn 2s ease-in-out infinite;">
+        Pay Now →
+      </button>
+    </div>
+  </div>
+  <style>
+    @keyframes npPulseAlert{0%,100%{opacity:1}50%{opacity:0.92}}
+    @keyframes npBlinkIcon{0%,100%{opacity:1}50%{opacity:0.4}}
+    @keyframes npBlinkBtn{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.03);opacity:0.85}}
+  </style>`;
+}
+
 // Shows a prominent "Pay Now" overlay banner after a booking that requires payment.
 function showPayNowBanner(checkoutUrl, amountDollars, description){
   const existing=document.getElementById('np-paynow-banner');if(existing)existing.remove();
@@ -8485,8 +8650,14 @@ function showPolicyModal(type){
       <li>Use the portal only for lawful purposes and in good faith.</li>
       <li>Keep your Google account credentials secure.</li>
     </ul>
-    <h3>Photos &amp; Payments</h3>
-    <p>If you consent, the facility may photograph your pet during visits. You can withdraw photo consent at any time in your profile. Payments are handled directly by the pet care facility — PawDesk does not process or store payment information.</p>
+    <h3>Payment &amp; Deposit Policy</h3>
+    <p><strong>Boarding:</strong> A 25% deposit is required to secure a boarding reservation. Deposits must be paid no later than <strong>7 days before the scheduled check-in date</strong>. Unpaid boarding reservations past this deadline are considered "at risk" and may be released to accommodate other clients at Nigel's Place's sole discretion.</p>
+    <p><strong>Daycare:</strong> Full payment for daycare sessions is due no later than <strong>24 hours before the scheduled session</strong>. Unpaid daycare bookings past this deadline may be forfeited and the spot released to paid clients.</p>
+    <p><strong>Session Packages:</strong> Pre-purchased session packages are paid at the time of purchase. Sessions are automatically applied when booking daycare.</p>
+    <p><strong>Refunds &amp; Cancellations:</strong> Deposits and payments for cancelled bookings are subject to Nigel's Place's cancellation policy. Contact Nigel's Place directly for refund requests.</p>
+    <p>All payments are processed securely through Square. PawDesk does not store your payment card information — it is handled entirely by Square's secure checkout.</p>
+    <h3>Photos</h3>
+    <p>If you consent, the facility may photograph your pet during visits. You can withdraw photo consent at any time in your profile.</p>
     <h3>Disclaimer</h3>
     <p>The portal is provided "as is." We are not liable for missed reminders, temporary outages, or issues resulting from inaccurate information you provided. PawDesk does not provide veterinary advice.</p>
     <h3>Contact</h3>

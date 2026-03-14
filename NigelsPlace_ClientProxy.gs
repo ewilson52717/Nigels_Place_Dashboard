@@ -291,12 +291,18 @@ function getClientData(ss, req, callerEmail) {
   }
 
   // Get this client's bookings
+  // Normalise Date objects → YYYY-MM-DD strings so JSON serialisation doesn't produce
+  // ISO datetime strings that the client-side parser can't handle (Invalid Date bug).
   const bookings = [];
   if (bookingsSheet) {
     const bkRows = bookingsSheet.getDataRange().getValues();
     for (let i = 1; i < bkRows.length; i++) {
       if (String(bkRows[i][1]) === String(clientId)) {
-        bookings.push(bkRows[i]);
+        const row = bkRows[i].slice();
+        // Columns 5 (checkIn) and 6 (checkOut) may be Date objects
+        if (row[5] instanceof Date) row[5] = Utilities.formatDate(row[5], Session.getScriptTimeZone(), 'yyyy-MM-dd');
+        if (row[6] instanceof Date) row[6] = Utilities.formatDate(row[6], Session.getScriptTimeZone(), 'yyyy-MM-dd');
+        bookings.push(row);
       }
     }
   }
