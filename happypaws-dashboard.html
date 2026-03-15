@@ -85,6 +85,13 @@
     .policy-modal-body ul { margin:0.3rem 0 0.75rem 1.25rem; }
     .policy-modal-body ul li { margin-bottom:0.25rem; }
     .policy-modal-footer { padding:1rem 1.5rem; border-top:1px solid #F3F4F6; display:flex; justify-content:flex-end; flex-shrink:0; }
+    /* ── Smooth collapsible section animations ── */
+    .np-collapse-body{overflow:hidden;transition:max-height .3s cubic-bezier(0.4,0,0.2,1),opacity .25s ease;opacity:1;}
+    .np-collapse-body.np-collapsed{max-height:0!important;opacity:0;pointer-events:none;}
+    .np-collapse-arrow{display:inline-block;transition:transform .3s cubic-bezier(0.4,0,0.2,1);}
+    .np-collapse-arrow.np-rotated{transform:rotate(-90deg);}
+    .np-collapse-header:hover{filter:brightness(0.97);}
+    .np-collapse-header:active{filter:brightness(0.95);}
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -1423,7 +1430,8 @@ async function onToken(resp){
         state.adminViewAsClient=true;
         const savedCid=parseInt(localStorage.getItem('np_admin_client_id')||'0');
         state.currentClientId=savedCid||null;
-        state.clientView='home';
+        const savedCV=(()=>{try{return localStorage.getItem('np_client_view');}catch(e){return null;}})();
+        state.clientView=(savedCV&&['home','bookings','mydog','account'].includes(savedCV))?savedCV:'home';
       }
     }else{
       // For clients, loadAllData() fails (their token can't read the private sheet).
@@ -1434,8 +1442,11 @@ async function onToken(resp){
       const cl=clients.find(c=>c.email.toLowerCase()===email);
       if(cl){
         state.role='client';state.currentClientId=cl.id;
+        // Restore last-viewed client tab so page refresh stays on the same view
+        const savedView=(()=>{try{return localStorage.getItem('np_client_view');}catch(e){return null;}})();
+        if(savedView&&['home','bookings','mydog','account'].includes(savedView))state.clientView=savedView;
         // Seed browser history so back-button stays within the portal, not the login page
-        try{history.replaceState({role:'client',clientView:'home'},'',' ');}catch(e){}
+        try{history.replaceState({role:'client',clientView:state.clientView},'',' ');}catch(e){}
         // Check for unseen changelog entries or missing required fields → show What's New popup
         checkWhatsNewOnLogin();
       }
@@ -1782,12 +1793,28 @@ async function archiveClientToSheet(cl){
 // ─── Calendar Settings panel toggle ──────────────────────────────────────────
 function toggleCalendarSettings(){
   state.showCalendarSettings=!state.showCalendarSettings;
-  // lightweight DOM toggle — avoids full re-render so inputs keep their values
+  // Smooth collapse/expand — avoids full re-render so inputs keep their values
   const panel=document.getElementById('cal-settings-panel');
   const btn=document.getElementById('cal-settings-btn');
-  if(panel)panel.style.display=state.showCalendarSettings?'block':'none';
-  if(btn)btn.innerHTML=`📅 Days Off${state.showCalendarSettings?' ▲':' ▾'}`;
-  if(btn)btn.className=`px-3 py-1.5 rounded-xl border text-sm transition-colors ${state.showCalendarSettings?'text-amber-700 bg-amber-50 border-amber-200':'border-gray-200 text-gray-500 hover:bg-gray-50'}`;
+  const arrow=document.getElementById('cal-settings-arrow');
+  if(panel){
+    if(state.showCalendarSettings){
+      panel.style.display='block';
+      panel.classList.remove('np-collapsed');
+      panel.style.maxHeight=panel.scrollHeight+'px';
+      setTimeout(()=>{if(!panel.classList.contains('np-collapsed'))panel.style.maxHeight='none';},320);
+    }else{
+      panel.style.maxHeight=panel.scrollHeight+'px';
+      panel.offsetHeight;
+      panel.classList.add('np-collapsed');
+      panel.style.maxHeight='0';
+    }
+  }
+  if(btn)btn.className=`np-collapse-header px-3 py-1.5 rounded-xl border text-sm transition-colors ${state.showCalendarSettings?'text-amber-700 bg-amber-50 border-amber-200':'border-gray-200 text-gray-500 hover:bg-gray-50'}`;
+  if(arrow){
+    if(state.showCalendarSettings)arrow.classList.remove('np-rotated');
+    else arrow.classList.add('np-rotated');
+  }
 }
 
 // ─── Per-cell quick-edit popover ──────────────────────────────────────────────
@@ -3021,7 +3048,7 @@ function buildCalendarView(role){
         <span class="font-semibold text-gray-700 min-w-[120px] text-center text-sm sm:text-base">${MONTHS[mo]} ${yr}</span>
         <button onclick="nextMonth()" class="px-3 py-1.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-100 text-sm">Next →</button>
         ${!isClient?`<button onclick="openBookingModal(null)" class="px-3 py-1.5 text-white rounded-xl text-sm shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ Book</button>
-        <button id="cal-settings-btn" onclick="toggleCalendarSettings()" class="px-3 py-1.5 rounded-xl border text-sm transition-colors ${state.showCalendarSettings?'text-amber-700 bg-amber-50 border-amber-200':'border-gray-200 text-gray-500 hover:bg-gray-50'}">📅 Days Off${state.showCalendarSettings?' ▲':' ▾'}</button>`:''}
+        <button id="cal-settings-btn" onclick="toggleCalendarSettings()" class="np-collapse-header px-3 py-1.5 rounded-xl border text-sm transition-colors ${state.showCalendarSettings?'text-amber-700 bg-amber-50 border-amber-200':'border-gray-200 text-gray-500 hover:bg-gray-50'}">📅 Days Off <span id="cal-settings-arrow" class="np-collapse-arrow ${state.showCalendarSettings?'':'np-rotated'}">▾</span></button>`:''}
         <button class="fs-btn" data-fs-btn title="Go fullscreen" onclick="toggleFullscreen()">${_FS_ENTER}</button>
       </div>
     </div>
@@ -3039,7 +3066,7 @@ function buildCalendarView(role){
 
     <!-- ── Days Off / Capacity Management panel (admin only) ──────── -->
     ${!isClient?`
-    <div id="cal-settings-panel" style="${state.showCalendarSettings?'':'display:none'}" class="mb-5 bg-white rounded-2xl shadow-sm border border-amber-100 overflow-hidden">
+    <div id="cal-settings-panel" class="np-collapse-body mb-5 bg-white rounded-2xl shadow-sm border border-amber-100 ${state.showCalendarSettings?'':'np-collapsed'}" style="${state.showCalendarSettings?'max-height:none':'max-height:0'}"
       <div class="px-5 py-3 border-b border-gray-50 flex items-center gap-2" style="background:#FFFBF5">
         <span class="text-base">📅</span>
         <span class="font-semibold text-gray-700 text-sm">Days Off &amp; Capacity</span>
@@ -3672,24 +3699,45 @@ async function deleteManualVetClinic(id){
   catch(e){showToast('Removed locally — sheet sync failed.','#F97316');}
 }
 
-// Track which service sections are collapsed (persists during session)
+// ── Unified smooth collapsible section system ──
+// All collapsible states live here; sections default-collapsed where noted
 const _svcCollapsed={base:true,addons:true,courier:true};
+if(!window._acctCollapsed)window._acctCollapsed={contact:false,payments:false,pets:false,packages:true};
+if(!window._settCollapsed)window._settCollapsed={};
+
+function _smoothToggle(bodyId,arrowId,collapsed){
+  const body=document.getElementById(bodyId);
+  const arrow=document.getElementById(arrowId);
+  if(!body)return;
+  if(collapsed){
+    // Collapse: set max-height to current scrollHeight, then animate to 0
+    body.style.maxHeight=body.scrollHeight+'px';
+    body.offsetHeight; // force reflow
+    body.classList.add('np-collapsed');
+    body.style.maxHeight='0';
+  }else{
+    // Expand: remove collapsed class, animate max-height from 0 to scrollHeight
+    body.classList.remove('np-collapsed');
+    body.style.maxHeight=body.scrollHeight+'px';
+    // After animation, remove max-height so content can reflow naturally
+    setTimeout(()=>{if(!body.classList.contains('np-collapsed'))body.style.maxHeight='none';},320);
+  }
+  if(arrow){
+    if(collapsed)arrow.classList.add('np-rotated');
+    else arrow.classList.remove('np-rotated');
+  }
+}
 function toggleSvcSection(key){
   _svcCollapsed[key]=!_svcCollapsed[key];
-  const body=document.getElementById('svc-body-'+key);
-  const arrow=document.getElementById('svc-arrow-'+key);
-  if(body)body.style.display=_svcCollapsed[key]?'none':'';
-  if(arrow)arrow.textContent=_svcCollapsed[key]?'▸':'▾';
+  _smoothToggle('svc-body-'+key,'svc-arrow-'+key,_svcCollapsed[key]);
 }
-
-/* ── My Account collapsible sections ── */
 function toggleAcctSection(key){
-  if(!window._acctCollapsed)window._acctCollapsed={};
   window._acctCollapsed[key]=!window._acctCollapsed[key];
-  const body=document.getElementById('acct-body-'+key);
-  const arrow=document.getElementById('acct-arrow-'+key);
-  if(body)body.style.display=window._acctCollapsed[key]?'none':'';
-  if(arrow)arrow.textContent=window._acctCollapsed[key]?'▸':'▾';
+  _smoothToggle('acct-body-'+key,'acct-arrow-'+key,window._acctCollapsed[key]);
+}
+function toggleSettSection(key){
+  window._settCollapsed[key]=!window._settCollapsed[key];
+  _smoothToggle('sett-body-'+key,'sett-arrow-'+key,window._settCollapsed[key]);
 }
 
 /* ── Courier settings UI helpers ── */
@@ -3732,14 +3780,14 @@ function buildServicesView(){
   // Collapsible section builder
   const secHead=(key,icon,title,subtitle,count)=>`
     <button type="button" onclick="toggleSvcSection('${key}')"
-      class="w-full flex items-center gap-3 px-5 py-4 text-left transition-colors"
+      class="np-collapse-header w-full flex items-center gap-3 px-5 py-4 text-left transition-colors"
       style="background:linear-gradient(135deg,#FFFBF5 0%,#FFF7ED 100%);border-bottom:2px solid #F5E6D3;border-left:4px solid #7B4015;">
       <span class="text-2xl">${icon}</span>
       <div class="flex-1 min-w-0">
         <div class="text-base font-bold text-gray-800">${title} <span class="text-xs font-medium text-amber-600 ml-1">${count!==undefined?'('+count+')':''}</span></div>
         <div class="text-xs text-gray-400 mt-0.5">${subtitle}</div>
       </div>
-      <span id="svc-arrow-${key}" class="text-gray-400 text-lg font-mono flex-shrink-0">${_svcCollapsed[key]?'▸':'▾'}</span>
+      <span id="svc-arrow-${key}" class="np-collapse-arrow text-gray-400 text-lg font-mono flex-shrink-0 ${_svcCollapsed[key]?'np-rotated':''}">▾</span>
     </button>`;
   return`
   <div class="p-6 slide-in">
@@ -3754,7 +3802,7 @@ function buildServicesView(){
     <!-- ── BASE SERVICES ───────────────────────────────────────── -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-4 overflow-hidden">
       ${secHead('base','🏠','Base Services','Charged per day · clients choose one when booking',base.length)}
-      <div id="svc-body-base" style="display:${_svcCollapsed.base?'none':''}">
+      <div id="svc-body-base" class="np-collapse-body ${_svcCollapsed.base?'np-collapsed':''}" style="${_svcCollapsed.base?'max-height:0':'max-height:none'}">
         <div class="pb-3 pt-2" style="margin-left:16px;border-left:2px solid #F0E4D6;">
           ${base.length===0?`<p class="text-gray-300 text-sm text-center py-4">No base services. Add one above.</p>`:`
           <div class="space-y-1 px-4">
@@ -3781,7 +3829,7 @@ function buildServicesView(){
     <!-- ── ADD-ONS ─────────────────────────────────────────────── -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-4 overflow-hidden">
       ${secHead('addons','✨','Add-Ons','Clients can select any combination when booking',addons.length)}
-      <div id="svc-body-addons" style="display:${_svcCollapsed.addons?'none':''}">
+      <div id="svc-body-addons" class="np-collapse-body ${_svcCollapsed.addons?'np-collapsed':''}" style="${_svcCollapsed.addons?'max-height:0':'max-height:none'}">
         <div class="pb-3 pt-2" style="margin-left:16px;border-left:2px solid #F0E4D6;">
           ${addons.length===0?`<div class="text-center py-6"><div class="text-3xl mb-2">✨</div><p class="text-gray-300 text-sm">No add-ons yet. Add your first one above!</p></div>`:`
           <div class="space-y-1 px-4">
@@ -3815,7 +3863,7 @@ function buildServicesView(){
         state.settings.courierEnabled!==false
           ?'Enabled · '+(state.settings.courierDays||'Tue,Thu').split(',').join(' & ')+' · $'+(state.settings.courierOneWayPrice||25)+' one-way / $'+(state.settings.courierRoundTripPrice||40)+' round trip'
           :'Disabled')}
-      <div id="svc-body-courier" style="display:${_svcCollapsed.courier?'none':''}">
+      <div id="svc-body-courier" class="np-collapse-body ${_svcCollapsed.courier?'np-collapsed':''}" style="${_svcCollapsed.courier?'max-height:0':'max-height:none'}">
         <div class="pb-4 pt-2 space-y-3" style="margin-left:16px;padding-left:20px;padding-right:20px;border-left:2px solid #F0E4D6;">
           <p class="text-xs text-gray-400">Offer pickup/dropoff for boarding & full-day daycare clients. Distance is verified against your business address using Google Maps.</p>
           <div>
@@ -3947,153 +3995,173 @@ function buildInvoicesView(){
   </div>`;
 }
 function buildSettingsView(){
+  if(!window._settCollapsed)window._settCollapsed={biz:false,integrations:true,booking:true,kiosk:true};
+  const settHead=(key,icon,title,subtitle)=>`
+    <button type="button" onclick="toggleSettSection('${key}')"
+      class="np-collapse-header w-full flex items-center gap-3 px-5 py-4 text-left transition-colors"
+      style="background:linear-gradient(135deg,#FFFBF5 0%,#FFF7ED 100%);border-bottom:2px solid #F5E6D3;border-left:4px solid #7B4015;">
+      <span class="text-2xl">${icon}</span>
+      <div class="flex-1 min-w-0">
+        <div class="text-base font-bold text-gray-800">${title}</div>
+        <div class="text-xs text-gray-400 mt-0.5">${subtitle}</div>
+      </div>
+      <span id="sett-arrow-${key}" class="np-collapse-arrow text-gray-400 text-lg font-mono flex-shrink-0 ${window._settCollapsed[key]?'np-rotated':''}">▾</span>
+    </button>`;
   return`
   <div class="p-6 slide-in">
-    <h1 class="text-2xl font-bold text-gray-800 mb-6">Settings</h1>
-    <div class="max-w-lg space-y-4">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-800">Settings</h1>
+        <p class="text-sm text-gray-400 mt-0.5">Configure your dashboard, integrations, and booking rules</p>
+      </div>
+      <button onclick="saveSettings()" class="px-5 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">Save Settings</button>
+    </div>
+    <div class="max-w-2xl space-y-4">
       ${state.mode==='live'&&state.sheetId?`
       <div class="bg-amber-50 rounded-2xl p-4 border border-amber-100">
         <div class="text-sm font-semibold text-amber-900 mb-2">📊 Google Sheet Connected</div>
         <div class="text-xs text-amber-800 font-mono break-all mb-2">${state.sheetId}</div>
         <a href="${state.sheetUrl}" target="_blank" class="text-xs text-amber-800 hover:underline font-medium">Open in Google Sheets ↗</a>
-        <div class="mt-2 p-2 bg-amber-100 rounded-lg text-xs text-amber-800">
-          <strong>Important:</strong> Copy the Sheet ID above and paste it into <code>CONFIG.SHEET_ID</code> in this HTML file so it persists.
-        </div>
       </div>`:state.mode==='live'?`<div class="bg-blue-50 rounded-2xl p-4 border border-blue-100 text-sm text-blue-700">No sheet yet. Sign out and sign back in to create one.</div>`:''}
-      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h2 class="font-semibold text-gray-800 mb-4">Business Info</h2>
-        <div class="space-y-3">
-          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Business Name</label>
-            <input id="set-biz" type="text" value="${state.settings.businessName}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
-          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Owner Name</label>
-            <input id="set-owner" type="text" value="${state.settings.ownerName}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
-          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Square Payment Link</label>
-            <input id="set-square" type="url" placeholder="https://square.link/u/XXXXXXXX" value="${state.settings.squareLink||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-            <p class="text-xs text-gray-400 mt-1">In Square: Online → Payment Links → Create Link → copy URL. Clients pay by card or Cash App via this link.</p></div>
-        </div>
-      </div>
-      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h2 class="font-semibold text-gray-800 mb-1">🟦 Square API Integration</h2>
-        <p class="text-xs text-gray-400 mb-3">Connect to Square to automatically sync payment totals on invoices. Get your credentials at <a href="https://developer.squareup.com/apps" target="_blank" class="underline text-amber-700">developer.squareup.com/apps</a> → create an app → Production → copy the Access Token and Location ID.</p>
-        <div class="space-y-3">
-          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Square Access Token</label>
-            <input id="set-square-api-key" type="password" placeholder="EAAAl..." value="${state.settings.squareApiKey||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
-            <p class="text-xs text-gray-400 mt-1">Production → Access Token (starts with EAAA). Keep this private — admin only.</p></div>
-          <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Square Location ID</label>
-            <input id="set-square-location" type="text" placeholder="LxxxxxxxxxxxxX" value="${state.settings.squareLocationId||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
-            <p class="text-xs text-gray-400 mt-1">Production → Location ID (under Locations in your Square dashboard).</p></div>
-          <div class="flex items-center gap-3 mt-1 px-3 py-2.5 rounded-xl" style="background:${state.settings.squareSandbox?'#FFF7ED':'#F0FDF4'};border:1px solid ${state.settings.squareSandbox?'#FDE68A':'#86EFAC'};">
-            <input type="checkbox" id="set-square-sandbox" class="accent-amber-700 w-4 h-4 flex-shrink-0" ${state.settings.squareSandbox?'checked':''}>
-            <div>
-              <label for="set-square-sandbox" class="text-xs font-semibold cursor-pointer" style="color:${state.settings.squareSandbox?'#92400E':'#166534'};">${state.settings.squareSandbox?'🧪 Sandbox mode — test payments only':'🟢 Production mode — real payments'}</label>
-              <div class="text-xs mt-0.5" style="color:${state.settings.squareSandbox?'#92400E':'#166534'};">${state.settings.squareSandbox?'Using squareupsandbox.com — no real charges. Uncheck when ready to go live.':'Using connect.squareup.com. Check this to switch to sandbox for testing.'}</div>
+
+      <!-- ── BUSINESS & PAYMENTS ──────────────────────────────────── -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        ${settHead('biz','🏪','Business & Payments','Business info, Square checkout, and payment link')}
+        <div id="sett-body-biz" class="np-collapse-body ${window._settCollapsed.biz?'np-collapsed':''}" style="${window._settCollapsed.biz?'max-height:0':'max-height:none'}">
+          <div class="pb-4 pt-3 space-y-4" style="margin-left:16px;padding-left:20px;padding-right:20px;border-left:2px solid #F0E4D6;">
+            <div class="space-y-3">
+              <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Business Name</label>
+                <input id="set-biz" type="text" value="${state.settings.businessName}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+              <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Owner Name</label>
+                <input id="set-owner" type="text" value="${state.settings.ownerName}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
+              <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Square Payment Link</label>
+                <input id="set-square" type="url" placeholder="https://square.link/u/XXXXXXXX" value="${state.settings.squareLink||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+                <p class="text-xs text-gray-400 mt-1">In Square: Online → Payment Links → Create Link → copy URL.</p></div>
+            </div>
+            <div class="border-t border-gray-100 pt-4">
+              <div class="text-sm font-semibold text-gray-700 mb-1">🟦 Square API Integration</div>
+              <p class="text-xs text-gray-400 mb-3">Connect to Square for automatic checkout links. Get credentials at <a href="https://developer.squareup.com/apps" target="_blank" class="underline text-amber-700">developer.squareup.com/apps</a>.</p>
+              <div class="space-y-3">
+                <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Square Access Token</label>
+                  <input id="set-square-api-key" type="password" placeholder="EAAAl..." value="${state.settings.squareApiKey||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono"></div>
+                <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Square Location ID</label>
+                  <input id="set-square-location" type="text" placeholder="LxxxxxxxxxxxxX" value="${state.settings.squareLocationId||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono"></div>
+                <div class="flex items-center gap-3 px-3 py-2.5 rounded-xl" style="background:${state.settings.squareSandbox?'#FFF7ED':'#F0FDF4'};border:1px solid ${state.settings.squareSandbox?'#FDE68A':'#86EFAC'};">
+                  <input type="checkbox" id="set-square-sandbox" class="accent-amber-700 w-4 h-4 flex-shrink-0" ${state.settings.squareSandbox?'checked':''}>
+                  <div>
+                    <label for="set-square-sandbox" class="text-xs font-semibold cursor-pointer" style="color:${state.settings.squareSandbox?'#92400E':'#166534'};">${state.settings.squareSandbox?'🧪 Sandbox mode — test payments only':'🟢 Production mode — real payments'}</label>
+                    <div class="text-xs mt-0.5" style="color:${state.settings.squareSandbox?'#92400E':'#166534'};">${state.settings.squareSandbox?'Using squareupsandbox.com — no real charges.':'Using connect.squareup.com — real charges.'}</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
-      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h2 class="font-semibold text-gray-800 mb-1">📁 Google Drive Folder</h2>
-        <p class="text-xs text-gray-400 mb-3">Paste your "Nigel's Place" Drive folder ID to prevent duplicate folders. In Drive: right-click your folder → Open in new tab → copy the ID from the URL (the long string after /folders/).</p>
-        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Nigel's Place Folder ID</label>
-          <input id="set-drive-folder" type="text" placeholder="e.g. 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs" value="${state.settings.nigelsDriveFolderId||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
-        </div>
-      </div>
-      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h2 class="font-semibold text-gray-800 mb-1">🤖 AI Vaccine Parsing</h2>
-        <p class="text-xs text-gray-400 mb-3">Upload a vaccine record PDF or photo and Gemini AI will read it and fill in all the vaccines and dates automatically.</p>
-        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Gemini API Key</label>
-          <input id="set-gemini" type="password" placeholder="AIza..." value="${state.settings.geminiApiKey||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
-          <p class="text-xs text-gray-400 mt-1">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" class="underline text-amber-700">aistudio.google.com/apikey</a> → Create API key (free tier is plenty).</p>
-        </div>
-      </div>
-      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h2 class="font-semibold text-gray-800 mb-1">🗺️ Vet Clinic Search (Google Maps)</h2>
-        <p class="text-xs text-gray-400 mb-3">Enables a live vet clinic search in the client portal — clients type a clinic name and it autocompletes to verified Google Maps locations, auto-filling the phone number. Without this key the vet field is a plain text input.</p>
-        <div>
-          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Google Maps API Key</label>
-          <input id="set-maps-key" type="password" placeholder="AIza..." value="${state.settings.googleMapsApiKey||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
-          <p class="text-xs text-gray-400 mt-1">
-            Get a key at <a href="https://console.cloud.google.com/apis/credentials" target="_blank" class="underline text-amber-700">Google Cloud Console</a>.
-            Enable <strong>Maps JavaScript API</strong> and <strong>Places API</strong>.
-            Restrict the key to your site's domain for security.
-          </p>
-        </div>
-      </div>
-      <!-- ── Required Vaccine Manager ──────────────────────────────── -->
-      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h2 class="font-semibold text-gray-800 mb-1">💉 Required Vaccine Records</h2>
-        <p class="text-xs text-gray-400 mb-4">Clients cannot book until their pet has current records for every vaccine below. Toggle one off to make it optional. Add new ones or remove any you don't require.</p>
-        <div id="vacc-req-list" class="space-y-2 mb-3">
-          ${(state.settings.requiredVaccines||[]).map((v,i)=>`
-          <div class="flex items-center gap-2 p-2 rounded-xl border border-gray-100 bg-gray-50">
-            <label class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
-              <input type="checkbox" checked onchange="toggleRequiredVaccine(${i},this.checked)" class="rounded" style="accent-color:#7B4015;">
-              <span class="text-sm text-gray-700 font-medium">${v}</span>
-            </label>
-            <button onclick="deleteRequiredVaccine(${i})" class="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none px-1" title="Remove">×</button>
-          </div>`).join('')}
-        </div>
-        <div class="flex gap-2 mt-2">
-          <input id="new-vacc-input" type="text" placeholder="e.g. Leptospirosis" maxlength="40"
-            class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();addRequiredVaccine();}">
-          <button onclick="addRequiredVaccine()" class="px-4 py-2 text-white text-sm font-semibold rounded-xl flex-shrink-0" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ Add</button>
-        </div>
-        <p class="text-xs text-gray-300 mt-2">Changes save automatically when you click Save Settings.</p>
-      </div>
-      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h2 class="font-semibold text-gray-800 mb-1">🔗 Client Portal Proxy</h2>
-        <p class="text-xs text-gray-400 mb-3">New clients sign in with their own Google account, which can't read your private sheet — so the proxy URL must be available before they can reach it. This page saves it to your browser's cache automatically. <strong class="text-gray-500">For the most reliable setup, also paste the URL into <code class="bg-amber-50 text-amber-800 px-1 rounded">CONFIG.APPS_SCRIPT_URL</code> near the top of the HTML file.</strong> Without the proxy configured, new client registrations will fail.</p>
-        <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Apps Script Web App URL</label>
-          <input id="set-apps-script-url" type="url" placeholder="https://script.google.com/macros/s/AKfy…/exec" value="${state.settings.appsScriptUrl||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
-          <p class="text-xs text-gray-400 mt-1">Deploy your <em>NigelsPlace_ClientProxy.gs</em> script as a Web App (Execute as: Me, Who can access: Anyone). Saving here caches the URL in this browser — for permanent reliability, also copy it into <code class="bg-gray-100 px-1 rounded">CONFIG.APPS_SCRIPT_URL</code> in the HTML source.</p>
-          ${CONFIG.APPS_SCRIPT_URL?`<p class="text-xs text-emerald-600 mt-1">✅ CONFIG.APPS_SCRIPT_URL is set — new clients will always be able to register.</p>`:`<p class="text-xs text-amber-600 mt-1">⚠️ CONFIG.APPS_SCRIPT_URL is not set in the HTML. Saving this field caches the URL in your browser as a fallback, but it's best to also paste it into CONFIG.APPS_SCRIPT_URL in the source.</p>`}
-        </div>
-      </div>
-      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h2 class="font-semibold text-gray-800 mb-1">📅 Daily Pet Capacity</h2>
-        <p class="text-xs text-gray-400 mb-3">Default max pets per day. Override specific dates below — or block entire date ranges for vacations.</p>
-        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Default Max Per Day</label>
-        <input id="set-cap" type="number" value="${state.settings.dailyCapacity}" min="1" max="100" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mb-5">
 
-        <!-- Days Off lives in Calendar view -->
-        <div class="flex items-center gap-3 p-3 rounded-xl border border-amber-100 bg-amber-50 mt-1 mb-1">
-          <span class="text-lg">📅</span>
-          <p class="text-xs text-amber-800 flex-1 min-w-0">For <strong>Days Off &amp; Capacity</strong>, head to the <button onclick="setView('calendar')" class="underline font-semibold text-amber-900 hover:text-amber-700">Calendar section</button> and tap <strong>Days Off ▾</strong> at the top.</p>
+      <!-- ── INTEGRATIONS & API KEYS ──────────────────────────────── -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        ${settHead('integrations','🔌','Integrations & API Keys','Google Drive, Maps, Gemini AI, and Client Portal proxy')}
+        <div id="sett-body-integrations" class="np-collapse-body ${window._settCollapsed.integrations?'np-collapsed':''}" style="${window._settCollapsed.integrations?'max-height:0':'max-height:none'}">
+          <div class="pb-4 pt-3 space-y-4" style="margin-left:16px;padding-left:20px;padding-right:20px;border-left:2px solid #F0E4D6;">
+            <div>
+              <div class="text-sm font-semibold text-gray-700 mb-1">📁 Google Drive Folder</div>
+              <p class="text-xs text-gray-400 mb-2">Paste your "Nigel's Place" Drive folder ID to prevent duplicate folders.</p>
+              <input id="set-drive-folder" type="text" placeholder="e.g. 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs" value="${state.settings.nigelsDriveFolderId||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
+            </div>
+            <div class="border-t border-gray-100 pt-4">
+              <div class="text-sm font-semibold text-gray-700 mb-1">🤖 AI Vaccine Parsing (Gemini)</div>
+              <p class="text-xs text-gray-400 mb-2">Upload a vaccine record and Gemini auto-fills the vaccines. <a href="https://aistudio.google.com/apikey" target="_blank" class="underline text-amber-700">Get a free key</a>.</p>
+              <input id="set-gemini" type="password" placeholder="AIza..." value="${state.settings.geminiApiKey||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
+            </div>
+            <div class="border-t border-gray-100 pt-4">
+              <div class="text-sm font-semibold text-gray-700 mb-1">🗺️ Google Maps (Vet Search & Courier)</div>
+              <p class="text-xs text-gray-400 mb-2">Enables vet clinic autocomplete and courier distance check. <a href="https://console.cloud.google.com/apis/credentials" target="_blank" class="underline text-amber-700">Get a key</a> — enable Maps JS, Places, Distance Matrix, and Geocoding APIs.</p>
+              <input id="set-maps-key" type="password" placeholder="AIza..." value="${state.settings.googleMapsApiKey||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
+            </div>
+            <div class="border-t border-gray-100 pt-4">
+              <div class="text-sm font-semibold text-gray-700 mb-1">🔗 Client Portal Proxy</div>
+              <p class="text-xs text-gray-400 mb-2">Apps Script URL for client registration & data sync. <strong class="text-gray-500">Also paste into <code class="bg-amber-50 text-amber-800 px-1 rounded">CONFIG.APPS_SCRIPT_URL</code> in the HTML.</strong></p>
+              <input id="set-apps-script-url" type="url" placeholder="https://script.google.com/macros/s/AKfy…/exec" value="${state.settings.appsScriptUrl||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
+              ${CONFIG.APPS_SCRIPT_URL?`<p class="text-xs text-emerald-600 mt-1">✅ CONFIG.APPS_SCRIPT_URL is set.</p>`:`<p class="text-xs text-amber-600 mt-1">⚠️ CONFIG.APPS_SCRIPT_URL not set in HTML — paste it there for reliability.</p>`}
+            </div>
+          </div>
         </div>
       </div>
-      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h2 class="font-semibold text-gray-800 mb-1">🐾 Multi-Pet Family Booking</h2>
-        <p class="text-xs text-gray-400 mb-3">Clients with multiple dogs can book them together sharing 1 kennel slot (max 3). The first dog pays full price; additional dogs get a discount.</p>
-        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Discount for Additional Dogs (%)</label>
-        <input id="set-multi-pet-discount" type="number" value="${state.settings.multiPetDiscount||10}" min="0" max="50" step="5" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
-        <p class="text-xs text-gray-400 mt-1">Example: 10% means the 2nd &amp; 3rd dog each pay 90% of the per-dog rate.</p>
-      </div>
-      <div class="bg-amber-50 rounded-xl p-4 border border-amber-100 text-sm text-amber-800">
-        🛎️ Service rates &amp; courier settings are managed in the <button onclick="setView('services')" class="underline font-semibold">Services</button> section.
-      </div>
-      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h2 class="font-semibold text-gray-800 mb-1">🖥️ Kiosk Mode Setup</h2>
-        <p class="text-xs text-gray-400 mb-3">A lobby display that shows today's pets — no login needed, always live. Set up once, run forever on a tablet or TV.</p>
-        <ol class="text-xs text-gray-600 space-y-2 list-decimal pl-4 mb-3">
-          <li>In <strong>Google Cloud Console</strong> → APIs &amp; Services → Credentials → <strong>Create API Key</strong>. Restrict it to the Sheets API.</li>
-          <li>Paste that key into <code class="bg-gray-100 px-1 rounded">CONFIG.KIOSK_API_KEY</code> in the HTML source file (near the top, same section as <code class="bg-gray-100 px-1 rounded">SHEET_ID</code>).</li>
-          <li>In <strong>Google Sheets</strong>: Share → Change → <em>Anyone with link</em> → Viewer.</li>
-          <li>Open the kiosk URL on any device: <code class="bg-amber-50 px-1.5 py-0.5 rounded text-amber-800 font-medium break-all">${window.location.href.split('?')[0]}?kiosk</code></li>
-        </ol>
-        <div class="flex gap-2">
-          <button onclick="setView('kiosk')" class="flex-1 py-2 rounded-xl text-sm font-medium border border-amber-200 text-amber-800 hover:bg-amber-50">👁 Preview Kiosk</button>
-          <button onclick="window.open(window.location.href.split('?')[0]+'?kiosk','_blank')" class="flex-1 py-2 rounded-xl text-sm font-medium text-white" style="background:#7B4015">🖥️ Open Kiosk</button>
+
+      <!-- ── BOOKING RULES ────────────────────────────────────────── -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        ${settHead('booking','📋','Booking Rules','Capacity, vaccines, multi-pet discounts')}
+        <div id="sett-body-booking" class="np-collapse-body ${window._settCollapsed.booking?'np-collapsed':''}" style="${window._settCollapsed.booking?'max-height:0':'max-height:none'}">
+          <div class="pb-4 pt-3 space-y-4" style="margin-left:16px;padding-left:20px;padding-right:20px;border-left:2px solid #F0E4D6;">
+            <div>
+              <div class="text-sm font-semibold text-gray-700 mb-1">📅 Daily Pet Capacity</div>
+              <p class="text-xs text-gray-400 mb-2">Default max pets per day. Override dates in the <button onclick="setView('calendar')" class="underline font-semibold text-amber-700">Calendar</button>.</p>
+              <input id="set-cap" type="number" value="${state.settings.dailyCapacity}" min="1" max="100" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+            </div>
+            <div class="border-t border-gray-100 pt-4">
+              <div class="text-sm font-semibold text-gray-700 mb-1">🐾 Multi-Pet Family Booking</div>
+              <p class="text-xs text-gray-400 mb-2">Multiple dogs share 1 slot. First dog full price, additional dogs get a discount.</p>
+              <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Discount for Additional Dogs (%)</label>
+              <input id="set-multi-pet-discount" type="number" value="${state.settings.multiPetDiscount||10}" min="0" max="50" step="5" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+              <p class="text-xs text-gray-400 mt-1">10% = 2nd & 3rd dog each pay 90% of the per-dog rate.</p>
+            </div>
+            <div class="border-t border-gray-100 pt-4">
+              <div class="text-sm font-semibold text-gray-700 mb-1">💉 Required Vaccine Records</div>
+              <p class="text-xs text-gray-400 mb-3">Clients must have current records for each vaccine below to book.</p>
+              <div id="vacc-req-list" class="space-y-2 mb-3">
+                ${(state.settings.requiredVaccines||[]).map((v,i)=>`
+                <div class="flex items-center gap-2 p-2 rounded-xl border border-gray-100 bg-white">
+                  <label class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
+                    <input type="checkbox" checked onchange="toggleRequiredVaccine(${i},this.checked)" class="rounded" style="accent-color:#7B4015;">
+                    <span class="text-sm text-gray-700 font-medium">${v}</span>
+                  </label>
+                  <button onclick="deleteRequiredVaccine(${i})" class="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none px-1" title="Remove">×</button>
+                </div>`).join('')}
+              </div>
+              <div class="flex gap-2">
+                <input id="new-vacc-input" type="text" placeholder="e.g. Leptospirosis" maxlength="40"
+                  class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm"
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();addRequiredVaccine();}">
+                <button onclick="addRequiredVaccine()" class="px-4 py-2 text-white text-sm font-semibold rounded-xl flex-shrink-0" style="background:#7B4015">+ Add</button>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 p-3 rounded-xl border border-amber-100 bg-amber-50">
+              <span class="text-lg">🛎️</span>
+              <p class="text-xs text-amber-800 flex-1">Service rates & courier settings are in <button onclick="setView('services')" class="underline font-semibold text-amber-900">Services</button>.</p>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <h2 class="font-semibold text-gray-800 mb-1">🔐 Kiosk Password</h2>
-        <p class="text-xs text-gray-400 mb-3">If set, anyone opening the kiosk URL must enter this password before the lobby screen appears. Leave blank for no password. Admins (Kelly &amp; Elyse) always bypass it.</p>
-        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Kiosk Password</label>
-        <input id="set-kiosk-password" type="text" placeholder="Leave blank for no password" value="${state.settings.kioskPassword||''}"
-          class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
-        <p class="text-xs text-gray-400 mt-1">Keep it simple — this is just to stop random people from pulling up the lobby on their own device, not Fort Knox. 🐾</p>
+
+      <!-- ── KIOSK MODE ───────────────────────────────────────────── -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        ${settHead('kiosk','🖥️','Kiosk Mode','Lobby display for tablets or TVs')}
+        <div id="sett-body-kiosk" class="np-collapse-body ${window._settCollapsed.kiosk?'np-collapsed':''}" style="${window._settCollapsed.kiosk?'max-height:0':'max-height:none'}">
+          <div class="pb-4 pt-3 space-y-4" style="margin-left:16px;padding-left:20px;padding-right:20px;border-left:2px solid #F0E4D6;">
+            <div>
+              <p class="text-xs text-gray-400 mb-3">A lobby display showing today's pets — no login needed. Set up once, run forever.</p>
+              <ol class="text-xs text-gray-600 space-y-2 list-decimal pl-4 mb-3">
+                <li>In <strong>Google Cloud Console</strong> → Credentials → <strong>Create API Key</strong> (restrict to Sheets API).</li>
+                <li>Paste into <code class="bg-gray-100 px-1 rounded">CONFIG.KIOSK_API_KEY</code> in the HTML source.</li>
+                <li>In <strong>Google Sheets</strong>: Share → Anyone with link → Viewer.</li>
+                <li>Open: <code class="bg-amber-50 px-1.5 py-0.5 rounded text-amber-800 font-medium break-all">${window.location.href.split('?')[0]}?kiosk</code></li>
+              </ol>
+              <div class="flex gap-2">
+                <button onclick="setView('kiosk')" class="flex-1 py-2 rounded-xl text-sm font-medium border border-amber-200 text-amber-800 hover:bg-amber-50">👁 Preview</button>
+                <button onclick="window.open(window.location.href.split('?')[0]+'?kiosk','_blank')" class="flex-1 py-2 rounded-xl text-sm font-medium text-white" style="background:#7B4015">🖥️ Open Kiosk</button>
+              </div>
+            </div>
+            <div class="border-t border-gray-100 pt-4">
+              <div class="text-sm font-semibold text-gray-700 mb-1">🔐 Kiosk Password</div>
+              <p class="text-xs text-gray-400 mb-2">Optional password to view the kiosk. Admins always bypass it.</p>
+              <input id="set-kiosk-password" type="text" placeholder="Leave blank for no password" value="${state.settings.kioskPassword||''}"
+                class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
+            </div>
+          </div>
+        </div>
       </div>
+
       <button onclick="saveSettings()" class="w-full py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">Save Settings</button>
     </div>
   </div>`;
@@ -4423,14 +4491,14 @@ function buildClientAccount(){
   if(!window._acctCollapsed)window._acctCollapsed={contact:false,payments:false,pets:false,packages:true};
   const acctHead=(key,icon,title,subtitle,badge)=>`
     <button type="button" onclick="toggleAcctSection('${key}')"
-      class="w-full flex items-center gap-3 px-5 py-4 text-left transition-colors"
+      class="np-collapse-header w-full flex items-center gap-3 px-5 py-4 text-left transition-colors"
       style="background:linear-gradient(135deg,#FFFBF5 0%,#FFF7ED 100%);border-bottom:2px solid #F5E6D3;border-left:4px solid #7B4015;">
       <span class="text-2xl">${icon}</span>
       <div class="flex-1 min-w-0">
         <div class="text-base font-bold text-gray-800">${title} ${badge||''}</div>
         <div class="text-xs text-gray-400 mt-0.5">${subtitle}</div>
       </div>
-      <span id="acct-arrow-${key}" class="text-gray-400 text-lg font-mono flex-shrink-0">${window._acctCollapsed[key]?'▸':'▾'}</span>
+      <span id="acct-arrow-${key}" class="np-collapse-arrow text-gray-400 text-lg font-mono flex-shrink-0 ${window._acctCollapsed[key]?'np-rotated':''}">▾</span>
     </button>`;
 
   // Build payments section content
@@ -4454,7 +4522,7 @@ function buildClientAccount(){
     <!-- ── CONTACT INFORMATION ─────────────────────────────────── -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       ${acctHead('contact','📞','Contact Information','Email and phone for booking confirmations')}
-      <div id="acct-body-contact" style="display:${window._acctCollapsed.contact?'none':''}">
+      <div id="acct-body-contact" class="np-collapse-body ${window._acctCollapsed.contact?'np-collapsed':''}" style="${window._acctCollapsed.contact?'max-height:0':'max-height:none'}">
         <div class="pb-4 pt-3" style="margin-left:16px;padding-left:20px;padding-right:20px;border-left:2px solid #F0E4D6;">
           <p class="text-xs text-gray-400 mb-3">To change your name, contact Nigel's Place directly.</p>
           <form onsubmit="submitUpdateProfile(event)" class="space-y-3">
@@ -4488,7 +4556,7 @@ function buildClientAccount(){
       ${acctHead('payments','💳','Payments & Balances',
         totalDue>0?'Outstanding balances and payment history':'All caught up — recent payment history',
         totalDue>0?'<span class="text-sm font-bold text-red-600 ml-2">$'+totalDue.toFixed(2)+' due</span>':'<span class="text-xs font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full ml-2">✓ All Paid</span>')}
-      <div id="acct-body-payments" style="display:${window._acctCollapsed.payments?'none':''}">
+      <div id="acct-body-payments" class="np-collapse-body ${window._acctCollapsed.payments?'np-collapsed':''}" style="${window._acctCollapsed.payments?'max-height:0':'max-height:none'}">
         <div class="pb-4 pt-3" style="margin-left:16px;padding-left:20px;padding-right:20px;border-left:2px solid #F0E4D6;">
           ${unpaid.length>0?`
           <div class="mb-4">
@@ -4543,7 +4611,7 @@ function buildClientAccount(){
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       ${acctHead('pets','🐾','My Pets','Your fur family',
         '<span class="text-xs font-medium text-amber-600 ml-1">('+cl.dogs.filter(d=>!d.deceased).length+')</span>')}
-      <div id="acct-body-pets" style="display:${window._acctCollapsed.pets?'none':''}">
+      <div id="acct-body-pets" class="np-collapse-body ${window._acctCollapsed.pets?'np-collapsed':''}" style="${window._acctCollapsed.pets?'max-height:0':'max-height:none'}">
         <div class="pb-4 pt-3" style="margin-left:16px;padding-left:20px;padding-right:20px;border-left:2px solid #F0E4D6;">
           <div class="flex justify-end mb-3">
             <button onclick="showAddDogModal()" class="text-xs px-3 py-1.5 rounded-lg text-white font-semibold" style="background:#7B4015">+ Add Pet</button>
@@ -4584,7 +4652,7 @@ function buildClientAccount(){
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       ${acctHead('packages','🎫','Session Packages','Pre-purchase daycare sessions and save',
         totalRemaining>0?'<span class="text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full ml-2">'+totalRemaining+' available</span>':'')}
-      <div id="acct-body-packages" style="display:${window._acctCollapsed.packages?'none':''}">
+      <div id="acct-body-packages" class="np-collapse-body ${window._acctCollapsed.packages?'np-collapsed':''}" style="${window._acctCollapsed.packages?'max-height:0':'max-height:none'}">
         <div class="pb-4 pt-3" style="margin-left:16px;padding-left:20px;padding-right:20px;border-left:2px solid #F0E4D6;">
           <div class="flex justify-end mb-3">
             <button onclick="showBuyPackageModal()" class="text-xs px-3 py-1.5 rounded-lg text-white font-semibold" style="background:#7B4015">+ Buy Sessions</button>
@@ -6245,6 +6313,8 @@ function startVoiceIntake(){
 }
 function setClientView(v,skipHistory=false){
   state.clientView=v;state.showModal=null;
+  // Persist client view so it survives page refresh
+  try{localStorage.setItem('np_client_view',v);}catch(e){}
   if(!skipHistory){
     // Push a history entry so the browser back button works within the client portal
     try{history.pushState({role:'client',clientView:v},'',' ');}catch(e){}
