@@ -88,10 +88,12 @@
     /* ── Smooth collapsible section animations ── */
     .np-collapse-body{overflow:hidden;transition:max-height .3s cubic-bezier(0.4,0,0.2,1),opacity .25s ease;opacity:1;}
     .np-collapse-body.np-collapsed{max-height:0!important;opacity:0;pointer-events:none;}
-    .np-collapse-arrow{display:inline-block;transition:transform .3s cubic-bezier(0.4,0,0.2,1);}
+    .np-collapse-arrow{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:rgba(123,64,21,0.08);transition:transform .3s cubic-bezier(0.4,0,0.2,1),background .2s ease;font-size:14px;color:#7B4015;}
     .np-collapse-arrow.np-rotated{transform:rotate(-90deg);}
-    .np-collapse-header:hover{filter:brightness(0.97);}
-    .np-collapse-header:active{filter:brightness(0.95);}
+    .np-collapse-header{cursor:pointer;}
+    .np-collapse-header:hover{filter:brightness(0.96);}
+    .np-collapse-header:hover .np-collapse-arrow{background:rgba(123,64,21,0.15);}
+    .np-collapse-header:active{filter:brightness(0.94);}
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -3702,7 +3704,7 @@ async function deleteManualVetClinic(id){
 // ── Unified smooth collapsible section system ──
 // All collapsible states live here; sections default-collapsed where noted
 const _svcCollapsed={base:true,addons:true,courier:true};
-if(!window._acctCollapsed)window._acctCollapsed={contact:false,payments:false,pets:false,packages:true};
+if(!window._acctCollapsed)window._acctCollapsed={contact:true,payments:true,pets:true,packages:true};
 if(!window._settCollapsed)window._settCollapsed={};
 
 function _smoothToggle(bodyId,arrowId,collapsed){
@@ -3787,7 +3789,7 @@ function buildServicesView(){
         <div class="text-base font-bold text-gray-800">${title} <span class="text-xs font-medium text-amber-600 ml-1">${count!==undefined?'('+count+')':''}</span></div>
         <div class="text-xs text-gray-400 mt-0.5">${subtitle}</div>
       </div>
-      <span id="svc-arrow-${key}" class="np-collapse-arrow text-gray-400 text-lg font-mono flex-shrink-0 ${_svcCollapsed[key]?'np-rotated':''}">▾</span>
+      <span id="svc-arrow-${key}" class="np-collapse-arrow text-lg font-mono flex-shrink-0 ${_svcCollapsed[key]?'np-rotated':''}">▾</span>
     </button>`;
   return`
   <div class="p-6 slide-in">
@@ -3995,7 +3997,7 @@ function buildInvoicesView(){
   </div>`;
 }
 function buildSettingsView(){
-  if(!window._settCollapsed)window._settCollapsed={biz:false,integrations:true,booking:true,kiosk:true};
+  if(!window._settCollapsed)window._settCollapsed={biz:true,integrations:true,booking:true,kiosk:true};
   const settHead=(key,icon,title,subtitle)=>`
     <button type="button" onclick="toggleSettSection('${key}')"
       class="np-collapse-header w-full flex items-center gap-3 px-5 py-4 text-left transition-colors"
@@ -4005,7 +4007,7 @@ function buildSettingsView(){
         <div class="text-base font-bold text-gray-800">${title}</div>
         <div class="text-xs text-gray-400 mt-0.5">${subtitle}</div>
       </div>
-      <span id="sett-arrow-${key}" class="np-collapse-arrow text-gray-400 text-lg font-mono flex-shrink-0 ${window._settCollapsed[key]?'np-rotated':''}">▾</span>
+      <span id="sett-arrow-${key}" class="np-collapse-arrow text-lg font-mono flex-shrink-0 ${window._settCollapsed[key]?'np-rotated':''}">▾</span>
     </button>`;
   return`
   <div class="p-6 slide-in">
@@ -4488,7 +4490,7 @@ function buildClientAccount(){
       <span class="text-sm text-gray-500 italic">${dog.name} — Forever in our hearts</span>
     </div>`).join('');
   // Collapsible section state for My Account (persists during session)
-  if(!window._acctCollapsed)window._acctCollapsed={contact:false,payments:false,pets:false,packages:true};
+  if(!window._acctCollapsed)window._acctCollapsed={contact:true,payments:true,pets:true,packages:true};
   const acctHead=(key,icon,title,subtitle,badge)=>`
     <button type="button" onclick="toggleAcctSection('${key}')"
       class="np-collapse-header w-full flex items-center gap-3 px-5 py-4 text-left transition-colors"
@@ -4498,7 +4500,7 @@ function buildClientAccount(){
         <div class="text-base font-bold text-gray-800">${title} ${badge||''}</div>
         <div class="text-xs text-gray-400 mt-0.5">${subtitle}</div>
       </div>
-      <span id="acct-arrow-${key}" class="np-collapse-arrow text-gray-400 text-lg font-mono flex-shrink-0 ${window._acctCollapsed[key]?'np-rotated':''}">▾</span>
+      <span id="acct-arrow-${key}" class="np-collapse-arrow text-lg font-mono flex-shrink-0 ${window._acctCollapsed[key]?'np-rotated':''}">▾</span>
     </button>`;
 
   // Build payments section content
