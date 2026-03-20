@@ -1602,7 +1602,7 @@ async function initSheetHeaders(){
     writeRange('Clients!A1:E1', [['id','name','email','phone','photoConsent']]),
     writeRange('Dogs!A1:T1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit','deceased','vaccOverride','vetName','vetPhone','vetWebsite']]),
     writeRange('Bookings!A1:R1',[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price','paymentStatus','depositAmount','squarePaymentId','checkoutUrl','createdBy','familyDogIds']]),
-    writeRange('Invoices!A1:K1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items','externalPaid','paymentNote']]),
+    writeRange('Invoices!A1:L1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items','externalPaid','paymentNote','checkoutUrl']]),
     writeRange('Settings!A1:B17',[
       ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
       ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
@@ -1627,7 +1627,7 @@ async function ensurePackagesSheet(){
 async function loadAllData(){
   const[cR,dR,bR,iR,sR]=await Promise.all([
     readRangeSafe('Clients!A2:E'),readRangeSafe('Dogs!A2:T'),readRangeSafe('Bookings!A2:R'),
-    readRangeSafe('Invoices!A2:K'),readRangeSafe('Settings!A2:B'),
+    readRangeSafe('Invoices!A2:L'),readRangeSafe('Settings!A2:B'),
   ]);
   const svR=await readRangeSafe('Services!A2:F');
   const pkR=await readRangeSafe('Packages!A2:K');
@@ -1694,7 +1694,7 @@ async function loadAllData(){
     }
   }
   invoices.length=0;
-  (iR||[]).forEach(r=>{if(r[0])invoices.push({id:+r[0],clientId:+r[1],clientName:r[2]||'',amount:+r[3]||0,paid:+r[4]||0,status:r[5]||'unpaid',dueDate:r[6]||'',issueDate:r[7]||'',items:r[8]||'',externalPaid:+r[9]||0,paymentNote:r[10]||''});});
+  (iR||[]).forEach(r=>{if(r[0])invoices.push({id:+r[0],clientId:+r[1],clientName:r[2]||'',amount:+r[3]||0,paid:+r[4]||0,status:r[5]||'unpaid',dueDate:r[6]||'',issueDate:r[7]||'',items:r[8]||'',externalPaid:+r[9]||0,paymentNote:r[10]||'',checkoutUrl:r[11]||''});});
   (sR||[]).forEach(r=>{
     if(!r[0])return;const[k,v]=r;
     if(k==='businessName')state.settings.businessName=v;
@@ -1771,10 +1771,10 @@ async function persistClients(){
 }
 async function persistInvoices(){
   if(state.mode!=='live')return;
-  const rows=[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items','externalPaid','paymentNote'],
-    ...invoices.map(i=>[i.id,i.clientId,i.clientName,i.amount,i.paid,i.status,i.dueDate,i.issueDate,i.items,i.externalPaid||0,i.paymentNote||''])];
-  await writeRange(`Invoices!A1:K${rows.length}`,rows);
-  if(rows.length<9999)await clearRange(`Invoices!A${rows.length+1}:K9999`);
+  const rows=[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items','externalPaid','paymentNote','checkoutUrl'],
+    ...invoices.map(i=>[i.id,i.clientId,i.clientName,i.amount,i.paid,i.status,i.dueDate,i.issueDate,i.items,i.externalPaid||0,i.paymentNote||'',i.checkoutUrl||''])];
+  await writeRange(`Invoices!A1:L${rows.length}`,rows);
+  if(rows.length<9999)await clearRange(`Invoices!A${rows.length+1}:L9999`);
 }
 // ─── ARCHIVE DELETED CLIENT ──────────────────────────────────────────────────
 async function ensureArchivedSheet(){
@@ -2165,6 +2165,16 @@ async function loadClientDataViaProxy(){
       result.services.forEach(r=>{
         if(r[0])services.push({id:+r[0],name:r[1]||'',type:r[2]||'addon',price:+r[3]||0,
           active:String(r[4]).toLowerCase()!=='false',frequency:r[5]||'stay'});
+      });
+    }
+
+    // Merge invoices for this client (if proxy returns them)
+    if(result.invoices&&result.invoices.length>0){
+      const otherInvs=invoices.filter(i=>i.clientId!==actualCid);
+      invoices.length=0;
+      otherInvs.forEach(i=>invoices.push(i));
+      result.invoices.forEach(r=>{
+        if(r[0])invoices.push({id:+r[0],clientId:+r[1],clientName:r[2]||'',amount:+r[3]||0,paid:+r[4]||0,status:r[5]||'unpaid',dueDate:r[6]||'',issueDate:r[7]||'',items:r[8]||'',externalPaid:+r[9]||0,paymentNote:r[10]||'',checkoutUrl:r[11]||''});
       });
     }
 
@@ -3983,6 +3993,7 @@ function buildInvoicesView(){
               <div class="flex items-center gap-2 flex-wrap">
                 ${inv.status!=='paid'?`
                   <button onclick="sendInvoiceText(${inv.id})" class="text-xs px-2 py-1 rounded-lg text-white" style="background:#7B4015" title="Send text message">📱 Text</button>
+                  <button onclick="sendInvoiceEmail(${inv.id})" class="text-xs px-2 py-1 rounded-lg text-white" style="background:#2563EB" title="Send email">📧 Email</button>
                   <button onclick="markInvoicePaid(${inv.id})" class="text-xs text-blue-600 hover:underline">Mark Paid</button>`
                 :`<span class="text-xs text-gray-300">Paid ✓</span>`}
                 <button onclick="openEditInvoiceModal(${inv.id})" class="text-xs px-2 py-1 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100">Edit</button>
@@ -4377,10 +4388,28 @@ function buildClientHome(){
     </div>
     <button onclick="(function(){try{localStorage.setItem('np_beta_dismissed','1');}catch(e){}document.getElementById('beta-banner')?.remove();})()" style="background:none;border:none;cursor:pointer;color:#93C5FD;font-size:1.1rem;line-height:1;padding:0;flex-shrink:0;" title="Dismiss">×</button>
   </div>`;
+  // Outstanding balance banner for client home
+  const _homeUnpaidBks=getUnpaidBookings(cl?.id);
+  const _homeUnpaidInvs=invoices.filter(i=>i.clientId===cl?.id&&i.status!=='paid');
+  const _homeTotalDue=_homeUnpaidBks.reduce((s,b)=>s+b.amountDue,0)+_homeUnpaidInvs.reduce((s,i)=>s+(i.amount-(i.paid||0)-(i.externalPaid||0)),0);
+  const balanceBanner=_homeTotalDue>0?`
+  <div class="mb-5 rounded-2xl border border-red-200 bg-red-50 p-4" style="animation:npPulseAlert 3s ease-in-out infinite;">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="text-2xl">💳</div>
+        <div>
+          <div class="font-bold text-red-800 text-sm">Outstanding Balance: $${_homeTotalDue.toFixed(2)}</div>
+          <div class="text-xs text-red-600 mt-0.5">${_homeUnpaidBks.length>0?_homeUnpaidBks.length+' unpaid booking'+((_homeUnpaidBks.length===1)?'':'s'):''}${_homeUnpaidBks.length>0&&_homeUnpaidInvs.length>0?' + ':''}${_homeUnpaidInvs.length>0?_homeUnpaidInvs.length+' invoice'+((_homeUnpaidInvs.length===1)?'':'s'):''}</div>
+        </div>
+      </div>
+      <button onclick="setClientView('account')" class="px-4 py-2 text-white text-xs font-bold rounded-xl" style="background:#DC2626;">View & Pay →</button>
+    </div>
+  </div>`:'';
   return`<div class="slide-in">
   ${betaBanner}
   ${noPetsBanner}
   ${checklistHtml}
+  ${balanceBanner}
   <div class="mb-5">
     <h1 class="text-2xl font-bold text-gray-800">Book a Stay 🐾</h1>
     <p class="text-gray-400 text-sm mt-1">${allDeceased?'Add a pet profile to get started.':`Select available days to book a stay for ${dogName}.`}</p></div>
@@ -4505,10 +4534,12 @@ function buildClientAccount(){
 
   // Build payments section content
   const unpaid=getUnpaidBookings(cl.id);
-  const totalDue=unpaid.reduce((s,b)=>s+b.amountDue,0);
+  const unpaidInvs=invoices.filter(i=>i.clientId===cl.id&&i.status!=='paid');
+  const invoiceDue=unpaidInvs.reduce((s,i)=>s+(i.amount-(i.paid||0)-(i.externalPaid||0)),0);
+  const totalDue=unpaid.reduce((s,b)=>s+b.amountDue,0)+invoiceDue;
   const paidBks=bookings.filter(b=>b.clientId===cl.id&&b.paymentStatus==='paid')
     .sort((a,b)=>(b.checkIn||'').localeCompare(a.checkIn||'')).slice(0,10);
-  const hasPayments=unpaid.length>0||paidBks.length>0;
+  const hasPayments=unpaid.length>0||paidBks.length>0||unpaidInvs.length>0;
 
   // Build packages content
   const myPkgs=packages.filter(p=>p.clientId===cl.id);
@@ -4586,6 +4617,30 @@ function buildClientAccount(){
               <div class="text-xs text-gray-500 leading-relaxed">
                 <strong>Payment Policy:</strong> Boarding deposits are due 7 days before check-in. Daycare payments are due 24 hours before the session.
               </div>
+            </div>
+          </div>
+          `:''}
+          ${unpaidInvs.length>0?`
+          <div class="mb-4">
+            <div class="text-xs font-bold text-red-700 uppercase tracking-wide mb-2">📄 Invoices Due</div>
+            <div class="space-y-2">
+              ${unpaidInvs.map(inv=>{
+                const invOwed=inv.amount-(inv.paid||0)-(inv.externalPaid||0);
+                const isOverdue=inv.dueDate&&inv.dueDate<TODAY;
+                const urgBg=isOverdue?'bg-red-50 border-red-200':'bg-amber-50 border-amber-200';
+                const urgLabel=isOverdue?'⚠️ Overdue':'📅 Due '+fmtDate(inv.dueDate);
+                const payBtnBg=isOverdue?'#DC2626':'#D97706';
+                const urgTextCls=isOverdue?'text-red-700':'text-amber-700';
+                const payBtn=inv.checkoutUrl?'<a href="'+inv.checkoutUrl+'" target="_blank" style="flex-shrink:0;background:'+payBtnBg+';color:white;border:none;padding:8px 16px;border-radius:10px;font-size:12px;font-weight:700;text-decoration:none;cursor:pointer;animation:npBlinkBtn 2s ease-in-out infinite;">💳 Pay Now</a>':'';
+                return'<div class="flex items-center justify-between rounded-xl border '+urgBg+' px-3 py-2.5">'
+                  +'<div>'
+                  +'<div class="text-sm font-semibold text-gray-700">'+(inv.items||'Invoice')+'</div>'
+                  +'<div class="text-xs text-gray-500">$'+invOwed.toFixed(2)+' due</div>'
+                  +'<div class="text-xs font-semibold '+urgTextCls+' mt-0.5">'+urgLabel+'</div>'
+                  +'</div>'
+                  +payBtn
+                  +'</div>';
+              }).join('')}
             </div>
           </div>
           `:''}
@@ -7283,10 +7338,14 @@ function setInvoiceType(type){
     sendBtn.style.cssText='background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.1);color:#1F2937;';
     manualBtn.style.cssText='color:#6B7280;background:none;box-shadow:none;';
     if(manualFields)manualFields.style.display='none';
+    const submitBtn=document.querySelector('#inv-type')?.closest('form')?.querySelector('button[type="submit"]');
+    if(submitBtn)submitBtn.textContent='Create Invoice';
   }else{
     manualBtn.style.cssText='background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.1);color:#1F2937;';
     sendBtn.style.cssText='color:#6B7280;background:none;box-shadow:none;';
     if(manualFields)manualFields.style.display='block';
+    const submitBtn=document.querySelector('#inv-type')?.closest('form')?.querySelector('button[type="submit"]');
+    if(submitBtn)submitBtn.textContent='Record Payment';
   }
 }
 function getSelectedInvoiceBookings(){
@@ -7303,7 +7362,8 @@ async function generateInvoiceDescriptionAI(){
   const btn=document.getElementById('inv-ai-btn');
   if(btn){btn.disabled=true;btn.textContent='✨ Writing...';}
   try{
-    const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,{
+    const model=await getGeminiModel(apiKey);
+    const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({contents:[{parts:[{text:`Write a concise, warm invoice description (1 sentence, max 25 words) for a pet boarding/daycare business called Nigel's Place. Mention the pet's name(s), services, and date range naturally.\n\nServices:\n${serviceList}`}]}]})
     });
@@ -8067,7 +8127,7 @@ async function submitBooking(e){
     checkIn:ci,checkOut:co,nights:days,status:'confirmed',service:svc,
     dailySchedule:{..._dailySchedule},
     addons:addonNames.join(','),price:totalPrice,
-    paymentStatus:(state.role==='client'||state.adminViewAsClient)?'checkout_pending':'',
+    paymentStatus:'checkout_pending',
     checkoutUrl:'',createdBy:bookingCreator(),familyDogIds:_familyDogCount>1?_familyDogIds.join(','):'',courierTrip:_courierTrip||'none',courierAddress:_courierAddress||''};
   bookings.push(dcBk);
   state.showModal=null;render();
@@ -8077,8 +8137,8 @@ async function submitBooking(e){
     if(state.role==='client'){await proxyClientWrite('addBooking',{booking:dcBk});}
     else{await persistBookings();if(state.adminViewAsClient)await persistClients();}
   }catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
-  // Trigger Square checkout for daycare (full amount due) — client and admin-as-client only
-  if(state.role==='client'||state.adminViewAsClient){
+  // Trigger Square checkout for daycare (full amount due) — all roles
+  {
     const _proxyUrl=(CONFIG.APPS_SCRIPT_URL||state.settings.appsScriptUrl||'').trim();
     if(_proxyUrl){
       try{
@@ -8579,16 +8639,34 @@ async function submitEditInvoice(e,invoiceId){
 function openEditClientModal(id){state.showModal={type:'editClient',clientId:id};render();}
 function openEditDogModal(clientId,dogId){state.showModal={type:'editDog',clientId,dogId};render();}
 function openEditInvoiceModal(id){state.showModal={type:'editInvoice',invoiceId:id};render();}
+function _invoicePayLink(inv){
+  // Prefer direct checkout URL on the invoice, fall back to generic Square link
+  if(inv.checkoutUrl)return inv.checkoutUrl;
+  return state.settings.squareLink||'';
+}
 function sendInvoiceText(invId){
   const inv=invoices.find(i=>i.id===invId);if(!inv)return;
   const cl=clients.find(c=>c.id===inv.clientId);
   const phone=String(cl?.phone||'').replace(/\D/g,'');
-  const owed=inv.amount-inv.paid;
-  const square=state.settings.squareLink;
-  const payLines=square?`\nPay by card or Cash App: ${square}`:'';
-  const msg=`Hi ${inv.clientName}! 🐾 This is a payment reminder from Nigel's Place.\n\nServices: ${inv.items}\nAmount due: $${owed}\nDue date: ${inv.dueDate}${payLines}\n\nThank you! 🐶`;
+  const owed=inv.amount-(inv.paid||0)-(inv.externalPaid||0);
+  const payUrl=_invoicePayLink(inv);
+  const payLines=payUrl?`\nPay now: ${payUrl}`:'';
+  const biz=state.settings.businessName||"Nigel's Place";
+  const msg=`Hi ${inv.clientName}! 🐾 This is a payment reminder from ${biz}.\n\nServices: ${inv.items}\nAmount due: $${owed.toFixed(2)}\nDue date: ${inv.dueDate}${payLines}\n\nThank you! 🐶`;
   const smsLink=phone?`sms:${phone}?&body=${encodeURIComponent(msg)}`:`sms:?&body=${encodeURIComponent(msg)}`;
   window.open(smsLink,'_self');
+}
+function sendInvoiceEmail(invId){
+  const inv=invoices.find(i=>i.id===invId);if(!inv)return;
+  const cl=clients.find(c=>c.id===inv.clientId);
+  const email=cl?.email||'';
+  const owed=inv.amount-(inv.paid||0)-(inv.externalPaid||0);
+  const payUrl=_invoicePayLink(inv);
+  const biz=state.settings.businessName||"Nigel's Place";
+  const subject=`Payment Reminder — ${biz} ($${owed.toFixed(2)} due)`;
+  const body=`Hi ${inv.clientName},\n\nThis is a friendly payment reminder from ${biz}.\n\nServices: ${inv.items}\nAmount due: $${owed.toFixed(2)}\nDue date: ${inv.dueDate}${payUrl?'\n\nPay now: '+payUrl:''}\n\nThank you for choosing ${biz}! 🐾\n\nBest,\n${biz}`;
+  const mailLink=`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.open(mailLink,'_self');
 }
 async function submitInvoice(e){
   e.preventDefault();
@@ -8609,10 +8687,32 @@ async function submitInvoice(e){
   if(totalReceived>=amount)status='paid';
   else if(totalReceived>0)status='partial';
   else if(dueDate&&dueDate<TODAY)status='overdue';
-  const ni={id:nextId(invoices),clientId:cId,clientName:cl?.name||'',amount,paid,status,dueDate,issueDate,items,externalPaid,paymentNote};
+  const ni={id:nextId(invoices),clientId:cId,clientName:cl?.name||'',amount,paid,status,dueDate,issueDate,items,externalPaid,paymentNote,checkoutUrl:''};
   invoices.push(ni);state.showModal=null;render();
   showToast(`Invoice created for ${cl?.name||'client'}!`);
   try{await persistInvoices();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+  // Generate Square checkout link for "Send for payment" invoices
+  if(invType==='send'&&amount>0){
+    const _proxyUrl=(CONFIG.APPS_SCRIPT_URL||state.settings.appsScriptUrl||'').trim();
+    const biz=state.settings.businessName||"Nigel's Place";
+    const label=`${biz} — Invoice for ${cl?.name||'client'}: ${items}`;
+    if(_proxyUrl){
+      try{
+        const ckRes=await proxyClientWrite('createCheckoutLink',{bookingId:'inv-'+ni.id,amountDollars:amount,label});
+        if(ckRes?.checkoutUrl){
+          ni.checkoutUrl=ckRes.checkoutUrl;
+          try{await persistInvoices();}catch(e){}
+          render();
+          showToast(`Payment link created! Use 📱 Text or 📧 Email to send it.`);
+        }else{console.warn('[INVOICE] checkout: no URL returned',JSON.stringify(ckRes));}
+      }catch(sqErr){console.error('[INVOICE checkout]',sqErr);showToast(`Invoice saved! Square link: ${sqErr.message}`,'#F97316');}
+    }else if(state.settings.squareApiKey&&state.settings.squareLocationId){
+      try{
+        const checkoutUrl=await createSquareCheckoutLink({id:'inv-'+ni.id},amount,label);
+        if(checkoutUrl){ni.checkoutUrl=checkoutUrl;try{await persistInvoices();}catch(e){}render();showToast(`Payment link created! Use 📱 Text or 📧 Email to send it.`);}
+      }catch(sqErr){showToast(`Invoice saved! Square link: ${sqErr.message}`,'#F97316');}
+    }
+  }
 }
 async function markInvoicePaid(id){
   const inv=invoices.find(i=>i.id===id);

@@ -335,7 +335,24 @@ function getClientData(ss, req, callerEmail) {
     }
   }
 
-  return respond({ ok: true, client: clientRow, dogs, bookings, settings, services });
+  // Return this client's invoices so they can see outstanding balances
+  // and pay via checkout links. Only returns invoices for this specific client.
+  const invoicesSheet = ss.getSheetByName('Invoices');
+  const invoiceRows = [];
+  if (invoicesSheet) {
+    const invData = invoicesSheet.getDataRange().getValues();
+    for (let i = 1; i < invData.length; i++) {
+      if (String(invData[i][1]) === String(clientId)) {
+        const row = invData[i].slice();
+        // Normalise Date objects in dueDate (col 6) and issueDate (col 7)
+        if (row[6] instanceof Date) row[6] = Utilities.formatDate(row[6], Session.getScriptTimeZone(), 'yyyy-MM-dd');
+        if (row[7] instanceof Date) row[7] = Utilities.formatDate(row[7], Session.getScriptTimeZone(), 'yyyy-MM-dd');
+        invoiceRows.push(row);
+      }
+    }
+  }
+
+  return respond({ ok: true, client: clientRow, dogs, bookings, settings, services, invoices: invoiceRows });
 }
 
 // ─── ACTION: updateVetLimit ───────────────────────────────────────────────────
