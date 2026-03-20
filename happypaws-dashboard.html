@@ -2851,7 +2851,7 @@ function buildClientLayout(){
   const cl=clients.find(c=>c.id===state.currentClientId);
   return`
   <div class="min-h-screen bg-gray-50">
-    <header class="bg-white border-b border-gray-100 px-4 sm:px-6 py-3 flex items-center justify-between shadow-sm" style="position:sticky;top:${state.adminViewAsClient?'34px':'0'};z-index:${state.adminViewAsClient?'100':'10'}">
+    <header class="bg-white border-b border-gray-100 px-4 sm:px-6 py-3 flex items-center justify-between" style="position:sticky;top:${state.adminViewAsClient?'34px':'0'};z-index:${state.adminViewAsClient?'100':'12'};box-shadow:0 2px 8px rgba(0,0,0,0.06);">
       <div class="flex items-center gap-2">
         <button onclick="setClientView('home')" style="background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:0;" title="Go to home">
           <img src="${LOGO_URL}" style="width:32px;height:32px;object-fit:contain;border-radius:6px;">
@@ -9098,11 +9098,10 @@ function buildUnpaidBanner(){
     const svc=b.isBoarding?'Boarding':'Daycare';
     const dateStr=b.checkIn!==b.checkOut?`${fmtDateShort(b.checkIn)}–${fmtDateShort(b.checkOut)}`:`${fmtDateShort(b.checkIn)}`;
     const deadlineNote=b.urgency==='overdue'?'⚠️ Past deadline':`Due in ${b.deadlineDays} day${b.deadlineDays===1?'':'s'}`;
-    return`<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:${textColor};flex-wrap:wrap;">
-      <span style="font-weight:600;">${b.dogName}</span>
-      <span style="opacity:0.7;">· ${svc} · ${dateStr}</span>
-      <span style="opacity:0.7;">· $${b.amountDue.toFixed(2)}</span>
-      <span style="font-weight:600;font-size:11px;">${deadlineNote}</span>
+    return`<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:${textColor};flex-wrap:wrap;line-height:1.5;">
+      <span style="font-weight:600;white-space:nowrap;">${b.dogName}</span>
+      <span style="opacity:0.7;white-space:nowrap;">· ${svc} · ${dateStr} · $${b.amountDue.toFixed(2)}</span>
+      <span style="font-weight:600;font-size:11px;white-space:nowrap;">${deadlineNote}</span>
     </div>`;
   }).join('');
   const moreCount=unpaid.length>3?unpaid.length-3:0;
@@ -9115,7 +9114,7 @@ function buildUnpaidBanner(){
     ?`<a href="${mostUrgent.checkoutUrl}" target="_blank" style="flex-shrink:0;background:${iconColor};color:white;border:none;padding:7px 18px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;box-shadow:0 2px 8px ${iconColor}44;animation:npBlinkBtn 2s ease-in-out infinite;display:inline-block;">💳 Pay Now →</a>`
     :`<button onclick="bannerPayNow('${mostUrgent.id}',${mostUrgent.amountDue})" style="flex-shrink:0;background:${iconColor};color:white;border:none;padding:7px 18px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px ${iconColor}44;animation:npBlinkBtn 2s ease-in-out infinite;">💳 Pay Now →</button>`;
   return`
-  <div id="np-unpaid-alert" style="position:sticky;top:${stickyTop};z-index:9;background:${bgColor};border-bottom:2px solid ${borderColor};padding:10px 16px;animation:npPulseAlert 3s ease-in-out infinite;">
+  <div id="np-unpaid-alert" style="position:sticky;top:${stickyTop};z-index:11;background:${bgColor};border-bottom:2px solid ${borderColor};padding:12px 16px;box-shadow:0 4px 12px rgba(0,0,0,0.08);overflow:visible;animation:npPulseAlert 3s ease-in-out infinite;">
     <div style="max-width:64rem;margin:0 auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
         <span style="font-size:1.1rem;animation:npBlinkIcon 2s ease-in-out infinite;">💳</span>
