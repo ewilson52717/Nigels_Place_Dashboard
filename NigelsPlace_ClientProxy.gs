@@ -102,6 +102,7 @@ function doPost(e) {
     if (action === 'addPackage')        return addPackage(ss, req, email);
     if (action === 'sendInvoiceEmail')  return sendInvoiceEmail(ss, req, email);
     if (action === 'sendSquareInvoice') return sendSquareInvoice(ss, req, email);
+    if (action === 'syncSquarePayments') return syncSquarePayments(ss, req, email);
 
     return respond({ ok: false, error: `Unknown action: ${action}` });
 
@@ -953,6 +954,194 @@ function sendSquareInvoice(ss, req, callerEmail) {
 
   } catch (e) {
     return respond({ ok: false, error: 'Square invoice failed: ' + e.message });
+  }
+}
+
+// ─── ACTION: syncSquarePayments ───────────────────────────────────────────────
+// Checks Square for completed payments and updates booking/invoice statuses.
+//
+// How it works:
+//   1. Reads all bookings with paymentStatus='checkout_pending' or 'deposit_due'
+//   2. Queries Square Payments API for recent completed payments at the location
+//   3. Matches payments to bookings by reference_id or checkout URL order ID
+//   4. Updates the Bookings sheet paymentStatus to 'paid' or 'deposit_paid'
+//   5. Also checks Square Invoices for any invoices marked PAID
+//
+// Admin-only.
+function syncSquarePayments(ss, req, callerEmail) {
+  const ADMIN_EMAILS = ['elyserwilson@gmail.com', 'kellyhendrickson1@yahoo.com'];
+  if (!ADMIN_EMAILS.some(a => a.toLowerCase() === callerEmail.toLowerCase())) {
+    return respond({ ok: false, error: 'Only admins can sync payments.' });
+  }
+
+  // Read Square credentials
+  const settingsSheet = ss.getSheetByName('Settings');
+  if (!settingsSheet) return respond({ ok: false, error: 'Settings sheet not found.' });
+
+  let squareApiKey = '', squareLocationId = '', squareSandbox = false;
+  const sRows = settingsSheet.getDataRange().getValues();
+  for (let i = 1; i < sRows.length; i++) {
+    const k = String(sRows[i][0]);
+    if (k === 'squareApiKey')     squareApiKey     = String(sRows[i][1] || '');
+    if (k === 'squareLocationId') squareLocationId = String(sRows[i][1] || '');
+    if (k === 'squareSandbox')    squareSandbox    = String(sRows[i][1]).toLowerCase() === 'true';
+  }
+  if (!squareApiKey || !squareLocationId) {
+    return respond({ ok: false, error: 'Square credentials not configured.' });
+  }
+
+  const sqBase = squareSandbox ? 'https://connect.squareupsandbox.com' : 'https://connect.squareup.com';
+  const sqVersion = '2024-01-18';
+  const headers = {
+    'Authorization': 'Bearer ' + squareApiKey,
+    'Square-Version': sqVersion,
+    'Content-Type': 'application/json'
+  };
+
+  const updated = { bookings: [], invoices: [] };
+
+  try {
+    // ── Sync Bookings ──────────────────────────────────────────────────────
+    const bookingsSheet = ss.getSheetByName('Bookings');
+    if (bookingsSheet) {
+      const bData = bookingsSheet.getDataRange().getValues();
+      // Headers: id(0) clientId(1) dogId(2) dogName(3) clientName(4) checkIn(5) checkOut(6) nights(7)
+      //          status(8) service(9) addons(10) price(11) paymentStatus(12) depositAmount(13)
+      //          squarePaymentId(14) checkoutUrl(15) createdBy(16) familyDogIds(17)
+      const pendingRows = [];
+      for (let i = 1; i < bData.length; i++) {
+        const ps = String(bData[i][12] || '');
+        if (ps === 'checkout_pending' || ps === 'deposit_due') {
+          pendingRows.push({ row: i, data: bData[i], checkoutUrl: String(bData[i][15] || '') });
+        }
+      }
+
+      if (pendingRows.length > 0) {
+        // Fetch recent completed payments from Square (last 30 days)
+        const beginTime = new Date(Date.now() - 30 * 86400000).toISOString();
+        const paymentsResp = UrlFetchApp.fetch(
+          sqBase + '/v2/payments?location_id=' + squareLocationId + '&begin_time=' + encodeURIComponent(beginTime) + '&sort_order=DESC&limit=100',
+          { method: 'get', headers: headers, muteHttpExceptions: true }
+        );
+        const paymentsData = JSON.parse(paymentsResp.getContentText());
+        const completedPayments = (paymentsData.payments || []).filter(p => p.status === 'COMPLETED');
+
+        // Build a set of completed order IDs from payments
+        const completedOrderIds = new Set();
+        completedPayments.forEach(p => {
+          if (p.order_id) completedOrderIds.add(p.order_id);
+        });
+
+        // Also fetch recent orders to cross-reference checkout links
+        // Square Payment Links create orders — when paid, the order state becomes COMPLETED
+        const ordersResp = UrlFetchApp.fetch(sqBase + '/v2/orders/search', {
+          method: 'post', contentType: 'application/json', headers: headers,
+          payload: JSON.stringify({
+            location_ids: [squareLocationId],
+            query: {
+              filter: {
+                state_filter: { states: ['COMPLETED'] },
+                date_time_filter: { created_at: { start_at: beginTime } }
+              }
+            },
+            limit: 100
+          }),
+          muteHttpExceptions: true
+        });
+        const ordersData = JSON.parse(ordersResp.getContentText());
+        const completedOrders = ordersData.orders || [];
+
+        // Build a set of completed checkout URLs (from order metadata)
+        const completedCheckoutOrderIds = new Set();
+        completedOrders.forEach(o => {
+          completedCheckoutOrderIds.add(o.id);
+        });
+
+        // Match pending bookings to completed payments
+        for (const pb of pendingRows) {
+          let matched = false;
+
+          // Check if the booking's checkout URL contains an order ID that's now completed
+          if (pb.checkoutUrl) {
+            // Payment links have order IDs; when the link is paid, Square creates a payment
+            // We check all completed payments to see if any reference matches
+            for (const payment of completedPayments) {
+              // Match by note or reference containing booking info
+              const note = (payment.note || '').toLowerCase();
+              const refId = (payment.reference_id || '').toLowerCase();
+              const bkId = String(pb.data[0]);
+              const dogName = String(pb.data[3] || '').toLowerCase();
+              const clientName = String(pb.data[4] || '').toLowerCase();
+              if (note.includes(bkId) || refId.includes(bkId) || note.includes(dogName) || note.includes(clientName)) {
+                matched = true;
+                break;
+              }
+            }
+          }
+
+          // Also check by matching the amount and client (fuzzy match for checkout link payments)
+          if (!matched && pb.checkoutUrl) {
+            const bkPrice = Math.round(Number(pb.data[11] || 0) * 100); // price in cents
+            const bkDeposit = Math.round(Number(pb.data[13] || 0) * 100); // deposit in cents
+            for (const payment of completedPayments) {
+              const paidCents = (payment.amount_money && payment.amount_money.amount) || 0;
+              if (paidCents === bkPrice || (bkDeposit > 0 && paidCents === bkDeposit)) {
+                // Amount match — check timing (payment should be after booking was created)
+                matched = true;
+                break;
+              }
+            }
+          }
+
+          if (matched) {
+            const rowIdx = pb.row + 1; // 1-indexed for Sheets
+            const wasDeposit = String(pb.data[12]) === 'deposit_due';
+            const newStatus = wasDeposit ? 'deposit_paid' : 'paid';
+            bookingsSheet.getRange(rowIdx, 13).setValue(newStatus); // column M = paymentStatus
+            updated.bookings.push({ id: pb.data[0], clientName: pb.data[4], dogName: pb.data[3], newStatus: newStatus });
+          }
+        }
+      }
+    }
+
+    // ── Sync Invoices ────────────────────────────────────────────────────────
+    const invoicesSheet = ss.getSheetByName('Invoices');
+    if (invoicesSheet) {
+      const iData = invoicesSheet.getDataRange().getValues();
+      // Headers: id(0) clientId(1) clientName(2) amount(3) paid(4) status(5) dueDate(6)
+      //          issueDate(7) items(8) externalPaid(9) paymentNote(10) checkoutUrl(11) squareInvoiceId(12)
+      for (let i = 1; i < iData.length; i++) {
+        const sqInvId = String(iData[i][12] || '');
+        const status = String(iData[i][5] || '');
+        if (sqInvId && status !== 'paid') {
+          // Check this invoice's status on Square
+          try {
+            const invResp = UrlFetchApp.fetch(sqBase + '/v2/invoices/' + sqInvId, {
+              method: 'get', headers: headers, muteHttpExceptions: true
+            });
+            const invData = JSON.parse(invResp.getContentText());
+            if (invData.invoice && invData.invoice.status === 'PAID') {
+              const rowIdx = i + 1;
+              const amount = Number(iData[i][3] || 0);
+              invoicesSheet.getRange(rowIdx, 5).setValue(amount);  // column E = paid
+              invoicesSheet.getRange(rowIdx, 6).setValue('paid');   // column F = status
+              updated.invoices.push({ id: iData[i][0], clientName: iData[i][2], amount: amount });
+            }
+          } catch (e) {
+            // Skip this invoice on error, continue with others
+          }
+        }
+      }
+    }
+
+    return respond({
+      ok: true,
+      message: 'Sync complete. ' + updated.bookings.length + ' booking(s) and ' + updated.invoices.length + ' invoice(s) updated.',
+      updated: updated
+    });
+
+  } catch (e) {
+    return respond({ ok: false, error: 'Sync failed: ' + e.message });
   }
 }
 

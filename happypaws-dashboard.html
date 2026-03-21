@@ -425,12 +425,16 @@ function capColor(n,cap){
 }
 function _safeDate(ds){
   if(!ds)return null;
+  const s=String(ds).trim();
+  // Handle Excel/Sheets serial date numbers (e.g. 46115 → 2026-03-20)
+  if(/^\d{4,6}$/.test(s)){const n=Number(s);if(n>25000&&n<60000){const d=new Date(Date.UTC(1899,11,30+n));return isNaN(d.getTime())?null:d;}}
   // If already ISO datetime (e.g. "2026-03-15T07:00:00.000Z"), extract the date part
-  const s=String(ds);
   const dateOnly=(s.length>=10&&s[4]==='-'&&s[7]==='-'&&s.includes('T'))?s.slice(0,10):s;
   const d=new Date(dateOnly+'T00:00:00');
   return isNaN(d.getTime())?null:d;
 }
+// Convert any date value (serial number, ISO, etc.) to YYYY-MM-DD string
+function _normDateStr(ds){const d=_safeDate(ds);if(!d)return String(ds||'');return d.toISOString().slice(0,10);}
 function fmtDate(ds){const d=_safeDate(ds);return d?d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'}):'—';}
 function fmtDateShort(ds){const d=_safeDate(ds);return d?d.toLocaleDateString('en-US',{month:'short',day:'numeric'}):'—';}
 // Returns a human-readable age string like "6 mo", "1 yr 3 mo", "3 yrs"
@@ -1476,6 +1480,11 @@ async function onToken(resp){
     }
   }catch(e){showToast('Error: '+e.message,'#EF4444');console.error(e);state.role='login';}
   state.isLoading=false;render();
+  // Auto-sync Square payments in background for admins
+  if(state.role==='admin'){
+    const _proxyUrl=(CONFIG.APPS_SCRIPT_URL||state.settings.appsScriptUrl||'').trim();
+    if(_proxyUrl){setTimeout(()=>syncSquarePayments(),1500);}
+  }
 }
 function googleSignIn(){
   if(!tokenClient){showToast('Auth loading, try again','#EF4444');return;}
@@ -1694,7 +1703,7 @@ async function loadAllData(){
     }
   }
   invoices.length=0;
-  (iR||[]).forEach(r=>{if(r[0])invoices.push({id:+r[0],clientId:+r[1],clientName:r[2]||'',amount:+r[3]||0,paid:+r[4]||0,status:r[5]||'unpaid',dueDate:r[6]||'',issueDate:r[7]||'',items:r[8]||'',externalPaid:+r[9]||0,paymentNote:r[10]||'',checkoutUrl:r[11]||'',squareInvoiceId:r[12]||''});});
+  (iR||[]).forEach(r=>{if(r[0])invoices.push({id:+r[0],clientId:+r[1],clientName:r[2]||'',amount:+r[3]||0,paid:+r[4]||0,status:r[5]||'unpaid',dueDate:_normDateStr(r[6]),issueDate:_normDateStr(r[7]),items:r[8]||'',externalPaid:+r[9]||0,paymentNote:r[10]||'',checkoutUrl:r[11]||'',squareInvoiceId:r[12]||''});});
   (sR||[]).forEach(r=>{
     if(!r[0])return;const[k,v]=r;
     if(k==='businessName')state.settings.businessName=v;
@@ -2174,7 +2183,7 @@ async function loadClientDataViaProxy(){
       invoices.length=0;
       otherInvs.forEach(i=>invoices.push(i));
       result.invoices.forEach(r=>{
-        if(r[0])invoices.push({id:+r[0],clientId:+r[1],clientName:r[2]||'',amount:+r[3]||0,paid:+r[4]||0,status:r[5]||'unpaid',dueDate:r[6]||'',issueDate:r[7]||'',items:r[8]||'',externalPaid:+r[9]||0,paymentNote:r[10]||'',checkoutUrl:r[11]||'',squareInvoiceId:r[12]||''});
+        if(r[0])invoices.push({id:+r[0],clientId:+r[1],clientName:r[2]||'',amount:+r[3]||0,paid:+r[4]||0,status:r[5]||'unpaid',dueDate:_normDateStr(r[6]),issueDate:_normDateStr(r[7]),items:r[8]||'',externalPaid:+r[9]||0,paymentNote:r[10]||'',checkoutUrl:r[11]||'',squareInvoiceId:r[12]||''});
       });
     }
 
@@ -3967,7 +3976,10 @@ function buildInvoicesView(){
   <div class="p-4 sm:p-6 slide-in">
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-xl sm:text-2xl font-bold text-gray-800">Invoices</h1>
-      <button onclick="openAddInvoiceModal()" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ New Invoice</button>
+      <div class="flex items-center gap-2">
+        <button onclick="syncSquarePayments()" id="sync-payments-btn" class="px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50" title="Check Square for completed payments">🔄 Sync Payments</button>
+        <button onclick="openAddInvoiceModal()" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ New Invoice</button>
+      </div>
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
       <div class="stat-card text-center"><div class="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Invoiced</div><div class="text-2xl font-bold text-gray-800">$${total}</div></div>
@@ -3987,7 +3999,7 @@ function buildInvoicesView(){
             <td class="px-5 py-3.5 font-semibold text-gray-800">${inv.clientName}</td>
             <td class="px-5 py-3.5 text-gray-500">${inv.items}</td>
             <td class="px-5 py-3.5"><div class="font-bold text-gray-800">$${inv.amount}</div>${(()=>{const t=(inv.paid||0)+(inv.externalPaid||0);if(t<=0)return'';if(t>=inv.amount)return'<div class="text-xs text-green-600">Paid in full ✓</div>';let parts=[];if(inv.paid>0)parts.push(`$${inv.paid} Square`);if(inv.externalPaid>0)parts.push(`$${inv.externalPaid} cash/ext`);return`<div class="text-xs text-gray-400">${parts.join(' + ')} paid</div>`;})()}</td>
-            <td class="px-5 py-3.5 text-gray-500">${inv.dueDate}</td>
+            <td class="px-5 py-3.5 text-gray-500">${fmtDateShort(inv.dueDate)||inv.dueDate}</td>
             <td class="px-5 py-3.5"><span class="badge ${sCls[inv.status]||'bg-gray-100 text-gray-600'}">${inv.status}</span></td>
             <td class="px-5 py-3.5">
               <div class="flex items-center gap-2 flex-wrap">
@@ -5337,6 +5349,7 @@ function buildDayModal(ds){
                 ?'<span class="text-xs font-bold text-red-600" style="animation:npBlinkIcon 2s ease-in-out infinite;">⚠️ At Risk — unpaid</span>'
                 :'<span class="text-xs font-semibold text-amber-600">💳 Awaiting payment</span>';
             })():''}
+            ${isAdm&&(b.paymentStatus==='checkout_pending'||b.paymentStatus==='deposit_due')?'<button onclick="markBookingPaid('+b.id+')" class="text-xs text-green-600 hover:text-green-800 whitespace-nowrap" title="Mark as paid">✓ Mark Paid</button>':''}
             ${isAdm?'<button onclick="cancelBooking('+b.id+')" class="text-xs text-red-400 hover:text-red-600 whitespace-nowrap" title="Cancel booking">✕ Cancel</button>':''}
             ${!isAdm&&b.paymentStatus==='paid'?'<span class="text-xs font-semibold text-green-600">✓ Paid</span>':''}
             ${!isAdm&&b.paymentStatus==='deposit_paid'?'<span class="text-xs font-semibold text-blue-600">🔐 Deposit paid</span>':''}
@@ -8255,6 +8268,14 @@ async function deleteClient(id){
   }
 }
 // ─── CANCEL/DELETE BOOKING ────────────────────────────────────────────────────
+async function markBookingPaid(id){
+  const b=bookings.find(bk=>bk.id===id);if(!b)return;
+  b.paymentStatus='paid';render();showToast(`✅ ${b.dogName}'s booking marked as paid!`);
+  try{await persistBookings();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+  // Also update via proxy if available
+  const _proxyUrl=(CONFIG.APPS_SCRIPT_URL||state.settings.appsScriptUrl||'').trim();
+  if(_proxyUrl){try{await proxyClientWrite('updateBooking',{id:b.id,paymentStatus:'paid'});}catch(e){}}
+}
 function cancelBooking(id){
   const b=bookings.find(bk=>bk.id===id);if(!b)return;
   const pol=calcCancelRefund(b.checkIn,b.depositAmount||0);
@@ -8786,6 +8807,44 @@ async function markInvoicePaid(id){
   if(inv){inv.paid=inv.amount;inv.status='paid';}
   render();showToast('Invoice marked as paid!');
   try{await persistInvoices();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+}
+// ── Sync Square Payments ─────────────────────────────────────────────────
+// Calls proxy to check Square for completed payments and update booking/invoice statuses.
+async function syncSquarePayments(){
+  const btn=document.getElementById('sync-payments-btn');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Syncing...';}
+  const _proxyUrl=(CONFIG.APPS_SCRIPT_URL||state.settings.appsScriptUrl||'').trim();
+  if(!_proxyUrl){showToast('No proxy URL configured — cannot sync with Square.','#EF4444');if(btn){btn.disabled=false;btn.textContent='🔄 Sync Payments';}return;}
+  try{
+    const res=await proxyClientWrite('syncSquarePayments',{});
+    if(res?.ok){
+      const upd=res.updated||{};
+      const bkCount=(upd.bookings||[]).length;
+      const invCount=(upd.invoices||[]).length;
+      // Apply booking updates locally
+      (upd.bookings||[]).forEach(u=>{
+        const bk=bookings.find(b=>String(b.id)===String(u.id));
+        if(bk)bk.paymentStatus=u.newStatus;
+      });
+      // Apply invoice updates locally
+      (upd.invoices||[]).forEach(u=>{
+        const inv=invoices.find(i=>String(i.id)===String(u.id));
+        if(inv){inv.paid=inv.amount;inv.status='paid';}
+      });
+      if(bkCount>0||invCount>0){
+        render();
+        showToast(`✅ Synced! ${bkCount} booking${bkCount===1?'':'s'} + ${invCount} invoice${invCount===1?'':'s'} updated.`);
+      }else{
+        showToast('All payments up to date — nothing new from Square.');
+      }
+    }else{
+      showToast(`Sync error: ${res?.error||'unknown'}`,'#EF4444');
+    }
+  }catch(err){
+    console.error('[SYNC]',err);
+    showToast(`Sync failed: ${err.message}`,'#EF4444');
+  }
+  if(btn){btn.disabled=false;btn.textContent='🔄 Sync Payments';}
 }
 function addCapOverride(){
   const d=document.getElementById('cap-override-date')?.value;
