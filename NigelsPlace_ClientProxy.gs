@@ -103,6 +103,7 @@ function doPost(e) {
     if (action === 'sendInvoiceEmail')  return sendInvoiceEmail(ss, req, email);
     if (action === 'sendSquareInvoice') return sendSquareInvoice(ss, req, email);
     if (action === 'syncSquarePayments') return syncSquarePayments(ss, req, email);
+    if (action === 'cancelSquareInvoice') return cancelSquareInvoice(ss, req, email);
 
     return respond({ ok: false, error: `Unknown action: ${action}` });
 
@@ -1142,6 +1143,81 @@ function syncSquarePayments(ss, req, callerEmail) {
 
   } catch (e) {
     return respond({ ok: false, error: 'Sync failed: ' + e.message });
+  }
+}
+
+// ─── ACTION: cancelSquareInvoice ──────────────────────────────────────────────
+// Cancels a Square invoice (e.g., when marked as paid externally).
+// This stops Square from sending further payment reminders.
+// Required: req.squareInvoiceId
+function cancelSquareInvoice(ss, req, callerEmail) {
+  const ADMIN_EMAILS = ['elyserwilson@gmail.com', 'kellyhendrickson1@yahoo.com'];
+  if (!ADMIN_EMAILS.some(a => a.toLowerCase() === callerEmail.toLowerCase())) {
+    return respond({ ok: false, error: 'Only admins can cancel Square invoices.' });
+  }
+
+  const { squareInvoiceId } = req;
+  if (!squareInvoiceId) return respond({ ok: false, error: 'Missing squareInvoiceId.' });
+
+  // Read Square credentials
+  const settingsSheet = ss.getSheetByName('Settings');
+  if (!settingsSheet) return respond({ ok: false, error: 'Settings sheet not found.' });
+
+  let squareApiKey = '', squareSandbox = false;
+  const rows = settingsSheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    const k = String(rows[i][0]);
+    if (k === 'squareApiKey')  squareApiKey  = String(rows[i][1] || '');
+    if (k === 'squareSandbox') squareSandbox = String(rows[i][1]).toLowerCase() === 'true';
+  }
+  if (!squareApiKey) return respond({ ok: false, error: 'Square API key not configured.' });
+
+  const sqBase = squareSandbox ? 'https://connect.squareupsandbox.com' : 'https://connect.squareup.com';
+  const headers = {
+    'Authorization': 'Bearer ' + squareApiKey,
+    'Square-Version': '2024-01-18',
+    'Content-Type': 'application/json'
+  };
+
+  try {
+    // First, get the current invoice to check its status and version
+    const getResp = UrlFetchApp.fetch(sqBase + '/v2/invoices/' + squareInvoiceId, {
+      method: 'get', headers: headers, muteHttpExceptions: true
+    });
+    const getData = JSON.parse(getResp.getContentText());
+    if (!getData.invoice) {
+      return respond({ ok: false, error: 'Invoice not found on Square.' });
+    }
+
+    const sqStatus = getData.invoice.status;
+    const version = getData.invoice.version;
+
+    // If already paid or cancelled, nothing to do
+    if (sqStatus === 'PAID') {
+      return respond({ ok: true, message: 'Invoice already marked as paid on Square.' });
+    }
+    if (sqStatus === 'CANCELED' || sqStatus === 'CANCELLED') {
+      return respond({ ok: true, message: 'Invoice already cancelled on Square.' });
+    }
+
+    // Cancel the invoice
+    const cancelResp = UrlFetchApp.fetch(sqBase + '/v2/invoices/' + squareInvoiceId + '/cancel', {
+      method: 'post', contentType: 'application/json', headers: headers,
+      payload: JSON.stringify({ version: version }),
+      muteHttpExceptions: true
+    });
+    const cancelCode = cancelResp.getResponseCode();
+    const cancelData = JSON.parse(cancelResp.getContentText());
+
+    if (cancelCode !== 200 && cancelCode !== 201) {
+      const err = (cancelData.errors && cancelData.errors[0] && cancelData.errors[0].detail) || ('Cancel failed: ' + cancelCode);
+      return respond({ ok: false, error: err });
+    }
+
+    return respond({ ok: true, message: 'Square invoice cancelled. Reminders stopped.' });
+
+  } catch (e) {
+    return respond({ ok: false, error: 'Cancel failed: ' + e.message });
   }
 }
 

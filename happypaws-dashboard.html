@@ -4006,7 +4006,14 @@ function buildInvoicesView(){
   const total=invoices.reduce((s,i)=>s+i.amount,0),collected=invoices.reduce((s,i)=>s+(i.paid||0)+(i.externalPaid||0),0);
   const outstanding=total-collected;
   // ── Booking sweep: find unpaid bookings not yet captured as invoices ──
-  const unpaidBks=bookings.filter(b=>b.status==='confirmed'&&(b.paymentStatus==='checkout_pending'||b.paymentStatus==='deposit_due')&&b.price>0);
+  // Include any confirmed booking that isn't fully paid (checkout_pending, deposit_due, or empty paymentStatus)
+  const unpaidBks=bookings.filter(b=>{
+    if(b.status==='cancelled')return false;
+    if(b.paymentStatus==='paid'||b.paymentStatus==='refunded')return false;
+    if((+b.price||0)<=0)return false;
+    // Include: checkout_pending, deposit_due, empty/missing, or any non-paid status
+    return true;
+  });
   const invoicedBkIds=new Set(invoices.filter(i=>i.paymentNote&&i.paymentNote.startsWith('bk-')).map(i=>i.paymentNote));
   const sweepBks=unpaidBks.filter(b=>!invoicedBkIds.has('bk-'+b.id));
   const sweepTotal=sweepBks.reduce((s,b)=>s+(b.price||0),0);
@@ -6159,7 +6166,7 @@ function buildEditInvoiceModal(invoiceId){
           <div>
             <div class="flex items-center justify-between mb-1">
               <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Square Paid ($)</label>
-              ${state.settings.squareApiKey?`<button type="button" onclick="syncSquarePayments(${invoiceId})" class="text-xs text-blue-600 hover:underline font-medium">🔄 Sync</button>`:''}
+              ${state.settings.squareApiKey?`<button type="button" onclick="syncSingleInvoiceFromSquare(${invoiceId})" class="text-xs text-blue-600 hover:underline font-medium">🔄 Sync</button>`:''}
             </div>
             <input id="einv-paid" type="number" min="0" step="0.01" value="${inv.paid||0}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
           </div>
@@ -8945,17 +8952,41 @@ async function submitInvoice(e){
 }
 async function markInvoicePaid(id){
   const inv=invoices.find(i=>i.id===id);
-  if(inv){inv.paid=inv.amount;inv.status='paid';}
-  render();showToast('Invoice marked as paid!');
+  if(!inv)return;
+  inv.paid=inv.amount;inv.status='paid';
+  render();showToast('✅ Invoice marked as paid!');
   try{await persistInvoices();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
+  // If this invoice has a Square invoice ID, cancel it so Square stops sending reminders
+  if(inv.squareInvoiceId){
+    const _proxyUrl=(CONFIG.APPS_SCRIPT_URL||state.settings.appsScriptUrl||'').trim();
+    if(_proxyUrl){
+      try{
+        const res=await proxyClientWrite('cancelSquareInvoice',{squareInvoiceId:inv.squareInvoiceId});
+        if(res?.ok)showToast('Square invoice cancelled (paid externally).');
+        else console.warn('[markPaid] Square cancel:',res?.error);
+      }catch(e){console.warn('[markPaid] Square cancel error:',e);}
+    }
+  }
+  // If this invoice was created from a booking sweep, mark that booking as paid too
+  if(inv.paymentNote&&inv.paymentNote.startsWith('bk-')){
+    const bkId=parseInt(inv.paymentNote.replace('bk-',''));
+    const bk=bookings.find(b=>b.id===bkId);
+    if(bk&&bk.paymentStatus!=='paid'){
+      bk.paymentStatus='paid';render();
+      try{await persistBookings();}catch(e){}
+      const _proxyUrl=(CONFIG.APPS_SCRIPT_URL||state.settings.appsScriptUrl||'').trim();
+      if(_proxyUrl){try{await proxyClientWrite('updateBooking',{id:bk.id,paymentStatus:'paid'});}catch(e){}}
+    }
+  }
 }
 // ── Sync Square Payments ─────────────────────────────────────────────────
 // Calls proxy to check Square for completed payments and update booking/invoice statuses.
 async function syncSquarePayments(){
   const btn=document.getElementById('sync-payments-btn');
-  if(btn){btn.disabled=true;btn.textContent='⏳ Syncing...';}
+  const origHtml=btn?btn.innerHTML:'';
+  if(btn){btn.disabled=true;btn.style.opacity='0.7';btn.innerHTML='<span class="spinner" style="width:14px;height:14px;border-width:2px;border-color:rgba(99,102,241,0.2);border-top-color:#6366f1;display:inline-block;vertical-align:middle;margin-right:6px;"></span> Syncing…';}
   const _proxyUrl=(CONFIG.APPS_SCRIPT_URL||state.settings.appsScriptUrl||'').trim();
-  if(!_proxyUrl){showToast('No proxy URL configured — cannot sync with Square.','#EF4444');if(btn){btn.disabled=false;btn.textContent='🔄 Sync Payments';}return;}
+  if(!_proxyUrl){if(btn){btn.disabled=false;btn.style.opacity='1';btn.innerHTML=origHtml;}return;}
   try{
     const res=await proxyClientWrite('syncSquarePayments',{});
     if(res?.ok){
@@ -8985,7 +9016,7 @@ async function syncSquarePayments(){
     console.error('[SYNC]',err);
     showToast(`Sync failed: ${err.message}`,'#EF4444');
   }
-  if(btn){btn.disabled=false;btn.textContent='🔄 Sync Payments';}
+  if(btn){btn.disabled=false;btn.style.opacity='1';btn.innerHTML='<span style="display:inline-block;transition:transform 0.3s" onmouseover="this.style.transform=\'rotate(180deg)\'" onmouseout="this.style.transform=\'rotate(0)\'">🔄</span> Sync';}
 }
 function addCapOverride(){
   const d=document.getElementById('cap-override-date')?.value;
@@ -9612,7 +9643,7 @@ async function createSquareCheckoutLink(booking, amountDollars, label){
 }
 
 // ─── Square Payment Sync ──────────────────────────────────────────────────────
-async function syncSquarePayments(invoiceId){
+async function syncSingleInvoiceFromSquare(invoiceId){
   const inv=invoices.find(i=>i.id===invoiceId);if(!inv)return;
   const apiKey=state.settings.squareApiKey;
   if(!apiKey){showToast('Add your Square API key in Settings first','#F97316');return;}
