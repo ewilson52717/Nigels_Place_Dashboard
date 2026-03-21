@@ -100,6 +100,7 @@ function doPost(e) {
     if (action === 'updateDogVaccines') return updateDogVaccines(ss, req, email);
     if (action === 'addBooking')        return addBooking(ss, req, email);
     if (action === 'addPackage')        return addPackage(ss, req, email);
+    if (action === 'sendInvoiceEmail')  return sendInvoiceEmail(ss, req, email);
 
     return respond({ ok: false, error: `Unknown action: ${action}` });
 
@@ -747,6 +748,104 @@ function addPackage(ss, req, callerEmail) {
   ]);
 
   return respond({ ok: true, id: safeId });
+}
+
+// ─── ACTION: sendInvoiceEmail ─────────────────────────────────────────────────
+// Sends a professional invoice/payment reminder email to a client.
+// The email is sent FROM the invoice alias (nigelsplace.invoices@gmail.com)
+// via the admin's Gmail "Send mail as" alias. Replies go to elyserwilson@gmail.com.
+//
+// Required fields in req:
+//   clientEmail  — recipient email address
+//   clientName   — client's display name
+//   subject      — email subject line
+//   items        — invoice description / services
+//   amount       — total amount due (number)
+//   dueDate      — due date string
+//   checkoutUrl  — (optional) Square payment link
+//   invoiceId    — (optional) for logging
+//
+// Only admins can trigger this — the caller's email must match an admin email.
+function sendInvoiceEmail(ss, req, callerEmail) {
+  // Security: only admins can send invoice emails
+  const ADMIN_EMAILS = ['elyserwilson@gmail.com', 'kellyhendrickson1@yahoo.com'];
+  if (!ADMIN_EMAILS.some(a => a.toLowerCase() === callerEmail.toLowerCase())) {
+    return respond({ ok: false, error: 'Only admins can send invoice emails.' });
+  }
+
+  const { clientEmail, clientName, subject, items, amount, dueDate, checkoutUrl } = req;
+  if (!clientEmail) return respond({ ok: false, error: 'Missing client email address.' });
+
+  // Read business name from Settings sheet
+  let businessName = "Nigel's Place";
+  const settingsSheet = ss.getSheetByName('Settings');
+  if (settingsSheet) {
+    const settingRows = settingsSheet.getDataRange().getValues();
+    for (let i = 1; i < settingRows.length; i++) {
+      if (String(settingRows[i][0]) === 'businessName' && settingRows[i][1]) {
+        businessName = String(settingRows[i][1]);
+        break;
+      }
+    }
+  }
+
+  // Build the email body (HTML for nice formatting)
+  const amountStr = Number(amount || 0).toFixed(2);
+  const payButton = checkoutUrl
+    ? '<div style="text-align:center;margin:24px 0;">'
+      + '<a href="' + checkoutUrl + '" style="display:inline-block;background:#7B4015;color:#ffffff;'
+      + 'font-size:16px;font-weight:bold;padding:14px 32px;border-radius:12px;text-decoration:none;">'
+      + '💳 Pay $' + amountStr + ' Now</a></div>'
+    : '';
+
+  const htmlBody = '<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;max-width:520px;margin:0 auto;color:#1F2937;">'
+    + '<div style="background:linear-gradient(135deg,#7B4015 0%,#A0522D 100%);padding:24px 28px;border-radius:16px 16px 0 0;">'
+    + '<h1 style="margin:0;color:#ffffff;font-size:20px;">🐾 ' + businessName + '</h1>'
+    + '<p style="margin:6px 0 0;color:#F5E6D3;font-size:13px;">Payment Reminder</p>'
+    + '</div>'
+    + '<div style="background:#ffffff;padding:28px;border:1px solid #E5E7EB;border-top:none;">'
+    + '<p style="margin:0 0 16px;font-size:15px;">Hi ' + (clientName || 'there') + ',</p>'
+    + '<p style="margin:0 0 20px;font-size:14px;color:#4B5563;line-height:1.6;">'
+    + 'This is a friendly reminder that you have an outstanding balance with ' + businessName + '.</p>'
+    + '<div style="background:#FFF7ED;border:1px solid #FDE68A;border-radius:12px;padding:16px 20px;margin:0 0 20px;">'
+    + '<table style="width:100%;font-size:14px;border-collapse:collapse;">'
+    + '<tr><td style="padding:4px 0;color:#6B7280;">Services</td>'
+    + '<td style="padding:4px 0;text-align:right;font-weight:600;color:#1F2937;">' + (items || 'Pet care services') + '</td></tr>'
+    + '<tr><td style="padding:4px 0;color:#6B7280;">Amount Due</td>'
+    + '<td style="padding:4px 0;text-align:right;font-weight:700;font-size:18px;color:#7B4015;">$' + amountStr + '</td></tr>'
+    + (dueDate ? '<tr><td style="padding:4px 0;color:#6B7280;">Due Date</td>'
+    + '<td style="padding:4px 0;text-align:right;font-weight:600;color:#1F2937;">' + dueDate + '</td></tr>' : '')
+    + '</table></div>'
+    + payButton
+    + '<p style="margin:20px 0 0;font-size:13px;color:#6B7280;line-height:1.6;">'
+    + 'If you\'ve already paid, please disregard this message. '
+    + 'If you have any questions, just reply to this email — we\'re happy to help!</p>'
+    + '</div>'
+    + '<div style="background:#F9FAFB;padding:16px 28px;border-radius:0 0 16px 16px;border:1px solid #E5E7EB;border-top:none;">'
+    + '<p style="margin:0;font-size:12px;color:#9CA3AF;text-align:center;">'
+    + '🐾 ' + businessName + ' · Sent with love for your fur babies</p>'
+    + '</div></div>';
+
+  // Plain-text fallback
+  const plainBody = 'Hi ' + (clientName || 'there') + ',\n\n'
+    + 'This is a payment reminder from ' + businessName + '.\n\n'
+    + 'Services: ' + (items || 'Pet care services') + '\n'
+    + 'Amount due: $' + amountStr + '\n'
+    + (dueDate ? 'Due date: ' + dueDate + '\n' : '')
+    + (checkoutUrl ? '\nPay now: ' + checkoutUrl + '\n' : '')
+    + '\nThank you!\n' + businessName;
+
+  try {
+    GmailApp.sendEmail(clientEmail, subject || ('Payment Reminder — ' + businessName), plainBody, {
+      htmlBody: htmlBody,
+      from: 'nigelsplace.invoices@gmail.com',
+      replyTo: 'elyserwilson@gmail.com',
+      name: businessName + ' Invoices',
+    });
+    return respond({ ok: true, message: 'Email sent to ' + clientEmail });
+  } catch (err) {
+    return respond({ ok: false, error: 'Failed to send email: ' + err.message });
+  }
 }
 
 // ─── RESPONSE HELPER ─────────────────────────────────────────────────────────

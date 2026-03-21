@@ -8653,20 +8653,54 @@ function sendInvoiceText(invId){
   const payLines=payUrl?`\nPay now: ${payUrl}`:'';
   const biz=state.settings.businessName||"Nigel's Place";
   const msg=`Hi ${inv.clientName}! 🐾 This is a payment reminder from ${biz}.\n\nServices: ${inv.items}\nAmount due: $${owed.toFixed(2)}\nDue date: ${inv.dueDate}${payLines}\n\nThank you! 🐶`;
-  const smsLink=phone?`sms:${phone}?&body=${encodeURIComponent(msg)}`:`sms:?&body=${encodeURIComponent(msg)}`;
-  window.open(smsLink,'_self');
+  // On mobile (touch device), use sms: link. On desktop, copy message to clipboard instead.
+  const isMobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if(isMobile){
+    const smsLink=phone?`sms:${phone}?&body=${encodeURIComponent(msg)}`:`sms:?&body=${encodeURIComponent(msg)}`;
+    window.open(smsLink,'_self');
+  }else{
+    // Desktop: copy to clipboard and show the phone number + message
+    navigator.clipboard.writeText(msg).then(()=>{
+      showToast(`📱 Message copied! ${phone?'Text to: '+cl?.phone:''}`,'#7B4015');
+    }).catch(()=>{
+      // Fallback: show a modal with the message
+      prompt('Copy this message and text it to '+(cl?.phone||'the client')+':', msg);
+    });
+  }
 }
-function sendInvoiceEmail(invId){
+async function sendInvoiceEmail(invId){
   const inv=invoices.find(i=>i.id===invId);if(!inv)return;
   const cl=clients.find(c=>c.id===inv.clientId);
   const email=cl?.email||'';
+  if(!email){showToast('No email address on file for this client.','#EF4444');return;}
   const owed=inv.amount-(inv.paid||0)-(inv.externalPaid||0);
   const payUrl=_invoicePayLink(inv);
   const biz=state.settings.businessName||"Nigel's Place";
   const subject=`Payment Reminder — ${biz} ($${owed.toFixed(2)} due)`;
-  const body=`Hi ${inv.clientName},\n\nThis is a friendly payment reminder from ${biz}.\n\nServices: ${inv.items}\nAmount due: $${owed.toFixed(2)}\nDue date: ${inv.dueDate}${payUrl?'\n\nPay now: '+payUrl:''}\n\nThank you for choosing ${biz}! 🐾\n\nBest,\n${biz}`;
-  const mailLink=`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  window.open(mailLink,'_self');
+  // Try sending via proxy (server-side Gmail) — falls back to mailto: if proxy not configured
+  const _proxyUrl=(CONFIG.APPS_SCRIPT_URL||state.settings.appsScriptUrl||'').trim();
+  if(_proxyUrl){
+    showToast('📧 Sending email...','#0EA5E9');
+    try{
+      const res=await proxyClientWrite('sendInvoiceEmail',{
+        clientEmail:email,clientName:inv.clientName||cl?.name||'',
+        subject,items:inv.items||'',amount:owed,
+        dueDate:inv.dueDate||'',checkoutUrl:payUrl||'',invoiceId:inv.id
+      });
+      if(res.ok)showToast(`📧 Email sent to ${email}!`);
+      else showToast('Email failed: '+(res.error||'Unknown error'),'#EF4444');
+    }catch(err){
+      console.error('[sendInvoiceEmail]',err);
+      showToast('Email send failed: '+err.message+'. Opening mail client instead...','#F97316');
+      // Fallback to mailto:
+      const body=`Hi ${inv.clientName},\n\nPayment reminder from ${biz}.\n\nServices: ${inv.items}\nAmount due: $${owed.toFixed(2)}\nDue date: ${inv.dueDate}${payUrl?'\n\nPay now: '+payUrl:''}\n\nThank you!\n${biz}`;
+      window.open(`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,'_self');
+    }
+  }else{
+    // No proxy — fall back to mailto: link
+    const body=`Hi ${inv.clientName},\n\nPayment reminder from ${biz}.\n\nServices: ${inv.items}\nAmount due: $${owed.toFixed(2)}\nDue date: ${inv.dueDate}${payUrl?'\n\nPay now: '+payUrl:''}\n\nThank you!\n${biz}`;
+    window.open(`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,'_self');
+  }
 }
 async function submitInvoice(e){
   e.preventDefault();
