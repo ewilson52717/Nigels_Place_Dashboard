@@ -101,6 +101,7 @@ function doPost(e) {
     if (action === 'addBooking')        return addBooking(ss, req, email);
     if (action === 'addPackage')        return addPackage(ss, req, email);
     if (action === 'sendInvoiceEmail')  return sendInvoiceEmail(ss, req, email);
+    if (action === 'sendSquareInvoice') return sendSquareInvoice(ss, req, email);
 
     return respond({ ok: false, error: `Unknown action: ${action}` });
 
@@ -748,6 +749,211 @@ function addPackage(ss, req, callerEmail) {
   ]);
 
   return respond({ ok: true, id: safeId });
+}
+
+// ─── ACTION: sendSquareInvoice ────────────────────────────────────────────────
+// Creates and publishes a Square Invoice via the Invoices API.
+// Square handles email delivery to the client with a professional payment link.
+//
+// Flow:
+//   1. Find or create a Square Customer by email
+//   2. Create an Order with line items
+//   3. Create an Invoice (draft) referencing the Order + Customer
+//   4. Publish the Invoice → Square emails the client
+//
+// Required fields in req:
+//   clientName    — client display name
+//   clientEmail   — client email address (for Square Customer lookup/creation)
+//   clientPhone   — (optional) client phone number
+//   items         — invoice description string
+//   amount        — total amount in dollars (number)
+//   dueDate       — due date string (YYYY-MM-DD)
+//   invoiceId     — PawDesk internal invoice ID (for idempotency)
+//
+// Only admins can create invoices.
+function sendSquareInvoice(ss, req, callerEmail) {
+  const ADMIN_EMAILS = ['elyserwilson@gmail.com', 'kellyhendrickson1@yahoo.com'];
+  if (!ADMIN_EMAILS.some(a => a.toLowerCase() === callerEmail.toLowerCase())) {
+    return respond({ ok: false, error: 'Only admins can send Square invoices.' });
+  }
+
+  const { clientName, clientEmail, clientPhone, items, amount, dueDate, invoiceId } = req;
+  if (!clientEmail) return respond({ ok: false, error: 'Client email is required for Square invoices.' });
+  if (!amount || amount <= 0) return respond({ ok: false, error: 'Invoice amount must be greater than zero.' });
+
+  // Read Square credentials from Settings
+  const settingsSheet = ss.getSheetByName('Settings');
+  if (!settingsSheet) return respond({ ok: false, error: 'Settings sheet not found.' });
+
+  let squareApiKey = '', squareLocationId = '', squareSandbox = false, businessName = "Nigel's Place";
+  const rows = settingsSheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    const k = String(rows[i][0]);
+    if (k === 'squareApiKey')     squareApiKey     = String(rows[i][1] || '');
+    if (k === 'squareLocationId') squareLocationId = String(rows[i][1] || '');
+    if (k === 'squareSandbox')    squareSandbox    = String(rows[i][1]).toLowerCase() === 'true';
+    if (k === 'businessName')     businessName     = String(rows[i][1] || "Nigel's Place");
+  }
+
+  if (!squareApiKey)     return respond({ ok: false, error: 'Square API key not configured in Settings.' });
+  if (!squareLocationId) return respond({ ok: false, error: 'Square Location ID not configured in Settings.' });
+
+  const sqBase = squareSandbox
+    ? 'https://connect.squareupsandbox.com'
+    : 'https://connect.squareup.com';
+  const sqVersion = '2024-01-18';
+  const headers = {
+    'Authorization': 'Bearer ' + squareApiKey,
+    'Square-Version': sqVersion,
+    'Content-Type': 'application/json'
+  };
+
+  try {
+    // ── Step 1: Find or create Square Customer ───────────────────────────
+    let customerId = '';
+
+    // Search for existing customer by email
+    const searchResp = UrlFetchApp.fetch(sqBase + '/v2/customers/search', {
+      method: 'post', contentType: 'application/json', headers: headers,
+      payload: JSON.stringify({
+        query: { filter: { email_address: { exact: clientEmail.toLowerCase() } } }
+      }),
+      muteHttpExceptions: true
+    });
+    const searchData = JSON.parse(searchResp.getContentText());
+    if (searchData.customers && searchData.customers.length > 0) {
+      customerId = searchData.customers[0].id;
+    }
+
+    // Create customer if not found
+    if (!customerId) {
+      const nameParts = (clientName || '').trim().split(/\s+/);
+      const givenName = nameParts[0] || 'Client';
+      const familyName = nameParts.slice(1).join(' ') || '';
+      const createCustResp = UrlFetchApp.fetch(sqBase + '/v2/customers', {
+        method: 'post', contentType: 'application/json', headers: headers,
+        payload: JSON.stringify({
+          idempotency_key: 'cust-' + clientEmail.toLowerCase() + '-' + Date.now(),
+          given_name: givenName,
+          family_name: familyName,
+          email_address: clientEmail.toLowerCase(),
+          phone_number: clientPhone || '',
+          reference_id: 'pawdesk-client',
+          note: 'Auto-created by PawDesk invoice system'
+        }),
+        muteHttpExceptions: true
+      });
+      const custCode = createCustResp.getResponseCode();
+      const custData = JSON.parse(createCustResp.getContentText());
+      if (custCode !== 200 && custCode !== 201) {
+        const err = (custData.errors && custData.errors[0] && custData.errors[0].detail) || ('Customer create failed: ' + custCode);
+        return respond({ ok: false, error: err });
+      }
+      customerId = custData.customer.id;
+    }
+
+    // ── Step 2: Create an Order ──────────────────────────────────────────
+    const amountCents = Math.round(Number(amount) * 100);
+    const orderResp = UrlFetchApp.fetch(sqBase + '/v2/orders', {
+      method: 'post', contentType: 'application/json', headers: headers,
+      payload: JSON.stringify({
+        idempotency_key: 'ord-inv-' + (invoiceId || Date.now()) + '-' + Date.now(),
+        order: {
+          location_id: squareLocationId,
+          customer_id: customerId,
+          line_items: [{
+            name: items || (businessName + ' Services'),
+            quantity: '1',
+            base_price_money: { amount: amountCents, currency: 'USD' }
+          }]
+        }
+      }),
+      muteHttpExceptions: true
+    });
+    const orderCode = orderResp.getResponseCode();
+    const orderData = JSON.parse(orderResp.getContentText());
+    if (orderCode !== 200 && orderCode !== 201) {
+      const err = (orderData.errors && orderData.errors[0] && orderData.errors[0].detail) || ('Order create failed: ' + orderCode);
+      return respond({ ok: false, error: err });
+    }
+    const orderId = orderData.order.id;
+
+    // ── Step 3: Create Invoice (draft) ───────────────────────────────────
+    // Calculate due date for the payment request
+    const dueDateStr = dueDate || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
+
+    const invoiceResp = UrlFetchApp.fetch(sqBase + '/v2/invoices', {
+      method: 'post', contentType: 'application/json', headers: headers,
+      payload: JSON.stringify({
+        idempotency_key: 'inv-' + (invoiceId || Date.now()) + '-' + Date.now(),
+        invoice: {
+          location_id: squareLocationId,
+          order_id: orderId,
+          primary_recipient: { customer_id: customerId },
+          title: businessName + ' Invoice',
+          description: items || 'Pet care services',
+          delivery_method: 'EMAIL',
+          payment_requests: [{
+            request_type: 'BALANCE',
+            due_date: dueDateStr,
+            tipping_enabled: false,
+            automatic_payment_source: 'NONE',
+            reminders: [
+              { relative_scheduled_days: -3, message: 'Your payment for ' + businessName + ' is due in 3 days.' },
+              { relative_scheduled_days: 0,  message: 'Your payment for ' + businessName + ' is due today.' },
+              { relative_scheduled_days: 3,  message: 'Your payment for ' + businessName + ' is now 3 days past due. Please remit payment at your earliest convenience.' }
+            ]
+          }],
+          accepted_payment_methods: {
+            card: true,
+            square_gift_card: false,
+            bank_account: true,
+            buy_now_pay_later: false,
+            cash_app_pay: true
+          }
+        }
+      }),
+      muteHttpExceptions: true
+    });
+    const invCode = invoiceResp.getResponseCode();
+    const invData = JSON.parse(invoiceResp.getContentText());
+    if (invCode !== 200 && invCode !== 201) {
+      const err = (invData.errors && invData.errors[0] && invData.errors[0].detail) || ('Invoice create failed: ' + invCode);
+      return respond({ ok: false, error: err });
+    }
+    const squareInvoiceId = invData.invoice.id;
+    const invoiceVersion = invData.invoice.version;
+
+    // ── Step 4: Publish the Invoice → Square emails the client ───────────
+    const pubResp = UrlFetchApp.fetch(sqBase + '/v2/invoices/' + squareInvoiceId + '/publish', {
+      method: 'post', contentType: 'application/json', headers: headers,
+      payload: JSON.stringify({
+        idempotency_key: 'pub-' + squareInvoiceId + '-' + Date.now(),
+        version: invoiceVersion
+      }),
+      muteHttpExceptions: true
+    });
+    const pubCode = pubResp.getResponseCode();
+    const pubData = JSON.parse(pubResp.getContentText());
+    if (pubCode !== 200 && pubCode !== 201) {
+      const err = (pubData.errors && pubData.errors[0] && pubData.errors[0].detail) || ('Invoice publish failed: ' + pubCode);
+      return respond({ ok: false, error: err });
+    }
+
+    // Extract the payment URL from the published invoice
+    const publicUrl = (pubData.invoice && pubData.invoice.public_url) || '';
+
+    return respond({
+      ok: true,
+      message: 'Square invoice sent to ' + clientEmail,
+      squareInvoiceId: squareInvoiceId,
+      publicUrl: publicUrl,
+      customerId: customerId
+    });
+
+  } catch (e) {
+    return respond({ ok: false, error: 'Square invoice failed: ' + e.message });
+  }
 }
 
 // ─── ACTION: sendInvoiceEmail ─────────────────────────────────────────────────

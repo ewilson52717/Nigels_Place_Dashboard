@@ -1602,7 +1602,7 @@ async function initSheetHeaders(){
     writeRange('Clients!A1:E1', [['id','name','email','phone','photoConsent']]),
     writeRange('Dogs!A1:T1',    [['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit','deceased','vaccOverride','vetName','vetPhone','vetWebsite']]),
     writeRange('Bookings!A1:R1',[['id','clientId','dogId','dogName','clientName','checkIn','checkOut','nights','status','service','addons','price','paymentStatus','depositAmount','squarePaymentId','checkoutUrl','createdBy','familyDogIds']]),
-    writeRange('Invoices!A1:L1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items','externalPaid','paymentNote','checkoutUrl']]),
+    writeRange('Invoices!A1:M1',[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items','externalPaid','paymentNote','checkoutUrl','squareInvoiceId']]),
     writeRange('Settings!A1:B17',[
       ['key','value'],['businessName',state.settings.businessName],['dailyCapacity',state.settings.dailyCapacity],
       ['fullDayRate',state.settings.fullDayRate],['halfDayRate',state.settings.halfDayRate],
@@ -1627,7 +1627,7 @@ async function ensurePackagesSheet(){
 async function loadAllData(){
   const[cR,dR,bR,iR,sR]=await Promise.all([
     readRangeSafe('Clients!A2:E'),readRangeSafe('Dogs!A2:T'),readRangeSafe('Bookings!A2:R'),
-    readRangeSafe('Invoices!A2:L'),readRangeSafe('Settings!A2:B'),
+    readRangeSafe('Invoices!A2:M'),readRangeSafe('Settings!A2:B'),
   ]);
   const svR=await readRangeSafe('Services!A2:F');
   const pkR=await readRangeSafe('Packages!A2:K');
@@ -1694,7 +1694,7 @@ async function loadAllData(){
     }
   }
   invoices.length=0;
-  (iR||[]).forEach(r=>{if(r[0])invoices.push({id:+r[0],clientId:+r[1],clientName:r[2]||'',amount:+r[3]||0,paid:+r[4]||0,status:r[5]||'unpaid',dueDate:r[6]||'',issueDate:r[7]||'',items:r[8]||'',externalPaid:+r[9]||0,paymentNote:r[10]||'',checkoutUrl:r[11]||''});});
+  (iR||[]).forEach(r=>{if(r[0])invoices.push({id:+r[0],clientId:+r[1],clientName:r[2]||'',amount:+r[3]||0,paid:+r[4]||0,status:r[5]||'unpaid',dueDate:r[6]||'',issueDate:r[7]||'',items:r[8]||'',externalPaid:+r[9]||0,paymentNote:r[10]||'',checkoutUrl:r[11]||'',squareInvoiceId:r[12]||''});});
   (sR||[]).forEach(r=>{
     if(!r[0])return;const[k,v]=r;
     if(k==='businessName')state.settings.businessName=v;
@@ -1771,10 +1771,10 @@ async function persistClients(){
 }
 async function persistInvoices(){
   if(state.mode!=='live')return;
-  const rows=[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items','externalPaid','paymentNote','checkoutUrl'],
-    ...invoices.map(i=>[i.id,i.clientId,i.clientName,i.amount,i.paid,i.status,i.dueDate,i.issueDate,i.items,i.externalPaid||0,i.paymentNote||'',i.checkoutUrl||''])];
-  await writeRange(`Invoices!A1:L${rows.length}`,rows);
-  if(rows.length<9999)await clearRange(`Invoices!A${rows.length+1}:L9999`);
+  const rows=[['id','clientId','clientName','amount','paid','status','dueDate','issueDate','items','externalPaid','paymentNote','checkoutUrl','squareInvoiceId'],
+    ...invoices.map(i=>[i.id,i.clientId,i.clientName,i.amount,i.paid,i.status,i.dueDate,i.issueDate,i.items,i.externalPaid||0,i.paymentNote||'',i.checkoutUrl||'',i.squareInvoiceId||''])];
+  await writeRange(`Invoices!A1:M${rows.length}`,rows);
+  if(rows.length<9999)await clearRange(`Invoices!A${rows.length+1}:M9999`);
 }
 // ─── ARCHIVE DELETED CLIENT ──────────────────────────────────────────────────
 async function ensureArchivedSheet(){
@@ -2174,7 +2174,7 @@ async function loadClientDataViaProxy(){
       invoices.length=0;
       otherInvs.forEach(i=>invoices.push(i));
       result.invoices.forEach(r=>{
-        if(r[0])invoices.push({id:+r[0],clientId:+r[1],clientName:r[2]||'',amount:+r[3]||0,paid:+r[4]||0,status:r[5]||'unpaid',dueDate:r[6]||'',issueDate:r[7]||'',items:r[8]||'',externalPaid:+r[9]||0,paymentNote:r[10]||'',checkoutUrl:r[11]||''});
+        if(r[0])invoices.push({id:+r[0],clientId:+r[1],clientName:r[2]||'',amount:+r[3]||0,paid:+r[4]||0,status:r[5]||'unpaid',dueDate:r[6]||'',issueDate:r[7]||'',items:r[8]||'',externalPaid:+r[9]||0,paymentNote:r[10]||'',checkoutUrl:r[11]||'',squareInvoiceId:r[12]||''});
       });
     }
 
@@ -3962,7 +3962,7 @@ function buildServicesView(){
 }
 function buildInvoicesView(){
   const total=invoices.reduce((s,i)=>s+i.amount,0),collected=invoices.reduce((s,i)=>s+i.paid,0);
-  const sCls={paid:'bg-amber-100 text-amber-800',unpaid:'bg-yellow-100 text-yellow-700',overdue:'bg-red-100 text-red-600',partial:'bg-blue-100 text-blue-600'};
+  const sCls={paid:'bg-amber-100 text-amber-800',unpaid:'bg-yellow-100 text-yellow-700',overdue:'bg-red-100 text-red-600',partial:'bg-blue-100 text-blue-600',sent:'bg-green-100 text-green-700'};
   return`
   <div class="p-4 sm:p-6 slide-in">
     <div class="flex items-center justify-between mb-6">
@@ -3991,11 +3991,15 @@ function buildInvoicesView(){
             <td class="px-5 py-3.5"><span class="badge ${sCls[inv.status]||'bg-gray-100 text-gray-600'}">${inv.status}</span></td>
             <td class="px-5 py-3.5">
               <div class="flex items-center gap-2 flex-wrap">
-                ${inv.status!=='paid'?`
+                ${inv.status==='paid'?`<span class="text-xs text-gray-300">Paid ✓</span>`
+                :inv.squareInvoiceId?`
+                  <span class="text-xs px-2 py-1 rounded-lg bg-green-50 text-green-700 font-medium">✅ Sent via Square</span>
+                  <button onclick="sendInvoiceText(${inv.id})" class="text-xs px-2 py-1 rounded-lg text-white" style="background:#7B4015" title="Send text reminder">📱 Text</button>
+                  <button onclick="markInvoicePaid(${inv.id})" class="text-xs text-blue-600 hover:underline">Mark Paid</button>`
+                :`
                   <button onclick="sendInvoiceText(${inv.id})" class="text-xs px-2 py-1 rounded-lg text-white" style="background:#7B4015" title="Send text message">📱 Text</button>
                   <button onclick="sendInvoiceEmail(${inv.id})" class="text-xs px-2 py-1 rounded-lg text-white" style="background:#2563EB" title="Send email">📧 Email</button>
-                  <button onclick="markInvoicePaid(${inv.id})" class="text-xs text-blue-600 hover:underline">Mark Paid</button>`
-                :`<span class="text-xs text-gray-300">Paid ✓</span>`}
+                  <button onclick="markInvoicePaid(${inv.id})" class="text-xs text-blue-600 hover:underline">Mark Paid</button>`}
                 <button onclick="openEditInvoiceModal(${inv.id})" class="text-xs px-2 py-1 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100">Edit</button>
                 <button onclick="deleteInvoice(${inv.id})" class="text-xs px-2 py-1 rounded-lg bg-red-50 text-red-400 hover:bg-red-100">Delete</button>
               </div>
@@ -8673,11 +8677,16 @@ async function sendInvoiceEmail(invId){
   const cl=clients.find(c=>c.id===inv.clientId);
   const email=cl?.email||'';
   if(!email){showToast('No email address on file for this client.','#EF4444');return;}
+  // If Square invoice was already sent, offer to resend via Square or Gmail
+  if(inv.squareInvoiceId){
+    showToast(`This invoice was sent via Square. The client received an email at ${email} with automatic reminders.`,'#7B4015');
+    return;
+  }
   const owed=inv.amount-(inv.paid||0)-(inv.externalPaid||0);
   const payUrl=_invoicePayLink(inv);
   const biz=state.settings.businessName||"Nigel's Place";
   const subject=`Payment Reminder — ${biz} ($${owed.toFixed(2)} due)`;
-  // Try sending via proxy (server-side Gmail) — falls back to mailto: if proxy not configured
+  // Try Square Invoice first, then Gmail, then mailto: fallback
   const _proxyUrl=(CONFIG.APPS_SCRIPT_URL||state.settings.appsScriptUrl||'').trim();
   if(_proxyUrl){
     showToast('📧 Sending email...','#0EA5E9');
@@ -8721,27 +8730,51 @@ async function submitInvoice(e){
   if(totalReceived>=amount)status='paid';
   else if(totalReceived>0)status='partial';
   else if(dueDate&&dueDate<TODAY)status='overdue';
-  const ni={id:nextId(invoices),clientId:cId,clientName:cl?.name||'',amount,paid,status,dueDate,issueDate,items,externalPaid,paymentNote,checkoutUrl:''};
+  const ni={id:nextId(invoices),clientId:cId,clientName:cl?.name||'',amount,paid,status,dueDate,issueDate,items,externalPaid,paymentNote,checkoutUrl:'',squareInvoiceId:''};
   invoices.push(ni);state.showModal=null;render();
   showToast(`Invoice created for ${cl?.name||'client'}!`);
   try{await persistInvoices();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
-  // Generate Square checkout link for "Send for payment" invoices
+  // "Send for payment" → create & send Square Invoice (Square emails the client directly)
+  // Falls back to checkout link + Gmail if Square Invoices API fails
   if(invType==='send'&&amount>0){
     const _proxyUrl=(CONFIG.APPS_SCRIPT_URL||state.settings.appsScriptUrl||'').trim();
-    const biz=state.settings.businessName||"Nigel's Place";
-    const label=`${biz} — Invoice for ${cl?.name||'client'}: ${items}`;
     if(_proxyUrl){
+      showToast('📤 Sending Square invoice...','#0EA5E9');
       try{
-        const ckRes=await proxyClientWrite('createCheckoutLink',{bookingId:'inv-'+ni.id,amountDollars:amount,label});
-        if(ckRes?.checkoutUrl){
-          ni.checkoutUrl=ckRes.checkoutUrl;
+        const sqRes=await proxyClientWrite('sendSquareInvoice',{
+          clientName:cl?.name||'',clientEmail:cl?.email||'',clientPhone:cl?.phone||'',
+          items,amount,dueDate,invoiceId:ni.id
+        });
+        if(sqRes?.ok){
+          ni.checkoutUrl=sqRes.publicUrl||'';ni.squareInvoiceId=sqRes.squareInvoiceId||'';
+          ni.status='sent';
           try{await persistInvoices();}catch(e){}
           render();
-          showToast(`Payment link created! Use 📱 Text or 📧 Email to send it.`);
-        }else{console.warn('[INVOICE] checkout: no URL returned',JSON.stringify(ckRes));}
-      }catch(sqErr){console.error('[INVOICE checkout]',sqErr);showToast(`Invoice saved! Square link: ${sqErr.message}`,'#F97316');}
+          showToast(`✅ Square invoice sent to ${cl?.email}! They'll get a payment email from Square.`);
+        }else{
+          // Square invoice failed — fall back to checkout link
+          console.warn('[INVOICE] Square invoice failed:',sqRes?.error);
+          showToast(`Square invoice: ${sqRes?.error||'failed'}. Creating payment link instead...`,'#F97316');
+          try{
+            const biz=state.settings.businessName||"Nigel's Place";
+            const label=`${biz} — Invoice for ${cl?.name||'client'}: ${items}`;
+            const ckRes=await proxyClientWrite('createCheckoutLink',{bookingId:'inv-'+ni.id,amountDollars:amount,label});
+            if(ckRes?.checkoutUrl){
+              ni.checkoutUrl=ckRes.checkoutUrl;
+              try{await persistInvoices();}catch(e){}
+              render();
+              showToast(`Payment link created! Use 📱 Text or 📧 Email to send it.`);
+            }
+          }catch(e2){console.error('[INVOICE fallback]',e2);}
+        }
+      }catch(sqErr){
+        console.error('[INVOICE sendSquareInvoice]',sqErr);
+        showToast(`Invoice saved! Square: ${sqErr.message}`,'#F97316');
+      }
     }else if(state.settings.squareApiKey&&state.settings.squareLocationId){
       try{
+        const biz=state.settings.businessName||"Nigel's Place";
+        const label=`${biz} — Invoice for ${cl?.name||'client'}: ${items}`;
         const checkoutUrl=await createSquareCheckoutLink({id:'inv-'+ni.id},amount,label);
         if(checkoutUrl){ni.checkoutUrl=checkoutUrl;try{await persistInvoices();}catch(e){}render();showToast(`Payment link created! Use 📱 Text or 📧 Email to send it.`);}
       }catch(sqErr){showToast(`Invoice saved! Square link: ${sqErr.message}`,'#F97316');}
