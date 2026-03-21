@@ -23,37 +23,8 @@
     .day-cell { cursor:pointer; transition:transform 0.15s, box-shadow 0.15s; min-height:88px; }
     .day-cell:hover { transform:scale(1.03); box-shadow:0 4px 16px rgba(0,0,0,0.12); z-index:2; position:relative; }
     .badge { display:inline-flex; align-items:center; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:600; }
-    input:focus, select:focus, textarea:focus { outline:none; border-color:#818cf8 !important; box-shadow:0 0 0 3px rgba(99,102,241,0.12); }
-    .stat-card { background:white; border-radius:16px; padding:1.25rem; box-shadow:0 1px 4px rgba(0,0,0,0.06); border:1px solid #F3F4F6; transition:transform 0.2s ease, box-shadow 0.2s ease; }
-    .stat-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(99,102,241,0.1); }
-    /* ── Enhanced UX: card hover lift ── */
-    .card-hover { transition:transform 0.2s ease, box-shadow 0.2s ease; }
-    .card-hover:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,0.08); }
-    /* ── Table row hover ── */
-    .row-hover { transition:background 0.15s ease, transform 0.1s ease; }
-    .row-hover:hover { background:linear-gradient(135deg,#eef2ff 0%,#f8fafc 100%); }
-    /* ── Floating action button ── */
-    .fab { position:fixed; bottom:2rem; right:2rem; width:56px; height:56px; border-radius:50%; background:linear-gradient(135deg,#6366f1,#8b5cf6); color:white; border:none; cursor:pointer; box-shadow:0 8px 32px rgba(99,102,241,0.35); font-size:1.5rem; display:flex; align-items:center; justify-content:center; z-index:40; transition:all 0.25s cubic-bezier(0.34,1.56,0.64,1); }
-    .fab:hover { transform:scale(1.1) rotate(90deg); box-shadow:0 12px 40px rgba(99,102,241,0.5); }
-    .fab:active { transform:scale(0.95); }
-    /* ── Gradient text ── */
-    .text-gradient { background:linear-gradient(135deg,#6366f1,#8b5cf6); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-    /* ── Button hover glow ── */
-    .btn-glow { transition:all 0.2s ease; position:relative; overflow:hidden; }
-    .btn-glow:hover { box-shadow:0 4px 20px rgba(99,102,241,0.3); transform:translateY(-1px); }
-    .btn-glow:active { transform:translateY(0); }
-    /* ── Animated gradient border ── */
-    @keyframes gradientShift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
-    /* ── Smooth counter animation ── */
-    @keyframes countUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-    .count-up { animation:countUp 0.4s ease-out; }
-    /* ── Shimmer loading effect ── */
-    @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
-    .shimmer { background:linear-gradient(90deg,#f3f4f6 25%,#e5e7eb 50%,#f3f4f6 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; }
-    /* ── Invoice stat card gradients ── */
-    .stat-invoiced { background:linear-gradient(135deg,#eef2ff 0%,#e0e7ff 100%); border:1px solid #c7d2fe; }
-    .stat-collected { background:linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%); border:1px solid #a7f3d0; }
-    .stat-outstanding { background:linear-gradient(135deg,#fef2f2 0%,#fee2e2 100%); border:1px solid #fecaca; }
+    input:focus, select:focus, textarea:focus { outline:none; border-color:#C4952A !important; box-shadow:0 0 0 3px rgba(196,149,42,0.1); }
+    .stat-card { background:white; border-radius:16px; padding:1.25rem; box-shadow:0 1px 4px rgba(0,0,0,0.06); border:1px solid #F3F4F6; }
     .spinner { width:20px; height:20px; border:2px solid rgba(255,255,255,.3); border-top-color:white; border-radius:50%; animation:spin 0.7s linear infinite; display:inline-block; }
     @keyframes spin { to { transform:rotate(360deg); } }
     .past-day  { opacity:0.5; pointer-events:none; }
@@ -108,7 +79,7 @@
     .policy-modal-box { background:white; border-radius:16px; max-width:680px; width:100%; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.3); overflow:hidden; }
     .policy-modal-header { padding:1.25rem 1.5rem; border-bottom:1px solid #F3F4F6; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
     .policy-modal-body { padding:1.5rem; overflow-y:auto; flex:1; font-size:0.87rem; line-height:1.7; color:#374151; }
-    .policy-modal-body h3 { font-size:0.95rem; font-weight:700; color:#6366f1; margin:1.4rem 0 0.4rem; }
+    .policy-modal-body h3 { font-size:0.95rem; font-weight:700; color:#7B4015; margin:1.4rem 0 0.4rem; }
     .policy-modal-body h3:first-child { margin-top:0; }
     .policy-modal-body p { margin-bottom:0.75rem; }
     .policy-modal-body ul { margin:0.3rem 0 0.75rem 1.25rem; }
@@ -117,11 +88,11 @@
     /* ── Smooth collapsible section animations ── */
     .np-collapse-body{overflow:hidden;transition:max-height .3s cubic-bezier(0.4,0,0.2,1),opacity .25s ease;opacity:1;}
     .np-collapse-body.np-collapsed{max-height:0!important;opacity:0;pointer-events:none;}
-    .np-collapse-arrow{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:rgba(99,102,241,0.08);transition:transform .3s cubic-bezier(0.4,0,0.2,1),background .2s ease;font-size:14px;color:#6366f1;}
+    .np-collapse-arrow{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:rgba(123,64,21,0.08);transition:transform .3s cubic-bezier(0.4,0,0.2,1),background .2s ease;font-size:14px;color:#7B4015;}
     .np-collapse-arrow.np-rotated{transform:rotate(-90deg);}
     .np-collapse-header{cursor:pointer;}
     .np-collapse-header:hover{filter:brightness(0.96);}
-    .np-collapse-header:hover .np-collapse-arrow{background:rgba(99,102,241,0.15);}
+    .np-collapse-header:hover .np-collapse-arrow{background:rgba(123,64,21,0.15);}
     .np-collapse-header:active{filter:brightness(0.94);}
   </style>
 </head>
@@ -448,7 +419,7 @@ function capColor(n,cap){
   if(cap===0)return{bar:'#9CA3AF',bg:'#F3F4F6',txt:'#6B7280',label:'Closed'};
   const p=n/cap;
   if(n>=cap)return{bar:'#EF4444',bg:'#FEF2F2',txt:'#DC2626',label:'Full'};
-  if(p>=0.8) return{bar:'#F97316',bg:'#eef2ff',txt:'#EA580C',label:'Almost Full'};
+  if(p>=0.8) return{bar:'#F97316',bg:'#FFF7ED',txt:'#EA580C',label:'Almost Full'};
   if(p>=0.5) return{bar:'#EAB308',bg:'#FEFCE8',txt:'#CA8A04',label:'Filling Up'};
   return         {bar:'#10B981',bg:'#F0FDF4',txt:'#059669',label:'Available'};
 }
@@ -593,7 +564,7 @@ function showSmsModal(phone, message){
     ${ph?`<div style="font-size:.8rem;color:#6b7280;margin-bottom:.75rem;">📱 To: <strong style="color:#374151;">${ph}</strong></div>`:''}
     <textarea id="sms-msg-text" readonly style="width:100%;height:90px;border:1px solid #e5e7eb;border-radius:10px;padding:.6rem;font-size:.8rem;color:#374151;resize:none;background:#f9fafb;box-sizing:border-box;">${msg}</textarea>
     <div style="display:flex;gap:.6rem;margin-top:.75rem;">
-      <button onclick="navigator.clipboard.writeText(document.getElementById('sms-msg-text').value).then(()=>{showToast('Message copied to clipboard!')})" style="flex:1;background:#e0e7ff;color:#4338ca;border:1px solid #d97706;border-radius:10px;padding:.5rem;font-size:.8rem;font-weight:600;cursor:pointer;">📋 Copy</button>
+      <button onclick="navigator.clipboard.writeText(document.getElementById('sms-msg-text').value).then(()=>{showToast('Message copied to clipboard!')})" style="flex:1;background:#fef3c7;color:#92400e;border:1px solid #d97706;border-radius:10px;padding:.5rem;font-size:.8rem;font-weight:600;cursor:pointer;">📋 Copy</button>
       ${ph?`<a href="sms:${ph}?&body=${encodeURIComponent(msg)}" style="flex:1;background:#f0fdf4;color:#166534;border:1px solid #16a34a;border-radius:10px;padding:.5rem;font-size:.8rem;font-weight:600;cursor:pointer;text-align:center;text-decoration:none;display:flex;align-items:center;justify-content:center;">📱 Open Messages</a>`:''}
       <button onclick="this.closest('[data-sms-modal]').remove()" style="flex:0 0 auto;background:#f9fafb;color:#6b7280;border:1px solid #e5e7eb;border-radius:10px;padding:.5rem .75rem;font-size:.8rem;cursor:pointer;">Close</button>
     </div>
@@ -826,7 +797,7 @@ function showVetPickerLightbox(candidates, nameInputId, phoneInputId, websiteInp
   const cards=candidates.map((c,i)=>`
     <button type="button" onclick="pickVetCandidate(${i})"
       style="width:100%;text-align:left;background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:.75rem 1rem;cursor:pointer;transition:border-color .15s,box-shadow .15s;"
-      onmouseover="this.style.borderColor='#6366f1';this.style.boxShadow='0 2px 8px rgba(123,64,21,0.12)'"
+      onmouseover="this.style.borderColor='#7B4015';this.style.boxShadow='0 2px 8px rgba(123,64,21,0.12)'"
       onmouseout="this.style.borderColor='#E5E7EB';this.style.boxShadow='none'">
       <div style="font-weight:700;font-size:.88rem;color:#1F2937;margin-bottom:.2rem;">🏥 ${c.name}</div>
       ${c.city?`<div style="font-size:.75rem;color:#6B7280;margin-bottom:.1rem;">📍 ${c.city}</div>`:''}
@@ -1013,7 +984,7 @@ function showUpdatePill(){
   pill.id='update-pill';
   pill.style.cssText=`
     position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9100;
-    background:#6366f1;color:#fff;padding:7px 16px 7px 14px;border-radius:999px;
+    background:#7B4015;color:#fff;padding:7px 16px 7px 14px;border-radius:999px;
     box-shadow:0 4px 18px rgba(0,0,0,0.22);cursor:default;
     font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;
     animation:pillDrop 0.28s ease;white-space:nowrap;`;
@@ -1029,7 +1000,7 @@ function showUpdatePill(){
     <span style="font-size:15px">🔄</span>
     <span id="pill-label">Changes detected — applying in ${secs}s</span>
     <button id="pill-apply"
-      style="background:#fff;color:#6366f1;border:none;border-radius:999px;
+      style="background:#fff;color:#7B4015;border:none;border-radius:999px;
              padding:2px 11px;font-size:12px;font-weight:700;cursor:pointer;margin-left:2px;">
       Apply now
     </button>
@@ -1242,7 +1213,7 @@ async function openProfilePhotoLightbox(fileId, clientId, dogId){
 
       // ── Reposition button ──────────────────────────────────────────────
       const reposBtn=mkLbBtn('↔ Reposition','rgba(255,255,255,0.12)','rgba(255,255,255,0.25)');
-      const saveBtn=mkLbBtn('✓ Save Position','#6366f1','#4f46e5');
+      const saveBtn=mkLbBtn('✓ Save Position','#7B4015','#6A3511');
       saveBtn.style.display='none';
 
       let reposMode=false;
@@ -1282,7 +1253,7 @@ async function openProfilePhotoLightbox(fileId, clientId, dogId){
         if(reposMode){
           reposBtn.textContent='✕ Cancel Reposition';
           reposBtn.style.background='rgba(195,148,42,0.35)';
-          reposBtn.style.borderColor='#818cf8';
+          reposBtn.style.borderColor='#C4952A';
           img.style.cursor='grab';
           hint.style.display='block';
           saveBtn.style.display='inline-block';
@@ -1850,7 +1821,7 @@ function toggleCalendarSettings(){
       panel.style.maxHeight='0';
     }
   }
-  if(btn)btn.className=`np-collapse-header px-3 py-1.5 rounded-xl border text-sm transition-colors ${state.showCalendarSettings?'text-indigo-700 bg-indigo-50 border-indigo-200':'border-gray-200 text-gray-500 hover:bg-gray-50'}`;
+  if(btn)btn.className=`np-collapse-header px-3 py-1.5 rounded-xl border text-sm transition-colors ${state.showCalendarSettings?'text-amber-700 bg-amber-50 border-amber-200':'border-gray-200 text-gray-500 hover:bg-gray-50'}`;
   if(arrow){
     if(state.showCalendarSettings)arrow.classList.remove('np-rotated');
     else arrow.classList.add('np-rotated');
@@ -1891,7 +1862,7 @@ function showDayQuickMenu(ds,event){
           style="width:60px;border:1px solid #E5E7EB;border-radius:8px;padding:5px 8px;font-size:13px;"
           onclick="event.stopPropagation()">
         <button onclick="setDayStatus('${ds}','custom');document.getElementById('day-quick-menu')?.remove()"
-          style="flex:1;padding:5px 8px;background:#6366f1;color:white;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">Set</button>
+          style="flex:1;padding:5px 8px;background:#7B4015;color:white;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">Set</button>
       </div>
     </div>`;
   document.body.appendChild(menu);
@@ -1911,7 +1882,7 @@ function setDayStatus(ds,status){
     showToast(`${fmtDate(ds)} — Open (override removed)`);
   }else if(status==='closed'){
     state.settings.capacityOverrides[ds]=0;
-    showToast(`${fmtDate(ds)} blocked 🔒`,'#6366f1');
+    showToast(`${fmtDate(ds)} blocked 🔒`,'#7B4015');
   }else if(status==='custom'){
     const v=parseInt(document.getElementById('dqm-cap')?.value);
     if(!v||v<1){showToast('Enter a valid number of pets.','#EF4444');return;}
@@ -1936,7 +1907,7 @@ function blockDateRange(){
     state.settings.capacityOverrides[ds]=0;
     d.setDate(d.getDate()+1);count++;
   }
-  showToast(`🔒 Blocked ${count} day${count!==1?'s':''}!`,'#6366f1');
+  showToast(`🔒 Blocked ${count} day${count!==1?'s':''}!`,'#7B4015');
   render();
   try{persistSettings();}catch(e){}
 }
@@ -1962,7 +1933,7 @@ async function parseBlockDatesAI(){
     if(!state.settings.capacityOverrides)state.settings.capacityOverrides={};
     dates.forEach(ds=>{if(/^\d{4}-\d{2}-\d{2}$/.test(ds))state.settings.capacityOverrides[ds]=0;});
     if(statusEl)statusEl.textContent=`✅ Blocked ${dates.length} date${dates.length!==1?'s':''}!`;
-    showToast(`🔒 AI blocked ${dates.length} day${dates.length!==1?'s':''}!`,'#6366f1');
+    showToast(`🔒 AI blocked ${dates.length} day${dates.length!==1?'s':''}!`,'#7B4015');
     const inp=document.getElementById('block-ai-text');if(inp)inp.value='';
     render();
     try{persistSettings();}catch(e){}
@@ -2009,7 +1980,7 @@ function toggleVoiceDateInput(){
 function buildKioskPasswordPrompt(){
   const biz=state.settings.businessName||"Nigel's Place";
   return`
-  <div id="kiosk-root" style="position:fixed;inset:0;background:linear-gradient(135deg,#1e1b4b,#312e81,#1e1b4b);display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;">
+  <div id="kiosk-root" style="position:fixed;inset:0;background:linear-gradient(135deg,#3d1a08,#5C3317,#3d1a08);display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;">
     <div style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:20px;padding:2.5rem 2rem;width:100%;max-width:340px;text-align:center;backdrop-filter:blur(12px);">
       <img src="${LOGO_URL}" style="width:64px;height:64px;object-fit:contain;border-radius:50%;background:rgba(255,255,255,0.1);padding:6px;margin:0 auto 1rem;">
       <div style="color:white;font-size:1.4rem;font-weight:800;margin-bottom:.25rem;">${biz}</div>
@@ -2017,7 +1988,7 @@ function buildKioskPasswordPrompt(){
       <input id="kiosk-pw-input" type="password" placeholder="Password"
         onkeydown="if(event.key==='Enter')verifyKioskPassword()"
         style="width:100%;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:.7rem 1rem;color:white;font-size:1rem;text-align:center;outline:none;letter-spacing:2px;margin-bottom:.75rem;">
-      <button onclick="verifyKioskPassword()" style="width:100%;background:#6366f1;border:none;border-radius:12px;padding:.75rem;color:white;font-size:.95rem;font-weight:700;cursor:pointer;">Enter →</button>
+      <button onclick="verifyKioskPassword()" style="width:100%;background:#7B4015;border:none;border-radius:12px;padding:.75rem;color:white;font-size:.95rem;font-weight:700;cursor:pointer;">Enter →</button>
       <div id="kiosk-pw-error" style="color:#FCA5A5;font-size:.8rem;margin-top:.6rem;min-height:1.2rem;"></div>
     </div>
   </div>`;
@@ -2300,11 +2271,11 @@ function render(){
   catch(e){
     console.error('Render error:',e);
     state.isLoading=false;
-    document.getElementById('app').innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;color:#6366f1;background:#e0e7ff">
+    document.getElementById('app').innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;color:#7B4015;background:#FEF3C7">
       <div style="font-size:3rem">🐾</div>
       <div style="font-weight:700;font-size:1.2rem;margin:8px 0">Something went wrong</div>
-      <div style="color:#4338ca;font-size:.9rem;margin-bottom:16px">${e.message}</div>
-      <button onclick="location.reload()" style="background:#6366f1;color:white;border:none;padding:10px 24px;border-radius:12px;cursor:pointer;font-size:.9rem">Refresh Page</button>
+      <div style="color:#92400E;font-size:.9rem;margin-bottom:16px">${e.message}</div>
+      <button onclick="location.reload()" style="background:#7B4015;color:white;border:none;padding:10px 24px;border-radius:12px;cursor:pointer;font-size:.9rem">Refresh Page</button>
     </div>`;
   }
 }
@@ -2328,7 +2299,7 @@ function buildClientError(){
         Go to <em>script.google.com</em> → open <em>NigelsPlace_ClientProxy</em> → Deploy → Manage deployments → Edit → <strong>New version</strong> → Deploy.
       </div>`
     :'';
-  return`<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e1b4b,#312e81);font-family:system-ui,sans-serif;padding:2rem;text-align:center;">
+  return`<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#3d1a08,#5C3317);font-family:system-ui,sans-serif;padding:2rem;text-align:center;">
     <img src="${LOGO_URL}" style="width:72px;border-radius:50%;margin-bottom:1.2rem;background:rgba(255,255,255,0.1);padding:8px;">
     <div style="color:#fff;font-size:1.25rem;font-weight:700;margin-bottom:.5rem;">Connection Problem</div>
     <div style="color:rgba(255,200,120,0.85);font-size:.9rem;max-width:320px;margin-bottom:1rem;line-height:1.5;">
@@ -2340,7 +2311,7 @@ function buildClientError(){
       Proxy: ${CONFIG.APPS_SCRIPT_URL?'configured ✓':'not configured ✗'}<br>
       ${errMsg?`Error: ${errMsg}`:''}
     </div>
-    <button onclick="retryClientLogin()" style="background:#818cf8;color:#fff;border:none;border-radius:12px;padding:.75rem 2rem;font-size:.95rem;font-weight:600;cursor:pointer;margin-bottom:.65rem;width:220px;">
+    <button onclick="retryClientLogin()" style="background:#C4952A;color:#fff;border:none;border-radius:12px;padding:.75rem 2rem;font-size:.95rem;font-weight:600;cursor:pointer;margin-bottom:.65rem;width:220px;">
       🔄 Try Again
     </button>
     <button onclick="switchAccount()" style="background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.25);border-radius:12px;padding:.65rem 2rem;font-size:.88rem;font-weight:500;cursor:pointer;margin-bottom:.65rem;width:220px;">
@@ -2382,7 +2353,7 @@ function buildAdminAsClientLayout(){
   // Renders the full client layout with an escape banner pinned at top
   const clientLayout=buildClientLayout();
   const curClient=clients.find(c=>c.id===state.currentClientId);
-  const banner=`<div style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#6366f1;color:#fff;font-size:0.75rem;padding:6px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,0.25)">
+  const banner=`<div style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#7B4015;color:#fff;font-size:0.75rem;padding:6px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,0.25)">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <span style="font-size:1rem;">🔁</span>
       <span style="white-space:nowrap"><strong>Client Preview</strong></span>
@@ -2399,7 +2370,7 @@ function buildAdminAsClientLayout(){
   return banner+clientLayout;
 }
 function buildLoader(){
-  return`<div class="min-h-screen flex items-center justify-center" style="background:linear-gradient(135deg,#312e81,#0f172a)">
+  return`<div class="min-h-screen flex items-center justify-center" style="background:linear-gradient(135deg,#5C3317,#2A1408)">
     <div class="text-center text-white">
       <img src="${LOGO_URL}" style="width:80px;margin:0 auto 1rem;display:block">
       <div class="flex items-center gap-3 justify-center">
@@ -2411,7 +2382,7 @@ function buildLoader(){
 }
 function buildLogin(){
   return`
-  <div class="min-h-screen flex items-center justify-center p-4" style="background:linear-gradient(135deg,#4338ca,#312e81,#1e1b4b)">
+  <div class="min-h-screen flex items-center justify-center p-4" style="background:linear-gradient(135deg,#7C4A1E,#5C3317,#3B1F0E)">
     <div class="bg-white rounded-3xl shadow-2xl w-full max-w-xs slide-in" style="padding:2.5rem 2rem 1.75rem;">
 
       <!-- Logo + name -->
@@ -2473,9 +2444,9 @@ function buildOnboarding(){
   const stepLabels=['Your Info','Your Pet','Agreements'];
   const stepsHtml=stepLabels.map((s,i)=>{
     const n=i+1,active=n===step,done=n<step;
-    const bg=done?'#6366f1':active?'#818cf8':'#E5E7EB';
+    const bg=done?'#7B4015':active?'#C4952A':'#E5E7EB';
     const fg=done||active?'#fff':'#9CA3AF';
-    const lc=active?'#6366f1':'#9CA3AF';
+    const lc=active?'#7B4015':'#9CA3AF';
     const lw=active?'700':'400';
     return`<div style="display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;">
       <div style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;background:${bg};color:${fg};">${done?'✓':n}</div>
@@ -2508,7 +2479,7 @@ function buildOnboarding(){
             style="width:100%;border:1px solid #E5E7EB;border-radius:12px;padding:.6rem .75rem;font-size:.875rem;box-sizing:border-box;">
         </div>
         <button onclick="onboardingNext(1)"
-          style="width:100%;background:#6366f1;color:#fff;border:none;border-radius:14px;padding:.75rem;font-size:.9rem;font-weight:600;cursor:pointer;margin-top:.25rem;">
+          style="width:100%;background:#7B4015;color:#fff;border:none;border-radius:14px;padding:.75rem;font-size:.9rem;font-weight:600;cursor:pointer;margin-top:.25rem;">
           Continue &rarr; Add Your Pet
         </button>
       </div>`;
@@ -2567,7 +2538,7 @@ function buildOnboarding(){
           <button onclick="state.onboardingStep=1;render()"
             style="flex:1;background:#F9FAFB;color:#6B7280;border:1px solid #E5E7EB;border-radius:14px;padding:.7rem;font-size:.875rem;font-weight:600;cursor:pointer;">&larr; Back</button>
           <button onclick="onboardingNext(2)"
-            style="flex:2;background:#6366f1;color:#fff;border:none;border-radius:14px;padding:.7rem;font-size:.875rem;font-weight:600;cursor:pointer;">Continue &rarr; Agreements</button>
+            style="flex:2;background:#7B4015;color:#fff;border:none;border-radius:14px;padding:.7rem;font-size:.875rem;font-weight:600;cursor:pointer;">Continue &rarr; Agreements</button>
         </div>
       </div>`;
 
@@ -2584,19 +2555,19 @@ function buildOnboarding(){
               style="width:100%;border:1px solid #E5E7EB;border-radius:12px;padding:.6rem .75rem;font-size:.875rem;box-sizing:border-box;">
           </div>
         </div>
-        <div style="background:#eef2ff;border:1px solid #FCD34D;border-radius:14px;padding:1rem;">
-          <p style="font-size:.8rem;font-weight:700;color:#4338ca;margin:0 0 .75rem;">📋 Please review and accept</p>
+        <div style="background:#FEF9EE;border:1px solid #FCD34D;border-radius:14px;padding:1rem;">
+          <p style="font-size:.8rem;font-weight:700;color:#92400E;margin:0 0 .75rem;">📋 Please review and accept</p>
           <div style="display:flex;flex-direction:column;gap:.75rem;">
             <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
-              <input type="checkbox" id="ob-agree-terms" ${d.agreeTerms?'checked':''} style="margin-top:2px;accent-color:#6366f1;flex-shrink:0;">
-              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I agree to Nigel's Place <button type="button" onclick="showPolicyModal('terms')" style="background:none;border:none;padding:0;cursor:pointer;font-size:.75rem;color:#6366f1;text-decoration:underline;font-weight:600;font-family:inherit;">Terms &amp; Conditions</button> — including payment, pick-up/drop-off times (8–10 AM drop-off, 4–6 PM pick-up), <button type="button" onclick="showCancellationPolicyModal()" style="background:none;border:none;padding:0;cursor:pointer;font-size:.75rem;color:#6366f1;text-decoration:underline;font-weight:600;font-family:inherit;">cancellation policies</button>, and the <strong>vaccine requirement</strong> (Rabies, DHPP, Bordetella — current records required before every visit). <span style="color:#DC2626;">*</span></span>
+              <input type="checkbox" id="ob-agree-terms" ${d.agreeTerms?'checked':''} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
+              <span style="font-size:.75rem;color:#374151;line-height:1.4;">I agree to Nigel's Place <button type="button" onclick="showPolicyModal('terms')" style="background:none;border:none;padding:0;cursor:pointer;font-size:.75rem;color:#7B4015;text-decoration:underline;font-weight:600;font-family:inherit;">Terms &amp; Conditions</button> — including payment, pick-up/drop-off times (8–10 AM drop-off, 4–6 PM pick-up), <button type="button" onclick="showCancellationPolicyModal()" style="background:none;border:none;padding:0;cursor:pointer;font-size:.75rem;color:#7B4015;text-decoration:underline;font-weight:600;font-family:inherit;">cancellation policies</button>, and the <strong>vaccine requirement</strong> (Rabies, DHPP, Bordetella — current records required before every visit). <span style="color:#DC2626;">*</span></span>
             </label>
             <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
-              <input type="checkbox" id="ob-agree-liability" ${d.agreeLiability?'checked':''} style="margin-top:2px;accent-color:#6366f1;flex-shrink:0;">
+              <input type="checkbox" id="ob-agree-liability" ${d.agreeLiability?'checked':''} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
               <span style="font-size:.75rem;color:#374151;line-height:1.4;">I acknowledge the <strong>Liability Waiver</strong> and understand that Nigel's Place is not liable for injuries or illness while boarding, provided reasonable care is taken. I assume responsibility for any harm my pet causes. <span style="color:#DC2626;">*</span></span>
             </label>
             <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
-              <input type="checkbox" id="ob-agree-medical" ${d.agreeMedical?'checked':''} style="margin-top:2px;accent-color:#6366f1;flex-shrink:0;">
+              <input type="checkbox" id="ob-agree-medical" ${d.agreeMedical?'checked':''} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
               <span style="font-size:.75rem;color:#374151;line-height:1.4;">I authorize Nigel's Place to seek <strong>emergency veterinary care</strong> for my pet if needed, and agree to cover associated costs. Nigel's Place will make every effort to contact me first. <span style="color:#DC2626;">*</span></span>
             </label>
             <!-- Emergency vet spending limit — shown always so client doesn't sign a blank check -->
@@ -2614,7 +2585,7 @@ function buildOnboarding(){
               </select>
             </div>
             <label style="display:flex;gap:.6rem;cursor:pointer;align-items:flex-start;">
-              <input type="checkbox" id="ob-photo-consent" ${d.photoConsent===false?'':' checked'} style="margin-top:2px;accent-color:#6366f1;flex-shrink:0;">
+              <input type="checkbox" id="ob-photo-consent" ${d.photoConsent===false?'':' checked'} style="margin-top:2px;accent-color:#7B4015;flex-shrink:0;">
               <span style="font-size:.75rem;color:#374151;line-height:1.4;">I agree that Nigel's Place may <strong>photograph &amp; video</strong> my pet for use in social media and marketing. <em style="color:#6B7280;">(Uncheck to opt out)</em></span>
             </label>
           </div>
@@ -2623,14 +2594,14 @@ function buildOnboarding(){
           <button onclick="state.onboardingStep=2;render()"
             style="flex:1;background:#F9FAFB;color:#6B7280;border:1px solid #E5E7EB;border-radius:14px;padding:.7rem;font-size:.875rem;font-weight:600;cursor:pointer;">&larr; Back</button>
           <button onclick="submitOnboarding()" id="ob-submit-btn"
-            style="flex:2;background:#6366f1;color:#fff;border:none;border-radius:14px;padding:.7rem;font-size:.875rem;font-weight:600;cursor:pointer;">🐾 Create My Profile</button>
+            style="flex:2;background:#7B4015;color:#fff;border:none;border-radius:14px;padding:.7rem;font-size:.875rem;font-weight:600;cursor:pointer;">🐾 Create My Profile</button>
         </div>
         <p style="font-size:.68rem;color:#9CA3AF;text-align:center;margin:0;"><span style="color:#DC2626;">*</span> Required to complete registration</p>
       </div>`;
   }
 
   return`
-  <div class="min-h-screen flex items-center justify-center p-4" style="background:linear-gradient(135deg,#4338ca,#312e81,#1e1b4b);">
+  <div class="min-h-screen flex items-center justify-center p-4" style="background:linear-gradient(135deg,#7C4A1E,#5C3317,#3B1F0E);">
     <div class="bg-white rounded-3xl shadow-2xl slide-in" style="width:100%;max-width:440px;padding:2rem 1.75rem;">
 
       <!-- Logo + welcome heading -->
@@ -2831,7 +2802,7 @@ function buildAdminLayout(){
   return`
   <!-- ── Mobile top bar ── -->
   <div id="mob-topbar" class="fixed top-0 left-0 right-0 z-[250] items-center justify-between px-4"
-       style="background:linear-gradient(90deg,#312e81,#0f172a);height:52px;min-height:52px;">
+       style="background:linear-gradient(90deg,#5C3317,#2A1408);height:52px;min-height:52px;">
     <button onclick="toggleMobileMenu()" aria-label="Open menu"
       style="background:rgba(255,255,255,0.13);border:1px solid rgba(255,255,255,0.22);border-radius:10px;padding:7px 10px;cursor:pointer;display:flex;align-items:center;justify-content:center;">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
@@ -2843,14 +2814,14 @@ function buildAdminLayout(){
       <span style="color:#fff;font-weight:700;font-size:0.95rem;">Nigel's Place</span>
     </button>
     <button onclick="openBookingModal(null)"
-      style="background:#818cf8;border:none;border-radius:10px;padding:7px 12px;color:#fff;font-size:0.78rem;font-weight:600;cursor:pointer;">
+      style="background:#C4952A;border:none;border-radius:10px;padding:7px 12px;color:#fff;font-size:0.78rem;font-weight:600;cursor:pointer;">
       + Book
     </button>
   </div>
   <!-- ── Mobile overlay ── -->
   <div id="mob-overlay" onclick="toggleMobileMenu(false)"></div>
   <div class="flex h-screen overflow-hidden bg-gray-50">
-    <aside id="admin-sidebar" class="w-56 flex flex-col flex-shrink-0" style="background:linear-gradient(to bottom,#312e81,#0f172a)">
+    <aside id="admin-sidebar" class="w-56 flex flex-col flex-shrink-0" style="background:linear-gradient(to bottom,#5C3317,#2A1408)">
       <div class="p-5 border-b border-white/10">
         <button onclick="${state.adminViewAsClient?'setClientView(\'home\')':'setView(\'dashboard\')'}" style="background:none;border:none;cursor:pointer;display:block;width:100%;padding:0;" title="Go to home">
           <img src="${LOGO_URL}" style="width:60px;margin:0 auto 0.2rem;display:block;opacity:0.95;transition:opacity .15s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.95'">
@@ -2859,7 +2830,7 @@ function buildAdminLayout(){
         <div style="text-align:center;margin-top:2px;margin-bottom:1px;">
           <span style="font-size:0.6rem;color:rgba(255,255,255,0.22);letter-spacing:0.06em;text-transform:uppercase;">powered by ${CONFIG.APP_NAME}</span>
         </div>
-        <div class="text-indigo-300 text-xs mt-0.5 text-center">
+        <div class="text-amber-300 text-xs mt-0.5 text-center">
           ${state.mode==='live'
             ?`<span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 bg-green-400 rounded-full inline-block"></span>Live · ${state.userEmail?.split('@')[0]||''}</span>`
             :`<span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 bg-amber-400 rounded-full inline-block"></span>Demo Mode</span>`}
@@ -2883,7 +2854,7 @@ function buildAdminLayout(){
           <span class="font-medium">Switch to Client View</span>
         </button>
         <button onclick="signOut()"
-          class="w-full px-3 py-2 rounded-xl text-indigo-200 hover:text-white hover:bg-white/10 text-xs text-left transition-all">
+          class="w-full px-3 py-2 rounded-xl text-amber-200 hover:text-white hover:bg-white/10 text-xs text-left transition-all">
           ← Sign Out
         </button>
         <div style="padding:6px 12px 2px;display:flex;gap:8px;flex-wrap:wrap;">
@@ -2895,10 +2866,6 @@ function buildAdminLayout(){
     </aside>
     <main id="admin-main" class="flex-1 overflow-auto">${views[state.view]||views.dashboard}</main>
   </div>
-  <!-- Floating Action Button -->
-  <button onclick="openBookingModal(null)" class="fab" title="Quick Book" style="display:${state.view==='kiosk'?'none':'flex'}">
-    <span style="font-size:1.5rem;line-height:1;">+</span>
-  </button>
   ${state.showModal?buildModal():''}`;
 }
 function buildClientLayout(){
@@ -2917,27 +2884,27 @@ function buildClientLayout(){
       <!-- Nav tabs centred on mobile -->
       <div class="flex items-center gap-1">
         <button onclick="setClientView('home')"
-          class="px-3 py-2 text-sm rounded-xl transition-all font-medium ${state.clientView==='home'?'text-indigo-700" style="background:#e0e7ff"':'text-gray-500 hover:bg-gray-100'}">
+          class="px-3 py-2 text-sm rounded-xl transition-all font-medium ${state.clientView==='home'?'text-amber-800" style="background:#FEF3C7"':'text-gray-500 hover:bg-gray-100'}">
           📅 <span class="hidden sm:inline">Book</span>
         </button>
         <button onclick="setClientView('bookings')"
-          class="px-3 py-2 text-sm rounded-xl transition-all font-medium ${state.clientView==='bookings'?'text-indigo-700" style="background:#e0e7ff"':'text-gray-500 hover:bg-gray-100'}">
+          class="px-3 py-2 text-sm rounded-xl transition-all font-medium ${state.clientView==='bookings'?'text-amber-800" style="background:#FEF3C7"':'text-gray-500 hover:bg-gray-100'}">
           📋 <span class="hidden sm:inline">My Bookings</span>
         </button>
         <button onclick="setClientView('mydog')"
-          class="px-3 py-2 text-sm rounded-xl transition-all font-medium ${state.clientView==='mydog'?'text-indigo-700" style="background:#e0e7ff"':'text-gray-500 hover:bg-gray-100'}">
+          class="px-3 py-2 text-sm rounded-xl transition-all font-medium ${state.clientView==='mydog'?'text-amber-800" style="background:#FEF3C7"':'text-gray-500 hover:bg-gray-100'}">
           🐾 <span class="hidden sm:inline">My Pet</span>
         </button>
       </div>
       <div class="flex items-center gap-1.5">
         <button onclick="setClientView('account')" title="My Account"
-          class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl transition-all hover:bg-gray-100 ${state.clientView==='account'?'bg-indigo-50 ring-1 ring-indigo-200':''}">
-          <div class="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0" style="background:#6366f1">
+          class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl transition-all hover:bg-gray-100 ${state.clientView==='account'?'bg-amber-50 ring-1 ring-amber-200':''}">
+          <div class="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0" style="background:#7B4015">
             ${cl?cl.name[0].toUpperCase():'?'}
           </div>
           <div class="hidden sm:flex flex-col items-start leading-none">
             <span class="text-sm text-gray-700 font-semibold max-w-[90px] truncate">${cl?.name||'Guest'}</span>
-            <span class="text-xs mt-0.5" style="color:#6366f1;font-weight:500;">My Account ›</span>
+            <span class="text-xs mt-0.5" style="color:#7B4015;font-weight:500;">My Account ›</span>
           </div>
         </button>
         <button onclick="signOut()" class="text-xs text-gray-400 hover:text-red-500 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors hidden sm:inline-block" title="Sign out">Sign out</button>
@@ -2983,10 +2950,10 @@ function buildDashboard(){
   <div class="p-4 sm:p-6 slide-in">
     <div class="flex items-center justify-between mb-6">
       <div>
-        <h1 class="text-xl sm:text-2xl font-extrabold text-gradient">${greetHour<12?'Good morning':greetHour<17?'Good afternoon':'Good evening'} ☀️</h1>
+        <h1 class="text-xl sm:text-2xl font-bold text-gray-800">${greetHour<12?'Good morning':greetHour<17?'Good afternoon':'Good evening'} ☀️</h1>
         <p class="text-gray-400 text-sm">${todayFmt} · ${state.settings.businessName}</p>
       </div>
-      <button onclick="openBookingModal(null)" class="hidden sm:block btn-glow px-4 py-2.5 text-white rounded-xl text-sm font-semibold shadow-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">+ New Booking</button>
+      <button onclick="openBookingModal(null)" class="hidden sm:block px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ New Booking</button>
     </div>
     <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 mb-6">
       <div class="stat-card">
@@ -3007,7 +2974,7 @@ function buildDashboard(){
         <div class="text-2xl font-bold text-gray-800">${activeDogs}</div>
         <div class="text-xs text-gray-400">Active Pets</div>
       </div>
-      <div class="stat-card cursor-pointer" onclick="showWeekRevenueBreakdown()" title="Click to see revenue breakdown" style="transition:box-shadow .15s;" onmouseover="this.style.boxShadow='0 4px 16px rgba(99,102,241,0.2)'" onmouseout="this.style.boxShadow=''"><div class="text-2xl mb-1">💵</div><div class="text-2xl font-bold text-gray-800">$${weekRev.toFixed(2)}</div><div class="text-xs text-gray-400">This Week Revenue</div><div class="text-xs mt-1" style="color:#6366f1;font-weight:500;">📊 tap for breakdown</div></div>
+      <div class="stat-card cursor-pointer" onclick="showWeekRevenueBreakdown()" title="Click to see revenue breakdown" style="transition:box-shadow .15s;" onmouseover="this.style.boxShadow='0 4px 16px rgba(123,64,21,0.18)'" onmouseout="this.style.boxShadow=''"><div class="text-2xl mb-1">💵</div><div class="text-2xl font-bold text-gray-800">$${weekRev.toFixed(2)}</div><div class="text-xs text-gray-400">This Week Revenue</div><div class="text-xs mt-1" style="color:#7B4015;font-weight:500;">📊 tap for breakdown</div></div>
       <div class="stat-card"><div class="text-2xl mb-1">📅</div><div class="text-2xl font-bold text-gray-800">${monthBks}</div><div class="text-xs text-gray-400">${now.toLocaleString('default',{month:'long'})} Bookings</div></div>
       <div class="stat-card"><div class="text-2xl mb-1">⚠️</div><div class="text-2xl font-bold text-red-500">$${overdue.toFixed(2)}</div><div class="text-xs text-gray-400">Overdue Balance</div></div>
     </div>
@@ -3023,14 +2990,14 @@ function buildDashboard(){
               <div class="text-sm font-semibold text-gray-800">${b.dogName}</div>
               <div class="text-xs text-gray-400 truncate">${b.clientName} · ${b.service}${b.checkIn!==b.checkOut?` · ${b.nights}d stay`:''}${b.addons?` · ${b.addons}`:''}</div>
             </div>
-            <span class="badge bg-amber-100 text-indigo-800">confirmed</span>
+            <span class="badge bg-amber-100 text-amber-800">confirmed</span>
           </div>`).join('')}
       </div>
       <div class="space-y-4">
         <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
           <div class="flex items-center justify-between mb-3">
             <h2 class="font-semibold text-gray-800">Upcoming — Next 3 Days</h2>
-            <button onclick="setView('calendar')" class="text-xs text-indigo-600 hover:underline">Full Calendar →</button>
+            <button onclick="setView('calendar')" class="text-xs text-amber-700 hover:underline">Full Calendar →</button>
           </div>
           <div class="space-y-2">
           ${next3.map(ds=>{
@@ -3077,7 +3044,7 @@ function buildDashboard(){
             <div class="flex items-center gap-2"><span class="badge ${s.cls}">${s.label}</span><span class="text-xs text-gray-400">${s.items.length} invoice${s.items.length!==1?'s':''}</span></div>
             <span class="text-sm font-semibold text-gray-700">$${s.items.reduce((t,i)=>t+i.amount,0)}</span>
           </div>`).join('')}
-          <button onclick="setView('invoices')" class="mt-2 w-full text-xs text-indigo-600 hover:underline">View All →</button>
+          <button onclick="setView('invoices')" class="mt-2 w-full text-xs text-amber-700 hover:underline">View All →</button>
         </div>
       </div>
     </div>
@@ -3101,8 +3068,8 @@ function buildCalendarView(role){
         <button onclick="prevMonth()" class="px-3 py-1.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-100 text-sm">← Prev</button>
         <span class="font-semibold text-gray-700 min-w-[120px] text-center text-sm sm:text-base">${MONTHS[mo]} ${yr}</span>
         <button onclick="nextMonth()" class="px-3 py-1.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-100 text-sm">Next →</button>
-        ${!isClient?`<button onclick="openBookingModal(null)" class="px-3 py-1.5 text-white rounded-xl text-sm shadow-sm" style="background:#6366f1" onmouseover="this.style.background='#4f46e5'" onmouseout="this.style.background='#6366f1'">+ Book</button>
-        <button id="cal-settings-btn" onclick="toggleCalendarSettings()" class="np-collapse-header px-3 py-1.5 rounded-xl border text-sm transition-colors ${state.showCalendarSettings?'text-indigo-700 bg-indigo-50 border-indigo-200':'border-gray-200 text-gray-500 hover:bg-gray-50'}">📅 Days Off <span id="cal-settings-arrow" class="np-collapse-arrow ${state.showCalendarSettings?'':'np-rotated'}">▾</span></button>`:''}
+        ${!isClient?`<button onclick="openBookingModal(null)" class="px-3 py-1.5 text-white rounded-xl text-sm shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ Book</button>
+        <button id="cal-settings-btn" onclick="toggleCalendarSettings()" class="np-collapse-header px-3 py-1.5 rounded-xl border text-sm transition-colors ${state.showCalendarSettings?'text-amber-700 bg-amber-50 border-amber-200':'border-gray-200 text-gray-500 hover:bg-gray-50'}">📅 Days Off <span id="cal-settings-arrow" class="np-collapse-arrow ${state.showCalendarSettings?'':'np-rotated'}">▾</span></button>`:''}
         <button class="fs-btn" data-fs-btn title="Go fullscreen" onclick="toggleFullscreen()">${_FS_ENTER}</button>
       </div>
     </div>
@@ -3121,7 +3088,7 @@ function buildCalendarView(role){
     <!-- ── Days Off / Capacity Management panel (admin only) ──────── -->
     ${!isClient?`
     <div id="cal-settings-panel" class="np-collapse-body mb-5 bg-white rounded-2xl shadow-sm border border-amber-100 ${state.showCalendarSettings?'':'np-collapsed'}" style="${state.showCalendarSettings?'max-height:none':'max-height:0'}"
-      <div class="px-5 py-3 border-b border-gray-50 flex items-center gap-2" style="background:#eef2ff">
+      <div class="px-5 py-3 border-b border-gray-50 flex items-center gap-2" style="background:#FFFBF5">
         <span class="text-base">📅</span>
         <span class="font-semibold text-gray-700 text-sm">Days Off &amp; Capacity</span>
         <span class="text-xs text-gray-400 ml-1">— block dates, describe to AI, or click any day cell ⚙ to edit it inline</span>
@@ -3142,7 +3109,7 @@ function buildCalendarView(role){
                 <input type="date" id="block-end" min="${TODAY}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
               </div>
               <div class="flex items-end">
-                <button type="button" onclick="blockDateRange()" class="px-4 py-2 text-white rounded-xl text-sm font-semibold" style="background:#6366f1">🔒 Block</button>
+                <button type="button" onclick="blockDateRange()" class="px-4 py-2 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">🔒 Block</button>
               </div>
             </div>
           </div>
@@ -3157,7 +3124,7 @@ function buildCalendarView(role){
                 class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm"
                 onkeydown="if(event.key==='Enter'){event.preventDefault();parseBlockDatesAI();}">
               <button type="button" id="block-mic-btn" onclick="toggleVoiceDateInput()" title="Speak dates" class="px-3 py-2 rounded-xl border border-gray-200 text-lg hover:bg-gray-50" style="line-height:1">🎤</button>
-              <button type="button" onclick="parseBlockDatesAI()" class="px-3 py-2 text-white rounded-xl text-sm font-semibold" style="background:#6366f1" ${state.settings.geminiApiKey?'':'disabled title="Add Gemini key in Settings first"'}>✨ Parse</button>
+              <button type="button" onclick="parseBlockDatesAI()" class="px-3 py-2 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" ${state.settings.geminiApiKey?'':'disabled title="Add Gemini key in Settings first"'}>✨ Parse</button>
             </div>
             <div id="block-ai-status" class="text-xs text-gray-400 mt-1 min-h-[16px]"></div>
           </div>
@@ -3166,7 +3133,7 @@ function buildCalendarView(role){
             <div class="flex gap-2">
               <input type="date" id="cap-override-date" min="${TODAY}" class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm">
               <input type="number" id="cap-override-val" placeholder="Max pets" min="1" max="100" class="w-24 border border-gray-200 rounded-xl px-3 py-2 text-sm">
-              <button type="button" onclick="addCapOverride()" class="px-3 py-2 text-white rounded-xl text-sm font-semibold" style="background:#6366f1">+ Set</button>
+              <button type="button" onclick="addCapOverride()" class="px-3 py-2 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">+ Set</button>
             </div>
           </div>
         </div>
@@ -3195,7 +3162,7 @@ function buildCalendarView(role){
                   <input type="checkbox" id="ocb-${d}" ${sel.has(d)?'checked':''} onchange="toggleOverrideSelection('${d}')" class="w-3.5 h-3.5 rounded flex-shrink-0 accent-amber-700">
                   <div class="flex items-center gap-2 flex-1 min-w-0">
                     <span class="text-sm">${+v===0?'🔒':'📊'}</span>
-                    <span class="text-xs font-medium ${+v===0?'text-gray-600':'text-indigo-900'}">${fmtDate(d)}</span>
+                    <span class="text-xs font-medium ${+v===0?'text-gray-600':'text-amber-900'}">${fmtDate(d)}</span>
                   </div>
                   <div class="flex items-center gap-2 flex-shrink-0">
                     <span class="text-xs font-bold ${+v===0?'text-gray-500':'text-amber-700'}">${+v===0?'Closed':v+' pets max'}</span>
@@ -3238,13 +3205,13 @@ function buildCalendarView(role){
             const clickable=canBook||hasMyBk;
             return`
             <div class="day-cell border-b border-r p-2 relative ${wknd?'weekend-day':''}"
-                 style="${hasMyBk?'background:#e0e7ff;border-color:#FCD34D;cursor:pointer;':clientPast?'background:#F3F4F6;border-color:#E5E7EB;cursor:default;':!clientPast&&unavailable?'background:#F3F4F6;border-color:#E5E7EB;cursor:default;background-image:repeating-linear-gradient(135deg,transparent,transparent 6px,rgba(180,180,190,0.35) 6px,rgba(180,180,190,0.35) 7px);':''}"
+                 style="${hasMyBk?'background:#FEF3C7;border-color:#FCD34D;cursor:pointer;':clientPast?'background:#F3F4F6;border-color:#E5E7EB;cursor:default;':!clientPast&&unavailable?'background:#F3F4F6;border-color:#E5E7EB;cursor:default;background-image:repeating-linear-gradient(135deg,transparent,transparent 6px,rgba(180,180,190,0.35) 6px,rgba(180,180,190,0.35) 7px);':''}"
                  onclick="${clickable?'openDayModal(\''+ds+'\')':''}">
               <div class="flex items-start justify-between mb-1">
                 <span class="${unavailable&&!hasMyBk?'text-sm font-medium text-gray-300':'text-sm font-medium text-gray-700'}">${day}</span>
                 ${hasMyBk?`<span style="font-size:9px;background:#F59E0B;color:white;border-radius:9999px;padding:1px 5px;font-weight:700;line-height:1.5;">✓</span>`:''}
               </div>
-              ${hasMyBk?`<div class="text-xs mt-1 font-medium" style="color:#4338ca;">🐾 Booked</div>`:!clientPast?unavailable?'<div class="text-xs text-gray-300 mt-1 select-none">Full</div>':'<div class="text-xs mt-1" style="color:#6366f1">Open</div>':''}
+              ${hasMyBk?`<div class="text-xs mt-1 font-medium" style="color:#92400E;">🐾 Booked</div>`:!clientPast?unavailable?'<div class="text-xs text-gray-300 mt-1 select-none">Full</div>':'<div class="text-xs mt-1" style="color:#7B4015">Open</div>':''}
             </div>`;}
 
           // ── ADMIN VIEW: full detail ──
@@ -3256,7 +3223,7 @@ function buildCalendarView(role){
                style="border-top:3px solid ${cap===0?'#9CA3AF':n>0?c.bar:adminEffPast?'#E5E7EB':'transparent'}${cap===0?';background:#F9FAFB':adminEffPast&&!isToday?';background:#FAFAFA;':''}"
                onclick="openDayModal('${ds}')">
             <div class="flex items-start justify-between mb-1">
-              <span class="${isToday?'text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style="background:#6366f1"':'text-sm font-medium text-gray-600'}">${day}</span>
+              <span class="${isToday?'text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style="background:#7B4015"':'text-sm font-medium text-gray-600'}">${day}</span>
               ${n>0&&cap!==0?`<span class="text-xs font-bold" style="color:${c.txt}">${n}/${cap}</span>`:''}
             </div>
             ${cap===0
@@ -3291,7 +3258,7 @@ function buildCalendarView(role){
           <span>Available — tap to book</span>
         </div>
       </div>
-      <div class="mt-3 p-4 rounded-xl border text-sm text-indigo-800" style="background:#e0e7ff;border-color:#FCD34D">
+      <div class="mt-3 p-4 rounded-xl border text-sm text-amber-800" style="background:#FEF3C7;border-color:#FCD34D">
         💡 Tap any <strong>available day</strong> to request a booking for your pup. Swipe left/right to see more months.
       </div>`:''}
   </div>`;
@@ -3304,7 +3271,7 @@ function buildClientsView(){
         <h1 class="text-2xl font-bold text-gray-800">Clients</h1>
         <p class="text-gray-400 text-sm mt-1">${clients.length} client${clients.length!==1?'s':''} · click a pet to view their profile</p>
       </div>
-      <button onclick="openAddClientModal()" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#6366f1" onmouseover="this.style.background='#4f46e5'" onmouseout="this.style.background='#6366f1'">+ Add Client</button>
+      <button onclick="openAddClientModal()" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ Add Client</button>
     </div>
     ${clients.length===0?`<div class="text-center text-gray-300 py-16"><div class="text-5xl mb-3">👥</div><p>No clients yet. Add your first one!</p></div>`:''}
     <div class="space-y-3">
@@ -3329,7 +3296,7 @@ function buildClientsView(){
               ${vaccWarn?`<span class="badge bg-amber-100 text-amber-700">⚠️ Vacc Expiring</span>`:''}
               ${cl.photoConsent?`<span class="badge bg-blue-100 text-blue-600">📸 Photo OK</span>`:`<span class="badge bg-gray-100 text-gray-400">No Photo Consent</span>`}
               <span class="badge bg-blue-100 text-blue-600">${total} visit${total!==1?'s':''}</span>
-              ${clPkgBalance>0?`<span class="badge bg-amber-100 text-indigo-800">🎫 ${clPkgBalance} session${clPkgBalance===1?'':'s'}</span>`:''}
+              ${clPkgBalance>0?`<span class="badge bg-amber-100 text-amber-800">🎫 ${clPkgBalance} session${clPkgBalance===1?'':'s'}</span>`:''}
               <button onclick="openEditClientModal(${cl.id})" class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100">Edit</button>
               <button onclick="deleteClient(${cl.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100">Delete</button>
             </div>
@@ -3355,13 +3322,13 @@ function buildClientsView(){
                       :`<span class="text-base">🐶</span>`;
                   })()}
                   <div>
-                    <button onclick="setView('dogs');setDogDetail(${d.id})" class="text-sm font-semibold text-indigo-700 hover:underline">${d.name}</button>
+                    <button onclick="setView('dogs');setDogDetail(${d.id})" class="text-sm font-semibold text-amber-800 hover:underline">${d.name}</button>
                     <div class="text-xs text-gray-400">${d.breed}</div>
                   </div>
                   <div class="ml-1">${vaccBadge(d)}</div>
                   ${needsRequest?`<div class="flex gap-1 ml-1">
                     <a href="${links.smsHref}" class="text-xs px-1.5 py-0.5 bg-amber-700 text-white rounded-md hover:bg-amber-800 no-underline" title="Text">💬</a>
-                    <a href="${links.emailHref}" class="text-xs px-1.5 py-0.5 bg-amber-100 text-indigo-800 rounded-md hover:bg-amber-200 no-underline" title="Email">✉️</a>
+                    <a href="${links.emailHref}" class="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded-md hover:bg-amber-200 no-underline" title="Email">✉️</a>
                   </div>`:''}
                 </div>`;
               }).join('')}
@@ -3384,7 +3351,7 @@ function buildDogsView(){
     return`
     <div class="p-6 slide-in">
       <div class="flex items-center gap-3 mb-6">
-        <button onclick="clearDogDetail()" class="flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 font-medium">← Back to All Pets</button>
+        <button onclick="clearDogDetail()" class="flex items-center gap-1.5 text-sm text-amber-700 hover:text-amber-900 font-medium">← Back to All Pets</button>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
         <!-- Left: Dog profile card -->
@@ -3397,12 +3364,12 @@ function buildDogsView(){
               const clickAttr=fileId?`onclick="openProfilePhotoLightbox('${fileId}',${dog.clientId},${dog.id})" style="cursor:pointer" title="Click to view or reposition photo"`:' ';
               return dog.photoLink
                 ?(`<div class="relative inline-block mb-3 group">
-                  ${driveImgTag(dog.photoLink,'w-32 h-32 rounded-full object-cover border-4 border-indigo-100',dog.name,posStyle)||`<div class="w-32 h-32 rounded-full bg-amber-50 flex items-center justify-center border-4 border-indigo-100 text-5xl">🐶</div>`}
+                  ${driveImgTag(dog.photoLink,'w-32 h-32 rounded-full object-cover border-4 border-amber-100',dog.name,posStyle)||`<div class="w-32 h-32 rounded-full bg-amber-50 flex items-center justify-center border-4 border-amber-100 text-5xl">🐶</div>`}
                   <div ${clickAttr} class="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/25 transition-all flex items-center justify-center">
                     <span class="opacity-0 group-hover:opacity-100 text-white text-2xl drop-shadow-lg transition-opacity">🔍</span>
                   </div>
                 </div>`)
-                :`<div onclick="openProfilePhotoLightbox(null,${dog.clientId},${dog.id})" class="w-32 h-32 rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-3 border-4 border-indigo-100 text-5xl cursor-pointer hover:bg-amber-100 transition-colors" title="Upload a photo">🐶</div>`;
+                :`<div onclick="openProfilePhotoLightbox(null,${dog.clientId},${dog.id})" class="w-32 h-32 rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-3 border-4 border-amber-100 text-5xl cursor-pointer hover:bg-amber-100 transition-colors" title="Upload a photo">🐶</div>`;
             })()}
             <h2 class="text-xl font-bold ${dog.deceased?'text-gray-400':'text-gray-800'}">${dog.name}</h2>
             <p class="text-gray-400 text-sm">${dog.breed} · ${fmtAge(dog.age,dog.birthday)} old</p>
@@ -3421,7 +3388,7 @@ function buildDogsView(){
               ${!dog.deceased?`<button onclick="openEditDogModal(${dog.clientId},${dog.id})" class="flex-1 text-xs px-3 py-2 bg-gray-50 text-gray-600 rounded-xl hover:bg-gray-100 border border-gray-200">✏️ Edit Info</button>`:''}
               <button onclick="showRainbowBridgeConfirm(${dog.clientId},${dog.id})"
                 class="flex-1 text-xs px-3 py-2 rounded-xl border transition-all"
-                style="${dog.deceased?'background:#F9FAFB;color:#6366f1;border-color:#E5E7EB;':'background:#F9FAFB;color:#6B7280;border-color:#E5E7EB;'}"
+                style="${dog.deceased?'background:#F9FAFB;color:#7B4015;border-color:#E5E7EB;':'background:#F9FAFB;color:#6B7280;border-color:#E5E7EB;'}"
                 onmouseover="this.style.background='#F3F4F6'" onmouseout="this.style.background='#F9FAFB'">
                 ${dog.deceased?'↩ Mark as Active':'🌈 Rainbow Bridge'}
               </button>
@@ -3443,7 +3410,7 @@ function buildDogsView(){
               <span class="badge bg-blue-100 text-blue-600">${totalVisits} visit${totalVisits!==1?'s':''}</span>
               ${cl.photoConsent?`<span class="badge bg-green-100 text-green-600">📸 Photo OK</span>`:`<span class="badge bg-gray-100 text-gray-500">No photo consent</span>`}
             </div>
-            <button onclick="viewClientProfile(${cl.id})" class="mt-3 text-xs text-indigo-600 hover:underline">View Client Profile →</button>
+            <button onclick="viewClientProfile(${cl.id})" class="mt-3 text-xs text-amber-700 hover:underline">View Client Profile →</button>
           </div>
         </div>
         <!-- Right: Vaccines + Play Photos -->
@@ -3463,7 +3430,7 @@ function buildDogsView(){
                 </button>
               </div>
             </div>
-            ${(()=>{try{const ov=dog.vaccOverride?JSON.parse(dog.vaccOverride):null;if(ov&&ov.until){const label=ov.until==='indefinite'?'Indefinitely waived by admin':`Extended until ${ov.until}`;const by=ov.by?` · by ${ov.by}`:'';return `<div class="mb-3 flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium" style="background:#eef2ff;border:1px solid #FED7AA;color:#C2410C;">🔓 Vaccine requirement overridden — ${label}${by}</div>`;}return'';}catch(e){return'';}})()}
+            ${(()=>{try{const ov=dog.vaccOverride?JSON.parse(dog.vaccOverride):null;if(ov&&ov.until){const label=ov.until==='indefinite'?'Indefinitely waived by admin':`Extended until ${ov.until}`;const by=ov.by?` · by ${ov.by}`:'';return `<div class="mb-3 flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium" style="background:#FFF7ED;border:1px solid #FED7AA;color:#C2410C;">🔓 Vaccine requirement overridden — ${label}${by}</div>`;}return'';}catch(e){return'';}})()}
             ${buildVaccineRecordsHTML(dog)}
             ${state.role!=='client'&&dog.driveFileLink?`<a href="${dog.driveFileLink}" target="_blank" class="mt-3 inline-flex items-center gap-1.5 text-xs text-blue-600 hover:underline">📂 View original record in Drive →</a>`:''}
           </div>
@@ -3553,8 +3520,8 @@ function buildDogsList(){
         <div class="${isRb?'opacity-50 grayscale':''}bg-white rounded-2xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer" onclick="setDogDetail(${dog.id})">
           <div class="flex items-center gap-3 mb-3">
             ${dog.photoLink
-              ?(driveImgTag(dog.photoLink,`w-12 h-12 rounded-full object-cover border-2 ${isRb?'border-gray-200':'border-indigo-100'}`,dog.name)||`<div class="w-12 h-12 rounded-full ${isRb?'bg-gray-100':'bg-indigo-50'} flex items-center justify-center text-2xl border-2 ${isRb?'border-gray-200':'border-indigo-100'}">🐶</div>`)
-              :`<div class="w-12 h-12 rounded-full ${isRb?'bg-gray-100':'bg-indigo-50'} flex items-center justify-center text-2xl border-2 ${isRb?'border-gray-200':'border-indigo-100'}">🐶</div>`}
+              ?(driveImgTag(dog.photoLink,`w-12 h-12 rounded-full object-cover border-2 ${isRb?'border-gray-200':'border-amber-100'}`,dog.name)||`<div class="w-12 h-12 rounded-full ${isRb?'bg-gray-100':'bg-amber-50'} flex items-center justify-center text-2xl border-2 ${isRb?'border-gray-200':'border-amber-100'}">🐶</div>`)
+              :`<div class="w-12 h-12 rounded-full ${isRb?'bg-gray-100':'bg-amber-50'} flex items-center justify-center text-2xl border-2 ${isRb?'border-gray-200':'border-amber-100'}">🐶</div>`}
             <div class="flex-1 min-w-0">
               <div class="font-semibold ${isRb?'text-gray-500':'text-gray-800'}">${dog.name}</div>
               <div class="text-xs text-gray-400">${dog.breed} · ${fmtAge(dog.age,dog.birthday)}</div>
@@ -3569,7 +3536,7 @@ function buildDogsList(){
               ${(dog.playPhotos||[]).length>0?`<span class="badge bg-blue-50 text-blue-600">📷 ${dog.playPhotos.length} photo${dog.playPhotos.length!==1?'s':''}</span>`:''}
               ${dog.driveFileLink?`<span class="badge bg-green-50 text-green-600">📂 Record</span>`:''}
             </div>
-            <span class="text-xs text-indigo-600 font-medium">View Profile →</span>
+            <span class="text-xs text-amber-700 font-medium">View Profile →</span>
           </div>`}
         </div>`;
       }).join('')}
@@ -3628,7 +3595,7 @@ function buildVetClinicsView(){
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 flex-wrap">
               <div class="font-bold text-gray-800 text-base truncate">${c.name}</div>
-              ${c.manual?`<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#e0e7ff;color:#4338ca;">🤝 Partner</span>`:''}
+              ${c.manual?`<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#FEF3C7;color:#92400E;">🤝 Partner</span>`:''}
             </div>
             ${c.phone?`<div class="text-sm text-gray-500 mt-0.5">📞 ${fmtPhone(c.phone)}</div>`:''}
             ${c.website?`<div class="mt-0.5"><a href="${c.website.startsWith('http')?c.website:'https://'+c.website}" target="_blank" rel="noopener" class="text-xs text-blue-500 hover:underline">🔗 ${c.website.replace(/^https?:\/\//,'').split('/')[0]}</a></div>`:'<div class="text-xs text-gray-300 mt-0.5 italic">No website on file</div>'}
@@ -3643,7 +3610,7 @@ function buildVetClinicsView(){
         <div class="mt-3 pt-3 border-t border-gray-50">
           <div class="text-xs text-gray-400 mb-1.5 font-semibold uppercase tracking-wide">Clients using this clinic</div>
           <div class="flex flex-wrap gap-1.5">
-            ${c.clients.map(cl=>`<button onclick="viewClientProfile(${cl.id})" class="text-xs px-2.5 py-1 rounded-full border hover:bg-amber-50 transition-colors" style="border-color:#a5b4fc;color:#6366f1;background:white;">🐾 ${cl.name} · ${cl.dogName}</button>`).join('')}
+            ${c.clients.map(cl=>`<button onclick="viewClientProfile(${cl.id})" class="text-xs px-2.5 py-1 rounded-full border hover:bg-amber-50 transition-colors" style="border-color:#D4A96B;color:#7B4015;background:white;">🐾 ${cl.name} · ${cl.dogName}</button>`).join('')}
           </div>
         </div>`:''}
       </div>`).join('');
@@ -3657,7 +3624,7 @@ function buildVetClinicsView(){
       </div>
       <button onclick="state.showModal={type:'addVetClinic'};render()"
         class="px-4 py-2 rounded-xl text-white text-sm font-semibold shadow-sm hover:opacity-90 transition-opacity"
-        style="background:#6366f1;">+ Add Partner Clinic</button>
+        style="background:#7B4015;">+ Add Partner Clinic</button>
     </div>
 
     <div class="mb-5 rounded-2xl p-4 border" style="background:#F0F9FF;border-color:#BAE6FD;">
@@ -3721,7 +3688,7 @@ function buildAddVetClinicModal(){
         class="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50">Cancel</button>
       <button onclick="submitAddVetClinic()"
         class="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold hover:opacity-90"
-        style="background:#6366f1;">Save Clinic</button>
+        style="background:#7B4015;">Save Clinic</button>
     </div>
   </div>
 </div>`;
@@ -3801,7 +3768,7 @@ function toggleCourierDay(btn,day){
   btn.setAttribute('data-active',String(nowActive));
   if(nowActive){
     btn.className='px-3.5 py-1.5 rounded-full text-sm font-medium transition-all cursor-pointer select-none text-white shadow-sm';
-    btn.style.background='#6366f1';
+    btn.style.background='#7B4015';
   }else{
     btn.className='px-3.5 py-1.5 rounded-full text-sm font-medium transition-all cursor-pointer select-none bg-gray-100 text-gray-500 hover:bg-gray-200';
     btn.style.background='';
@@ -3835,7 +3802,7 @@ function buildServicesView(){
   const secHead=(key,icon,title,subtitle,count)=>`
     <button type="button" onclick="toggleSvcSection('${key}')"
       class="np-collapse-header w-full flex items-center gap-3 px-5 py-4 text-left transition-colors"
-      style="background:linear-gradient(135deg,#eef2ff 0%,#eef2ff 100%);border-bottom:2px solid #e0e7ff;border-left:4px solid #6366f1;">
+      style="background:linear-gradient(135deg,#FFFBF5 0%,#FFF7ED 100%);border-bottom:2px solid #F5E6D3;border-left:4px solid #7B4015;">
       <span class="text-2xl">${icon}</span>
       <div class="flex-1 min-w-0">
         <div class="text-base font-bold text-gray-800">${title} <span class="text-xs font-medium text-amber-600 ml-1">${count!==undefined?'('+count+')':''}</span></div>
@@ -3850,7 +3817,7 @@ function buildServicesView(){
         <h1 class="text-2xl font-bold text-gray-800">Services & Add-Ons</h1>
         <p class="text-gray-400 text-sm mt-1">Manage what's available when clients book</p>
       </div>
-      <button onclick="openAddServiceModal()" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#6366f1" onmouseover="this.style.background='#4f46e5'" onmouseout="this.style.background='#6366f1'">+ Add Service</button>
+      <button onclick="openAddServiceModal()" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ Add Service</button>
     </div>
 
     <!-- ── BASE SERVICES ───────────────────────────────────────── -->
@@ -3863,7 +3830,7 @@ function buildServicesView(){
             ${base.map(s=>`
               <div class="flex items-center justify-between px-4 py-3 rounded-xl transition-colors ${s.active?'bg-white hover:bg-gray-50 border border-gray-100':'bg-gray-50 opacity-50 border border-gray-100'}">
                 <div class="flex items-center gap-3">
-                  <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm" style="background:#eef2ff">🏠</div>
+                  <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm" style="background:#FFF7ED">🏠</div>
                   <div>
                     <div class="font-medium text-sm text-gray-700">${s.name} ${!s.active?'<span class="text-xs text-gray-400">(disabled)</span>':''}</div>
                     <div class="text-xs text-gray-400">$${s.price} per day</div>
@@ -3890,7 +3857,7 @@ function buildServicesView(){
             ${addons.map(s=>`
               <div class="flex items-center justify-between px-4 py-3 rounded-xl transition-colors ${s.active?'bg-white hover:bg-gray-50 border border-gray-100':'bg-gray-50 opacity-50 border border-gray-100'}">
                 <div class="flex items-center gap-3">
-                  <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm" style="background:#eef2ff">✨</div>
+                  <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm" style="background:#FFF7ED">✨</div>
                   <div>
                     <div class="flex items-center gap-2">
                       <span class="font-medium text-sm text-gray-700">${s.name}</span>
@@ -3964,7 +3931,7 @@ function buildServicesView(){
                 return`<button type="button" onclick="toggleCourierDay(this,'${d}')"
                   class="px-3.5 py-1.5 rounded-full text-sm font-medium transition-all cursor-pointer select-none
                   ${active?'text-white shadow-sm':'bg-gray-100 text-gray-500 hover:bg-gray-200'}"
-                  style="${active?'background:#6366f1':''}"
+                  style="${active?'background:#7B4015':''}"
                   data-day="${d}" data-active="${active}">${d}</button>`;
               }).join('')}
             </div>
@@ -3996,151 +3963,64 @@ function buildServicesView(){
               </div>
             </div>
           </div>
-          <button type="button" onclick="saveCourierSettings()" class="w-full py-2.5 text-white rounded-xl text-sm font-semibold mt-2" style="background:#6366f1" onmouseover="this.style.background='#4f46e5'" onmouseout="this.style.background='#6366f1'">Save Courier Settings</button>
+          <button type="button" onclick="saveCourierSettings()" class="w-full py-2.5 text-white rounded-xl text-sm font-semibold mt-2" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">Save Courier Settings</button>
         </div>
       </div>
     </div>
   </div>`;
 }
 function buildInvoicesView(){
-  const total=invoices.reduce((s,i)=>s+i.amount,0),collected=invoices.reduce((s,i)=>s+(i.paid||0)+(i.externalPaid||0),0);
-  const outstanding=total-collected;
-  // ── Booking sweep: find unpaid bookings not yet captured as invoices ──
-  const unpaidBks=bookings.filter(b=>b.status==='confirmed'&&(b.paymentStatus==='checkout_pending'||b.paymentStatus==='deposit_due')&&b.price>0);
-  const invoicedBkIds=new Set(invoices.filter(i=>i.paymentNote&&i.paymentNote.startsWith('bk-')).map(i=>i.paymentNote));
-  const sweepBks=unpaidBks.filter(b=>!invoicedBkIds.has('bk-'+b.id));
-  const sweepTotal=sweepBks.reduce((s,b)=>s+(b.price||0),0);
-  // Status styling with dot indicators
-  const statusDot={paid:'bg-emerald-400',unpaid:'bg-amber-400',overdue:'bg-red-400',partial:'bg-blue-400',sent:'bg-indigo-400'};
-  const statusBg={paid:'bg-emerald-50 text-emerald-700 border-emerald-200',unpaid:'bg-amber-50 text-amber-700 border-amber-200',overdue:'bg-red-50 text-red-700 border-red-200',partial:'bg-blue-50 text-blue-700 border-blue-200',sent:'bg-indigo-50 text-indigo-700 border-indigo-200'};
+  const total=invoices.reduce((s,i)=>s+i.amount,0),collected=invoices.reduce((s,i)=>s+i.paid,0);
+  const sCls={paid:'bg-amber-100 text-amber-800',unpaid:'bg-yellow-100 text-yellow-700',overdue:'bg-red-100 text-red-600',partial:'bg-blue-100 text-blue-600',sent:'bg-green-100 text-green-700'};
   return`
   <div class="p-4 sm:p-6 slide-in">
-    <!-- ═══ HEADER ═══ -->
-    <div class="flex items-center justify-between mb-8">
-      <div>
-        <h1 class="text-2xl sm:text-3xl font-extrabold text-gradient">Invoices</h1>
-        <p class="text-sm text-gray-400 mt-1">Manage payments, track balances, and send invoices</p>
-      </div>
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-xl sm:text-2xl font-bold text-gray-800">Invoices</h1>
       <div class="flex items-center gap-2">
-        <button onclick="syncSquarePayments()" id="sync-payments-btn" class="btn-glow px-3 py-2.5 rounded-xl text-sm font-medium border border-indigo-200 text-indigo-600 bg-indigo-50 hover:bg-indigo-100" title="Check Square for completed payments">
-          <span style="display:inline-block;transition:transform 0.3s" onmouseover="this.style.transform='rotate(180deg)'" onmouseout="this.style.transform='rotate(0)'">🔄</span> Sync
-        </button>
-        <button onclick="openAddInvoiceModal()" class="btn-glow px-4 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">+ New Invoice</button>
+        <button onclick="syncSquarePayments()" id="sync-payments-btn" class="px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50" title="Check Square for completed payments">🔄 Sync Payments</button>
+        <button onclick="openAddInvoiceModal()" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">+ New Invoice</button>
       </div>
     </div>
-
-    <!-- ═══ STAT CARDS ═══ -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-      <div class="stat-invoiced rounded-2xl p-5 text-center count-up">
-        <div class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-2">Total Invoiced</div>
-        <div class="text-3xl font-extrabold text-indigo-700">$${total.toFixed(2)}</div>
-        <div class="text-xs text-indigo-400 mt-1">${invoices.length} invoice${invoices.length===1?'':'s'}</div>
-      </div>
-      <div class="stat-collected rounded-2xl p-5 text-center count-up" style="animation-delay:0.1s">
-        <div class="text-xs font-bold text-emerald-500 uppercase tracking-wider mb-2">Collected</div>
-        <div class="text-3xl font-extrabold text-emerald-600">$${collected.toFixed(2)}</div>
-        <div class="text-xs text-emerald-400 mt-1">${total>0?Math.round(collected/total*100):0}% collected</div>
-      </div>
-      <div class="stat-outstanding rounded-2xl p-5 text-center count-up" style="animation-delay:0.2s">
-        <div class="text-xs font-bold text-red-400 uppercase tracking-wider mb-2">Outstanding</div>
-        <div class="text-3xl font-extrabold text-red-500">$${outstanding.toFixed(2)}</div>
-        <div class="text-xs text-red-400 mt-1">${invoices.filter(i=>i.status!=='paid').length} pending</div>
-      </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
+      <div class="stat-card text-center"><div class="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Invoiced</div><div class="text-2xl font-bold text-gray-800">$${total}</div></div>
+      <div class="stat-card text-center"><div class="text-xs text-gray-400 uppercase tracking-wide mb-1">Collected</div><div class="text-2xl font-bold text-amber-700">$${collected}</div></div>
+      <div class="stat-card text-center"><div class="text-xs text-gray-400 uppercase tracking-wide mb-1">Outstanding</div><div class="text-2xl font-bold text-red-500">$${total-collected}</div></div>
     </div>
-
-    ${sweepBks.length>0?`
-    <!-- ═══ UNPAID BOOKINGS SWEEP ═══ -->
-    <div class="mb-6 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-5 card-hover">
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-xl">⚡</div>
-          <div>
-            <div class="font-bold text-gray-800">${sweepBks.length} Unpaid Booking${sweepBks.length===1?'':'s'} Found</div>
-            <div class="text-xs text-gray-500">These bookings have outstanding payments not yet captured as invoices</div>
-          </div>
-        </div>
-        <div class="text-right">
-          <div class="text-lg font-bold text-amber-700">$${sweepTotal.toFixed(2)}</div>
-          <button onclick="sweepBookingsToInvoices()" class="btn-glow mt-1 text-xs px-3 py-1.5 rounded-lg text-white font-semibold" style="background:linear-gradient(135deg,#f59e0b,#d97706)">Capture as Invoices</button>
-        </div>
-      </div>
-      <div class="space-y-2">
-        ${sweepBks.map(b=>{
-          const cl=clients.find(c=>c.id===b.clientId);
-          const isPastDue=b.checkIn<TODAY;
-          return '<div class="flex items-center justify-between bg-white/70 rounded-xl px-4 py-2.5 border border-amber-100">'
-            +'<div class="flex items-center gap-3">'
-            +'<span class="text-lg">🐶</span>'
-            +'<div><div class="text-sm font-semibold text-gray-700">'+b.dogName+' · '+b.service+'</div>'
-            +'<div class="text-xs text-gray-400">'+(cl?.name||'Client')+' · '+fmtDateShort(b.checkIn)+'</div></div>'
-            +'</div>'
-            +'<div class="flex items-center gap-3">'
-            +(isPastDue?'<span class="text-xs font-semibold text-red-500">⚠️ Past due</span>':'')
-            +'<span class="font-bold text-gray-700">$'+(+b.price).toFixed(2)+'</span>'
-            +'<button onclick="markBookingPaid('+b.id+')" class="text-xs px-2 py-1 rounded-lg border border-green-200 text-green-600 hover:bg-green-50">✓ Paid</button>'
-            +'</div></div>';
-        }).join('')}
-      </div>
-    </div>`:''}
-
-    <!-- ═══ INVOICE CARDS ═══ -->
-    ${invoices.length===0&&sweepBks.length===0?`
-    <div class="text-center py-20">
-      <div class="text-6xl mb-4" style="filter:grayscale(0.3)">📋</div>
-      <p class="text-lg font-semibold text-gray-400">No invoices yet</p>
-      <p class="text-sm text-gray-300 mt-1">Create your first invoice or sync unpaid bookings</p>
-      <button onclick="openAddInvoiceModal()" class="btn-glow mt-4 px-5 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">+ Create Invoice</button>
-    </div>`:`
-    <div class="space-y-3">
-      ${invoices.map(inv=>{
-        const owed=inv.amount-(inv.paid||0)-(inv.externalPaid||0);
-        const pctPaid=inv.amount>0?Math.min(100,Math.round(((inv.paid||0)+(inv.externalPaid||0))/inv.amount*100)):0;
-        const isPaid=inv.status==='paid'||owed<=0;
-        const isOverdue=!isPaid&&inv.dueDate&&inv.dueDate<TODAY;
-        const effectiveStatus=isPaid?'paid':isOverdue?'overdue':inv.status;
-        return '<div class="bg-white rounded-2xl border border-gray-100 p-5 card-hover" style="animation:fadeUp 0.3s ease">'
-          +'<div class="flex items-start justify-between gap-4">'
-          +'<div class="flex-1 min-w-0">'
-          +'<div class="flex items-center gap-3 mb-2">'
-          +'<div class="w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold text-white" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">'
-          +inv.clientName.charAt(0).toUpperCase()+'</div>'
-          +'<div><div class="font-bold text-gray-800">'+inv.clientName+'</div>'
-          +'<div class="text-xs text-gray-400">'+inv.items+'</div></div>'
-          +'</div>'
-          // Progress bar
-          +'<div class="mt-3 flex items-center gap-3">'
-          +'<div class="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">'
-          +'<div class="h-full rounded-full transition-all duration-500" style="width:'+pctPaid+'%;background:'+(isPaid?'#10b981':pctPaid>0?'#6366f1':'#e5e7eb')+'"></div>'
-          +'</div>'
-          +'<span class="text-xs font-semibold '+(isPaid?'text-emerald-600':'text-gray-400')+'">'+pctPaid+'%</span>'
-          +'</div>'
-          +'</div>'
-          // Right side: amount + status
-          +'<div class="text-right flex-shrink-0">'
-          +'<div class="text-2xl font-extrabold text-gray-800">$'+inv.amount.toFixed(2)+'</div>'
-          +(owed>0&&owed<inv.amount?'<div class="text-xs text-gray-400">$'+owed.toFixed(2)+' remaining</div>':'')
-          +'<div class="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold '+(statusBg[effectiveStatus]||'bg-gray-50 text-gray-600 border-gray-200')+'">'
-          +'<span class="w-2 h-2 rounded-full '+(statusDot[effectiveStatus]||'bg-gray-400')+'"></span>'
-          +effectiveStatus+'</div>'
-          +(inv.dueDate?'<div class="text-xs text-gray-400 mt-1">Due '+fmtDateShort(inv.dueDate)+'</div>':'')
-          +'</div></div>'
-          // Actions bar
-          +'<div class="mt-4 pt-3 border-t border-gray-100 flex items-center gap-2 flex-wrap">'
-          +(isPaid
-            ?'<span class="text-xs text-emerald-500 font-semibold flex items-center gap-1">✅ Paid in full</span>'
-            :inv.squareInvoiceId
-              ?'<span class="text-xs px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-600 font-medium border border-indigo-100">📤 Sent via Square</span>'
-                +'<button onclick="sendInvoiceText('+inv.id+')" class="btn-glow text-xs px-3 py-1.5 rounded-lg text-white font-medium" style="background:linear-gradient(135deg,#6366f1,#818cf8)">📱 Text</button>'
-                +'<button onclick="markInvoicePaid('+inv.id+')" class="text-xs px-3 py-1.5 rounded-lg border border-emerald-200 text-emerald-600 hover:bg-emerald-50 font-medium">✓ Mark Paid</button>'
-              :'<button onclick="sendInvoiceText('+inv.id+')" class="btn-glow text-xs px-3 py-1.5 rounded-lg text-white font-medium" style="background:linear-gradient(135deg,#6366f1,#818cf8)">📱 Text</button>'
-                +'<button onclick="sendInvoiceEmail('+inv.id+')" class="btn-glow text-xs px-3 py-1.5 rounded-lg text-white font-medium" style="background:linear-gradient(135deg,#2563eb,#3b82f6)">📧 Email</button>'
-                +'<button onclick="markInvoicePaid('+inv.id+')" class="text-xs px-3 py-1.5 rounded-lg border border-emerald-200 text-emerald-600 hover:bg-emerald-50 font-medium">✓ Mark Paid</button>')
-          +'<div class="flex-1"></div>'
-          +'<button onclick="openEditInvoiceModal('+inv.id+')" class="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 hover:border-gray-300 transition-all">✏️ Edit</button>'
-          +'<button onclick="deleteInvoice('+inv.id+')" class="text-xs px-2.5 py-1.5 rounded-lg border border-red-100 text-red-400 hover:bg-red-50 hover:border-red-200 transition-all">🗑️</button>'
-          +'</div></div>';
-      }).join('')}
-    </div>`}
+    ${invoices.length===0?`<div class="text-center text-gray-300 py-16"><div class="text-5xl mb-3">💰</div><p>No invoices yet.</p></div>`:''}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div class="overflow-x-auto">
+      <table class="w-full text-sm" style="min-width:580px">
+        <thead class="bg-gray-50 border-b border-gray-100">
+          <tr>${['Client','Services','Amount','Due Date','Status','Actions'].map(h=>`<th class="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide">${h}</th>`).join('')}</tr>
+        </thead>
+        <tbody class="divide-y divide-gray-50">
+          ${invoices.map(inv=>`
+          <tr class="hover:bg-gray-50">
+            <td class="px-5 py-3.5 font-semibold text-gray-800">${inv.clientName}</td>
+            <td class="px-5 py-3.5 text-gray-500">${inv.items}</td>
+            <td class="px-5 py-3.5"><div class="font-bold text-gray-800">$${inv.amount}</div>${(()=>{const t=(inv.paid||0)+(inv.externalPaid||0);if(t<=0)return'';if(t>=inv.amount)return'<div class="text-xs text-green-600">Paid in full ✓</div>';let parts=[];if(inv.paid>0)parts.push(`$${inv.paid} Square`);if(inv.externalPaid>0)parts.push(`$${inv.externalPaid} cash/ext`);return`<div class="text-xs text-gray-400">${parts.join(' + ')} paid</div>`;})()}</td>
+            <td class="px-5 py-3.5 text-gray-500">${fmtDateShort(inv.dueDate)||inv.dueDate}</td>
+            <td class="px-5 py-3.5"><span class="badge ${sCls[inv.status]||'bg-gray-100 text-gray-600'}">${inv.status}</span></td>
+            <td class="px-5 py-3.5">
+              <div class="flex items-center gap-2 flex-wrap">
+                ${inv.status==='paid'?`<span class="text-xs text-gray-300">Paid ✓</span>`
+                :inv.squareInvoiceId?`
+                  <span class="text-xs px-2 py-1 rounded-lg bg-green-50 text-green-700 font-medium">✅ Sent via Square</span>
+                  <button onclick="sendInvoiceText(${inv.id})" class="text-xs px-2 py-1 rounded-lg text-white" style="background:#7B4015" title="Send text reminder">📱 Text</button>
+                  <button onclick="markInvoicePaid(${inv.id})" class="text-xs text-blue-600 hover:underline">Mark Paid</button>`
+                :`
+                  <button onclick="sendInvoiceText(${inv.id})" class="text-xs px-2 py-1 rounded-lg text-white" style="background:#7B4015" title="Send text message">📱 Text</button>
+                  <button onclick="sendInvoiceEmail(${inv.id})" class="text-xs px-2 py-1 rounded-lg text-white" style="background:#2563EB" title="Send email">📧 Email</button>
+                  <button onclick="markInvoicePaid(${inv.id})" class="text-xs text-blue-600 hover:underline">Mark Paid</button>`}
+                <button onclick="openEditInvoiceModal(${inv.id})" class="text-xs px-2 py-1 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100">Edit</button>
+                <button onclick="deleteInvoice(${inv.id})" class="text-xs px-2 py-1 rounded-lg bg-red-50 text-red-400 hover:bg-red-100">Delete</button>
+              </div>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      </div><!-- /overflow-x-auto -->
+    </div>
   </div>`;
 }
 function buildSettingsView(){
@@ -4148,7 +4028,7 @@ function buildSettingsView(){
   const settHead=(key,icon,title,subtitle)=>`
     <button type="button" onclick="toggleSettSection('${key}')"
       class="np-collapse-header w-full flex items-center gap-3 px-5 py-4 text-left transition-colors"
-      style="background:linear-gradient(135deg,#eef2ff 0%,#eef2ff 100%);border-bottom:2px solid #e0e7ff;border-left:4px solid #6366f1;">
+      style="background:linear-gradient(135deg,#FFFBF5 0%,#FFF7ED 100%);border-bottom:2px solid #F5E6D3;border-left:4px solid #7B4015;">
       <span class="text-2xl">${icon}</span>
       <div class="flex-1 min-w-0">
         <div class="text-base font-bold text-gray-800">${title}</div>
@@ -4163,14 +4043,14 @@ function buildSettingsView(){
         <h1 class="text-2xl font-bold text-gray-800">Settings</h1>
         <p class="text-sm text-gray-400 mt-0.5">Configure your dashboard, integrations, and booking rules</p>
       </div>
-      <button onclick="saveSettings()" class="px-5 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#6366f1" onmouseover="this.style.background='#4f46e5'" onmouseout="this.style.background='#6366f1'">Save Settings</button>
+      <button onclick="saveSettings()" class="px-5 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">Save Settings</button>
     </div>
     <div class="max-w-2xl space-y-4">
       ${state.mode==='live'&&state.sheetId?`
       <div class="bg-amber-50 rounded-2xl p-4 border border-amber-100">
-        <div class="text-sm font-semibold text-indigo-900 mb-2">📊 Google Sheet Connected</div>
-        <div class="text-xs text-indigo-800 font-mono break-all mb-2">${state.sheetId}</div>
-        <a href="${state.sheetUrl}" target="_blank" class="text-xs text-indigo-800 hover:underline font-medium">Open in Google Sheets ↗</a>
+        <div class="text-sm font-semibold text-amber-900 mb-2">📊 Google Sheet Connected</div>
+        <div class="text-xs text-amber-800 font-mono break-all mb-2">${state.sheetId}</div>
+        <a href="${state.sheetUrl}" target="_blank" class="text-xs text-amber-800 hover:underline font-medium">Open in Google Sheets ↗</a>
       </div>`:state.mode==='live'?`<div class="bg-blue-50 rounded-2xl p-4 border border-blue-100 text-sm text-blue-700">No sheet yet. Sign out and sign back in to create one.</div>`:''}
 
       <!-- ── BUSINESS & PAYMENTS ──────────────────────────────────── -->
@@ -4195,11 +4075,11 @@ function buildSettingsView(){
                   <input id="set-square-api-key" type="password" placeholder="EAAAl..." value="${state.settings.squareApiKey||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono"></div>
                 <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Square Location ID</label>
                   <input id="set-square-location" type="text" placeholder="LxxxxxxxxxxxxX" value="${state.settings.squareLocationId||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono"></div>
-                <div class="flex items-center gap-3 px-3 py-2.5 rounded-xl" style="background:${state.settings.squareSandbox?'#eef2ff':'#F0FDF4'};border:1px solid ${state.settings.squareSandbox?'#c7d2fe':'#86EFAC'};">
+                <div class="flex items-center gap-3 px-3 py-2.5 rounded-xl" style="background:${state.settings.squareSandbox?'#FFF7ED':'#F0FDF4'};border:1px solid ${state.settings.squareSandbox?'#FDE68A':'#86EFAC'};">
                   <input type="checkbox" id="set-square-sandbox" class="accent-amber-700 w-4 h-4 flex-shrink-0" ${state.settings.squareSandbox?'checked':''}>
                   <div>
-                    <label for="set-square-sandbox" class="text-xs font-semibold cursor-pointer" style="color:${state.settings.squareSandbox?'#4338ca':'#166534'};">${state.settings.squareSandbox?'🧪 Sandbox mode — test payments only':'🟢 Production mode — real payments'}</label>
-                    <div class="text-xs mt-0.5" style="color:${state.settings.squareSandbox?'#4338ca':'#166534'};">${state.settings.squareSandbox?'Using squareupsandbox.com — no real charges.':'Using connect.squareup.com — real charges.'}</div>
+                    <label for="set-square-sandbox" class="text-xs font-semibold cursor-pointer" style="color:${state.settings.squareSandbox?'#92400E':'#166534'};">${state.settings.squareSandbox?'🧪 Sandbox mode — test payments only':'🟢 Production mode — real payments'}</label>
+                    <div class="text-xs mt-0.5" style="color:${state.settings.squareSandbox?'#92400E':'#166534'};">${state.settings.squareSandbox?'Using squareupsandbox.com — no real charges.':'Using connect.squareup.com — real charges.'}</div>
                   </div>
                 </div>
               </div>
@@ -4230,7 +4110,7 @@ function buildSettingsView(){
             </div>
             <div class="border-t border-gray-100 pt-4">
               <div class="text-sm font-semibold text-gray-700 mb-1">🔗 Client Portal Proxy</div>
-              <p class="text-xs text-gray-400 mb-2">Apps Script URL for client registration & data sync. <strong class="text-gray-500">Also paste into <code class="bg-amber-50 text-indigo-800 px-1 rounded">CONFIG.APPS_SCRIPT_URL</code> in the HTML.</strong></p>
+              <p class="text-xs text-gray-400 mb-2">Apps Script URL for client registration & data sync. <strong class="text-gray-500">Also paste into <code class="bg-amber-50 text-amber-800 px-1 rounded">CONFIG.APPS_SCRIPT_URL</code> in the HTML.</strong></p>
               <input id="set-apps-script-url" type="url" placeholder="https://script.google.com/macros/s/AKfy…/exec" value="${state.settings.appsScriptUrl||''}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono">
               ${CONFIG.APPS_SCRIPT_URL?`<p class="text-xs text-emerald-600 mt-1">✅ CONFIG.APPS_SCRIPT_URL is set.</p>`:`<p class="text-xs text-amber-600 mt-1">⚠️ CONFIG.APPS_SCRIPT_URL not set in HTML — paste it there for reliability.</p>`}
             </div>
@@ -4262,7 +4142,7 @@ function buildSettingsView(){
                 ${(state.settings.requiredVaccines||[]).map((v,i)=>`
                 <div class="flex items-center gap-2 p-2 rounded-xl border border-gray-100 bg-white">
                   <label class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
-                    <input type="checkbox" checked onchange="toggleRequiredVaccine(${i},this.checked)" class="rounded" style="accent-color:#6366f1;">
+                    <input type="checkbox" checked onchange="toggleRequiredVaccine(${i},this.checked)" class="rounded" style="accent-color:#7B4015;">
                     <span class="text-sm text-gray-700 font-medium">${v}</span>
                   </label>
                   <button onclick="deleteRequiredVaccine(${i})" class="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none px-1" title="Remove">×</button>
@@ -4272,12 +4152,12 @@ function buildSettingsView(){
                 <input id="new-vacc-input" type="text" placeholder="e.g. Leptospirosis" maxlength="40"
                   class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm"
                   onkeydown="if(event.key==='Enter'){event.preventDefault();addRequiredVaccine();}">
-                <button onclick="addRequiredVaccine()" class="px-4 py-2 text-white text-sm font-semibold rounded-xl flex-shrink-0" style="background:#6366f1">+ Add</button>
+                <button onclick="addRequiredVaccine()" class="px-4 py-2 text-white text-sm font-semibold rounded-xl flex-shrink-0" style="background:#7B4015">+ Add</button>
               </div>
             </div>
             <div class="flex items-center gap-3 p-3 rounded-xl border border-amber-100 bg-amber-50">
               <span class="text-lg">🛎️</span>
-              <p class="text-xs text-indigo-800 flex-1">Service rates & courier settings are in <button onclick="setView('services')" class="underline font-semibold text-indigo-900">Services</button>.</p>
+              <p class="text-xs text-amber-800 flex-1">Service rates & courier settings are in <button onclick="setView('services')" class="underline font-semibold text-amber-900">Services</button>.</p>
             </div>
           </div>
         </div>
@@ -4294,11 +4174,11 @@ function buildSettingsView(){
                 <li>In <strong>Google Cloud Console</strong> → Credentials → <strong>Create API Key</strong> (restrict to Sheets API).</li>
                 <li>Paste into <code class="bg-gray-100 px-1 rounded">CONFIG.KIOSK_API_KEY</code> in the HTML source.</li>
                 <li>In <strong>Google Sheets</strong>: Share → Anyone with link → Viewer.</li>
-                <li>Open: <code class="bg-amber-50 px-1.5 py-0.5 rounded text-indigo-800 font-medium break-all">${window.location.href.split('?')[0]}?kiosk</code></li>
+                <li>Open: <code class="bg-amber-50 px-1.5 py-0.5 rounded text-amber-800 font-medium break-all">${window.location.href.split('?')[0]}?kiosk</code></li>
               </ol>
               <div class="flex gap-2">
-                <button onclick="setView('kiosk')" class="flex-1 py-2 rounded-xl text-sm font-medium border border-amber-200 text-indigo-800 hover:bg-amber-50">👁 Preview</button>
-                <button onclick="window.open(window.location.href.split('?')[0]+'?kiosk','_blank')" class="flex-1 py-2 rounded-xl text-sm font-medium text-white" style="background:#6366f1">🖥️ Open Kiosk</button>
+                <button onclick="setView('kiosk')" class="flex-1 py-2 rounded-xl text-sm font-medium border border-amber-200 text-amber-800 hover:bg-amber-50">👁 Preview</button>
+                <button onclick="window.open(window.location.href.split('?')[0]+'?kiosk','_blank')" class="flex-1 py-2 rounded-xl text-sm font-medium text-white" style="background:#7B4015">🖥️ Open Kiosk</button>
               </div>
             </div>
             <div class="border-t border-gray-100 pt-4">
@@ -4311,7 +4191,7 @@ function buildSettingsView(){
         </div>
       </div>
 
-      <button onclick="saveSettings()" class="w-full py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#6366f1" onmouseover="this.style.background='#4f46e5'" onmouseout="this.style.background='#6366f1'">Save Settings</button>
+      <button onclick="saveSettings()" class="w-full py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">Save Settings</button>
     </div>
   </div>`;
 }
@@ -4357,14 +4237,14 @@ function buildWhatsNewModal(){
     <!-- CTAs -->
     <div style="display:flex;gap:.75rem;">
       ${missing.length>0?`
-      <button onclick="closeWhatsNew('mydog')" style="flex:2;background:#6366f1;color:white;border:none;border-radius:14px;padding:.75rem;font-size:.88rem;font-weight:600;cursor:pointer;">
+      <button onclick="closeWhatsNew('mydog')" style="flex:2;background:#7B4015;color:white;border:none;border-radius:14px;padding:.75rem;font-size:.88rem;font-weight:600;cursor:pointer;">
         🐾 Update My Pet's Profile
       </button>
       <button onclick="closeWhatsNew(null,true)" style="flex:1;background:#F9FAFB;color:#6B7280;border:1px solid #E5E7EB;border-radius:14px;padding:.75rem;font-size:.88rem;font-weight:600;cursor:pointer;">
         Remind Later
       </button>
       `:`
-      <button onclick="closeWhatsNew()" style="flex:1;background:#6366f1;color:white;border:none;border-radius:14px;padding:.75rem;font-size:.88rem;font-weight:600;cursor:pointer;">
+      <button onclick="closeWhatsNew()" style="flex:1;background:#7B4015;color:white;border:none;border-radius:14px;padding:.75rem;font-size:.88rem;font-weight:600;cursor:pointer;">
         Got it — let's go! 🐾
       </button>
       `}
@@ -4435,27 +4315,27 @@ function buildClientHome(){
     <div style="font-size:2rem;line-height:1;">🐾</div>
     <div class="font-semibold text-gray-700 text-sm">No active pets on your profile</div>
     <div class="text-xs text-gray-400 leading-snug max-w-xs">It looks like there are currently no pets linked to your account. Ready to add a new furry family member?</div>
-    <button onclick="setClientView('mydog')" class="mt-2 px-5 py-2 text-white text-xs font-semibold rounded-xl" style="background:#6366f1">Add a Pet Profile →</button>
+    <button onclick="setClientView('mydog')" class="mt-2 px-5 py-2 text-white text-xs font-semibold rounded-xl" style="background:#7B4015">Add a Pet Profile →</button>
   </div>`:'';
   const checklistHtml=allDeceased?'':allDone?'':`
   <div class="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 pb-5">
     <div class="flex items-center justify-between mb-4">
-      <span class="font-semibold text-indigo-900 text-sm">Getting started</span>
-      <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full" style="background:#6366f1;color:#fff;">${doneCt} of ${steps.length} complete</span>
+      <span class="font-semibold text-amber-900 text-sm">Getting started</span>
+      <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full" style="background:#7B4015;color:#fff;">${doneCt} of ${steps.length} complete</span>
     </div>
     <!-- Milestone track -->
     <div class="relative flex items-start">
       <!-- Background connector line -->
       <div class="absolute top-4 left-0 right-0 h-0.5 bg-amber-200" style="z-index:0"></div>
       <!-- Filled connector line -->
-      <div class="absolute top-4 left-0 h-0.5 transition-all" style="z-index:0;width:${Math.round((doneCt-1)/(steps.length-1)*100)}%;background:#6366f1;min-width:0"></div>
+      <div class="absolute top-4 left-0 h-0.5 transition-all" style="z-index:0;width:${Math.round((doneCt-1)/(steps.length-1)*100)}%;background:#7B4015;min-width:0"></div>
       ${steps.map((s,i)=>`
       <div class="relative flex flex-col items-center flex-1" style="z-index:1">
         <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm mb-2 border-2 transition-all shadow-sm"
-             style="${s.done?'background:#6366f1;border-color:#6366f1;color:#fff':'background:#fff;border-color:#a5b4fc;color:#6366f1'}">
+             style="${s.done?'background:#7B4015;border-color:#7B4015;color:#fff':'background:#fff;border-color:#D4A96B;color:#B45309'}">
           ${s.done?'✓':s.icon}
         </div>
-        <div class="text-xs font-semibold text-center leading-tight px-1 ${s.done?'text-indigo-900':'text-amber-700'}">${s.label}</div>
+        <div class="text-xs font-semibold text-center leading-tight px-1 ${s.done?'text-amber-900':'text-amber-700'}">${s.label}</div>
         ${s.detail&&!s.done?`<div class="text-xs text-gray-500 text-center mt-0.5 px-1 leading-snug max-w-[100px]">${s.detail}</div>`:''}
       </div>`).join('')}
     </div>
@@ -4466,7 +4346,7 @@ function buildClientHome(){
         <div class="text-xs font-semibold text-gray-700">${anyVaccExpired?'Vaccine records expired':'Vaccine records needed'}</div>
         <div class="text-xs text-gray-500 mt-0.5">${anyVaccExpired?'Tap to upload updated records — AI will scan and fill dates automatically.':'Tap to upload vaccine records — AI will scan and fill all dates automatically.'}</div>
       </div>
-      <button onclick="inlineVaccUpload(${cl.id})" class="text-xs px-3 py-1.5 rounded-lg text-white flex-shrink-0" style="background:#6366f1">📄 Upload →</button>
+      <button onclick="inlineVaccUpload(${cl.id})" class="text-xs px-3 py-1.5 rounded-lg text-white flex-shrink-0" style="background:#7B4015">📄 Upload →</button>
     </div>`:''}
     ${!vetOnFile&&hasAnyDog?`
     <div class="mt-3 flex items-center gap-2 p-3 rounded-xl border" style="background:#FEF2F2;border-color:#FECACA;">
@@ -4489,7 +4369,7 @@ function buildClientHome(){
       <div style="font-size:2.5rem;margin-bottom:.75rem;">🐾</div>
       <div class="text-lg font-bold text-gray-800 mb-1">Ready When You Are</div>
       <div class="text-sm text-gray-500 text-center max-w-xs mb-4">Add a pet profile to start booking stays.</div>
-      <button onclick="setClientView('mydog')" class="px-5 py-2.5 text-white text-sm font-semibold rounded-xl" style="background:#6366f1">Add a Pet Profile →</button>
+      <button onclick="setClientView('mydog')" class="px-5 py-2.5 text-white text-sm font-semibold rounded-xl" style="background:#7B4015">Add a Pet Profile →</button>
     </div>
   </div>`:showVetLock?`
   <div class="relative">
@@ -4508,7 +4388,7 @@ function buildClientHome(){
       <div style="font-size:2.5rem;margin-bottom:.75rem;">🔒</div>
       <div class="text-lg font-bold text-gray-800 mb-1">Booking Locked</div>
       <div class="text-sm text-gray-500 text-center max-w-xs mb-4">Booking is available once all required vaccine records are current and on file.</div>
-      <button onclick="inlineVaccUpload(${cl.id})" class="px-5 py-2.5 text-white text-sm font-semibold rounded-xl" style="background:#6366f1">📄 Upload Vaccine Records →</button>
+      <button onclick="inlineVaccUpload(${cl.id})" class="px-5 py-2.5 text-white text-sm font-semibold rounded-xl" style="background:#7B4015">📄 Upload Vaccine Records →</button>
     </div>
   </div>`:buildCalendarView('client');
   // ──────────────────────────────────────────────────────────────────────────
@@ -4555,7 +4435,7 @@ function buildClientBookings(){
   const myBks=bookings.filter(b=>b.clientId===state.currentClientId).sort((a,b)=>b.checkIn.localeCompare(a.checkIn));
   const myPkgs=packages.filter(p=>p.clientId===state.currentClientId);
   const totalRemaining=myPkgs.reduce((s,p)=>s+p.remaining,0);
-  const sCls={confirmed:'bg-amber-100 text-indigo-800',pending:'bg-yellow-100 text-yellow-700',cancelled:'bg-red-100 text-red-600'};
+  const sCls={confirmed:'bg-amber-100 text-amber-800',pending:'bg-yellow-100 text-yellow-700',cancelled:'bg-red-100 text-red-600'};
   return`
   <div class="slide-in">
     <h1 class="text-2xl font-bold text-gray-800 mb-5">My Bookings</h1>
@@ -4564,7 +4444,7 @@ function buildClientBookings(){
       <div class="flex items-center gap-3 mb-3">
         <div class="text-2xl">🎫</div>
         <div>
-          <div class="font-bold text-indigo-900">Session Package Balance</div>
+          <div class="font-bold text-amber-900">Session Package Balance</div>
           <div class="text-xs text-amber-700">${totalRemaining} session${totalRemaining===1?'':'s'} available · sessions never expire</div>
         </div>
       </div>
@@ -4572,14 +4452,14 @@ function buildClientBookings(){
         ${myPkgs.map(p=>`
         <div class="flex items-center justify-between bg-white/70 rounded-xl px-3 py-2">
           <div class="text-xs text-gray-600">${p.dogName} · purchased ${fmtDateShort(p.purchaseDate)}</div>
-          <div class="text-sm font-semibold ${p.remaining>0?'text-indigo-800':'text-gray-400'}">
+          <div class="text-sm font-semibold ${p.remaining>0?'text-amber-800':'text-gray-400'}">
             ${p.remaining} / ${p.qty} remaining</div>
         </div>`).join('')}
       </div>
     </div>`:''}
     ${myBks.length===0?`<div class="text-center text-gray-300 py-16"><div class="text-5xl mb-3">🐾</div>
       <div class="text-lg font-medium text-gray-400">No bookings yet!</div>
-      <button onclick="setClientView('home')" class="mt-3 text-indigo-800 hover:underline text-sm">Book your first stay →</button></div>`
+      <button onclick="setClientView('home')" class="mt-3 text-amber-800 hover:underline text-sm">Book your first stay →</button></div>`
     :`<div class="space-y-3">${myBks.map(b=>{
       const isUpcoming=b.checkIn>=TODAY&&b.status!=='cancelled';
       // Payment status badge
@@ -4605,8 +4485,8 @@ function buildClientBookings(){
         ${(b.paymentStatus==='deposit_due'||b.paymentStatus==='checkout_pending')&&isUpcoming?`
         <div class="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2">
           ${b.checkoutUrl
-            ?`<a href="${b.checkoutUrl}" target="_blank" style="flex:1;display:block;text-align:center;padding:.5rem;background:#6366f1;color:white;border-radius:10px;font-size:.75rem;font-weight:700;text-decoration:none;">💳 Pay ${b.depositAmount?'$'+b.depositAmount.toFixed(2)+' Deposit':'Now'} via Square</a>`
-            :`<button onclick="bannerPayNow('${b.id}',${b.depositAmount||b.price||0})" style="flex:1;text-align:center;padding:.5rem;background:#6366f1;color:white;border:none;border-radius:10px;font-size:.75rem;font-weight:700;cursor:pointer;">💳 Pay ${b.depositAmount?'$'+b.depositAmount.toFixed(2)+' Deposit':'Now'} via Square</button>`}
+            ?`<a href="${b.checkoutUrl}" target="_blank" style="flex:1;display:block;text-align:center;padding:.5rem;background:#7B4015;color:white;border-radius:10px;font-size:.75rem;font-weight:700;text-decoration:none;">💳 Pay ${b.depositAmount?'$'+b.depositAmount.toFixed(2)+' Deposit':'Now'} via Square</a>`
+            :`<button onclick="bannerPayNow('${b.id}',${b.depositAmount||b.price||0})" style="flex:1;text-align:center;padding:.5rem;background:#7B4015;color:white;border:none;border-radius:10px;font-size:.75rem;font-weight:700;cursor:pointer;">💳 Pay ${b.depositAmount?'$'+b.depositAmount.toFixed(2)+' Deposit':'Now'} via Square</button>`}
         </div>
         <div class="mt-1.5 flex justify-end">
           <button onclick="showClientCancelConfirm('${b.id}')" style="background:none;border:none;padding:0;font-size:.68rem;color:#9CA3AF;cursor:pointer;text-decoration:underline;">Cancel booking</button>
@@ -4638,7 +4518,7 @@ function buildClientAccount(){
           <div class="text-xs text-gray-400">${dog.breed||'Mixed Breed'} · ${fmtAge(dog.age,dog.birthday)}</div>
         </div>
         <div class="ml-auto flex items-center gap-2">
-          <button onclick="setClientView('mydog')" class="text-xs px-3 py-1.5 rounded-lg border font-medium" style="border-color:#a5b4fc;color:#6366f1;background:#eef2ff;">🐾 Full Profile</button>
+          <button onclick="setClientView('mydog')" class="text-xs px-3 py-1.5 rounded-lg border font-medium" style="border-color:#D4A96B;color:#7B4015;background:#FFFBF0;">🐾 Full Profile</button>
           <button onclick="showEditMyDogModal(${dog.id})" class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 font-medium">✏️ Edit</button>
         </div>
       </div>
@@ -4659,7 +4539,7 @@ function buildClientAccount(){
   const acctHead=(key,icon,title,subtitle,badge)=>`
     <button type="button" onclick="toggleAcctSection('${key}')"
       class="np-collapse-header w-full flex items-center gap-3 px-5 py-4 text-left transition-colors"
-      style="background:linear-gradient(135deg,#eef2ff 0%,#eef2ff 100%);border-bottom:2px solid #e0e7ff;border-left:4px solid #6366f1;">
+      style="background:linear-gradient(135deg,#FFFBF5 0%,#FFF7ED 100%);border-bottom:2px solid #F5E6D3;border-left:4px solid #7B4015;">
       <span class="text-2xl">${icon}</span>
       <div class="flex-1 min-w-0">
         <div class="text-base font-bold text-gray-800">${title} ${badge||''}</div>
@@ -4713,7 +4593,7 @@ function buildClientAccount(){
                 <span class="text-sm text-gray-600">📸 Allow Nigel's Place to share pet photos on social media</span>
               </label>
             </div>
-            <button type="submit" id="acct-save-btn" class="w-full py-2.5 rounded-xl text-white text-sm font-semibold" style="background:#6366f1;">Save Changes</button>
+            <button type="submit" id="acct-save-btn" class="w-full py-2.5 rounded-xl text-white text-sm font-semibold" style="background:#7B4015;">Save Changes</button>
           </form>
         </div>
       </div>
@@ -4807,19 +4687,19 @@ function buildClientAccount(){
       <div id="acct-body-pets" class="np-collapse-body ${window._acctCollapsed.pets?'np-collapsed':''}" style="${window._acctCollapsed.pets?'max-height:0':'max-height:none'}">
         <div class="pb-4 pt-3" style="margin-left:16px;padding-left:20px;padding-right:20px;border-left:2px solid #F0E4D6;">
           <div class="flex justify-end mb-3">
-            <button onclick="showAddDogModal()" class="text-xs px-3 py-1.5 rounded-lg text-white font-semibold" style="background:#6366f1">+ Add Pet</button>
+            <button onclick="showAddDogModal()" class="text-xs px-3 py-1.5 rounded-lg text-white font-semibold" style="background:#7B4015">+ Add Pet</button>
           </div>
           <div class="space-y-2">
             ${cl.dogs.filter(d=>!d.deceased).map(dog=>`
             <div class="rounded-xl border border-gray-100 bg-white p-4 hover:bg-gray-50 transition-colors">
               <div class="flex items-center gap-3 mb-3">
-                <div class="w-10 h-10 rounded-lg flex items-center justify-center text-xl flex-shrink-0" style="background:#eef2ff">🐕</div>
+                <div class="w-10 h-10 rounded-lg flex items-center justify-center text-xl flex-shrink-0" style="background:#FFF7ED">🐕</div>
                 <div class="flex-1">
                   <div class="font-semibold text-gray-800">${dog.name}</div>
                   <div class="text-xs text-gray-400">${dog.breed||'Mixed Breed'} · ${fmtAge(dog.age,dog.birthday)}</div>
                 </div>
                 <div class="flex items-center gap-2">
-                  <button onclick="setClientView('mydog')" class="text-xs px-3 py-1.5 rounded-lg border font-medium" style="border-color:#a5b4fc;color:#6366f1;background:#eef2ff;">🐾 Full Profile</button>
+                  <button onclick="setClientView('mydog')" class="text-xs px-3 py-1.5 rounded-lg border font-medium" style="border-color:#D4A96B;color:#7B4015;background:#FFFBF0;">🐾 Full Profile</button>
                   <button onclick="showEditMyDogModal(${dog.id})" class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 font-medium">✏️ Edit</button>
                 </div>
               </div>
@@ -4848,7 +4728,7 @@ function buildClientAccount(){
       <div id="acct-body-packages" class="np-collapse-body ${window._acctCollapsed.packages?'np-collapsed':''}" style="${window._acctCollapsed.packages?'max-height:0':'max-height:none'}">
         <div class="pb-4 pt-3" style="margin-left:16px;padding-left:20px;padding-right:20px;border-left:2px solid #F0E4D6;">
           <div class="flex justify-end mb-3">
-            <button onclick="showBuyPackageModal()" class="text-xs px-3 py-1.5 rounded-lg text-white font-semibold" style="background:#6366f1">+ Buy Sessions</button>
+            <button onclick="showBuyPackageModal()" class="text-xs px-3 py-1.5 rounded-lg text-white font-semibold" style="background:#7B4015">+ Buy Sessions</button>
           </div>
           ${myPkgs.length===0?`
           <div class="text-center py-5">
@@ -4856,10 +4736,10 @@ function buildClientAccount(){
             <div class="text-sm text-gray-400 mb-1">No packages yet</div>
             <div class="text-xs text-gray-300">Buy sessions in bulk and save up to $20/session</div>
           </div>`:`
-          <div class="mb-3 flex items-center gap-3 p-3 rounded-xl" style="background:#FFFBEB;border:1px solid #c7d2fe;">
+          <div class="mb-3 flex items-center gap-3 p-3 rounded-xl" style="background:#FFFBEB;border:1px solid #FDE68A;">
             <div class="text-2xl">💛</div>
             <div>
-              <div class="font-bold text-indigo-900">${totalRemaining} session${totalRemaining===1?'':'s'} available</div>
+              <div class="font-bold text-amber-900">${totalRemaining} session${totalRemaining===1?'':'s'} available</div>
               <div class="text-xs text-amber-700">Applied automatically when booking daycare</div>
             </div>
           </div>
@@ -4871,7 +4751,7 @@ function buildClientAccount(){
                 <div class="text-xs text-gray-400">Purchased ${fmtDateShort(p.purchaseDate)} · $${(+p.pricePerSession||0).toFixed(2)}/session</div>
               </div>
               <div class="text-right">
-                <div class="text-sm font-bold ${p.remaining>0?'text-indigo-800':'text-gray-400'}">${p.remaining} / ${p.qty}</div>
+                <div class="text-sm font-bold ${p.remaining>0?'text-amber-800':'text-gray-400'}">${p.remaining} / ${p.qty}</div>
                 <div class="text-xs text-gray-400">remaining</div>
               </div>
             </div>`).join('')}
@@ -5071,7 +4951,7 @@ function buildEditMyDogModal(){
 
       <div class="flex gap-3 pt-1">
         <button type="button" onclick="state.showModal=null;render()" class="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50">Cancel</button>
-        <button id="emydog-submit" type="submit" class="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style="background:#6366f1;">Save Changes</button>
+        <button id="emydog-submit" type="submit" class="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style="background:#7B4015;">Save Changes</button>
       </div>
     </form>
   </div>
@@ -5166,27 +5046,27 @@ function buildClientDog(){
     <div class="mb-5 slide-in">
 
       <!-- ① Top hero card: photo + name + quick info + edit button -->
-      <div class="rounded-2xl border border-gray-100 shadow-sm mb-3 overflow-hidden" style="background:linear-gradient(135deg,#eef2ff 0%,#e0e7ff 100%);">
+      <div class="rounded-2xl border border-gray-100 shadow-sm mb-3 overflow-hidden" style="background:linear-gradient(135deg,#FFFBF0 0%,#FEF3C7 100%);">
         <div class="p-4 flex items-center gap-4">
           <!-- Avatar -->
           <div class="relative flex-shrink-0">
             ${dog.photoLink
               ?`<img src="${dog.photoLink}" class="w-20 h-20 rounded-2xl object-cover shadow-sm" style="object-position:${dog.photoOffset?.x??50}% ${dog.photoOffset?.y??50}%">`
-              :`<div class="w-20 h-20 rounded-2xl flex items-center justify-center text-4xl shadow-sm" style="background:#c7d2fe;">🐶</div>`}
+              :`<div class="w-20 h-20 rounded-2xl flex items-center justify-center text-4xl shadow-sm" style="background:#FDE68A;">🐶</div>`}
           </div>
           <!-- Name + details -->
           <div class="flex-1 min-w-0">
             <div class="font-bold text-gray-800 text-xl leading-tight">${dog.name}</div>
             <div class="text-sm text-amber-700 font-medium mt-0.5">${dog.breed||'Pet'}</div>
             <div class="flex flex-wrap gap-2 mt-2">
-              ${fmtAge(dog.age,dog.birthday)?`<span class="text-xs bg-white rounded-full px-2.5 py-0.5 border border-amber-200 text-indigo-800">${fmtAge(dog.age,dog.birthday)} old</span>`:''}
-              ${dog.birthday?`<span class="text-xs bg-white rounded-full px-2.5 py-0.5 border border-amber-200 text-indigo-800">🎂 ${fmtDateShort(dog.birthday)}</span>`:''}
+              ${fmtAge(dog.age,dog.birthday)?`<span class="text-xs bg-white rounded-full px-2.5 py-0.5 border border-amber-200 text-amber-800">${fmtAge(dog.age,dog.birthday)} old</span>`:''}
+              ${dog.birthday?`<span class="text-xs bg-white rounded-full px-2.5 py-0.5 border border-amber-200 text-amber-800">🎂 ${fmtDateShort(dog.birthday)}</span>`:''}
             </div>
           </div>
           <!-- Edit button -->
           <button onclick="showEditMyDogModal(${dog.id})"
             class="flex-shrink-0 text-xs px-3 py-1.5 rounded-xl border font-semibold text-amber-700 hover:bg-amber-50"
-            style="background:white;border-color:#a5b4fc;">
+            style="background:white;border-color:#D4A96B;">
             ✏️ Edit
           </button>
         </div>
@@ -5244,13 +5124,13 @@ function buildClientDog(){
               </button>
               <button id="cvbtn-${dog.id}" onclick="handleClientVaccUpload(${cl.id},${dog.id})"
                 class="text-xs px-2 py-1 rounded-lg border text-amber-700 hover:bg-amber-50 flex-shrink-0"
-                style="border-color:#a5b4fc;font-size:10px;">
+                style="border-color:#D4A96B;font-size:10px;">
                 📄 Upload
               </button>
             </div>
           </div>
           <div>${vBadge}</div>
-          ${(()=>{try{const ov=dog.vaccOverride?JSON.parse(dog.vaccOverride):null;if(!ov||!ov.until)return'';if(ov.until!=='indefinite'&&ov.until<TODAY)return'';const msg=ov.until==='indefinite'?`Your vaccination requirement has been waived by Nigel's Place — contact us for details.`:`Your vaccination requirement has been extended until ${fmtDate(ov.until)} — approved by Nigel's Place.`;return`<div class="rounded-xl px-2.5 py-2 text-xs font-medium flex items-start gap-1.5" style="background:#eef2ff;border:1px solid #FED7AA;color:#C2410C;line-height:1.4;">🔓 ${msg}</div>`;}catch(e){return'';}})()}
+          ${(()=>{try{const ov=dog.vaccOverride?JSON.parse(dog.vaccOverride):null;if(!ov||!ov.until)return'';if(ov.until!=='indefinite'&&ov.until<TODAY)return'';const msg=ov.until==='indefinite'?`Your vaccination requirement has been waived by Nigel's Place — contact us for details.`:`Your vaccination requirement has been extended until ${fmtDate(ov.until)} — approved by Nigel's Place.`;return`<div class="rounded-xl px-2.5 py-2 text-xs font-medium flex items-start gap-1.5" style="background:#FFF7ED;border:1px solid #FED7AA;color:#C2410C;line-height:1.4;">🔓 ${msg}</div>`;}catch(e){return'';}})()}
           ${(dog.vaccines||[]).length>0
             ?`<div class="space-y-1 text-xs">${buildVaccineRecordsHTML(dog)}</div>`
             :`<div class="text-xs text-amber-700 bg-amber-50 rounded-xl px-2.5 py-2 border border-amber-100">
@@ -5285,7 +5165,7 @@ function buildClientDog(){
     <p class="text-gray-400 text-sm mb-5">View your pet's profile, manage vet info, and upload vaccine records.</p>
     ${dogsHtml}
     <div class="mt-4 flex flex-col items-center gap-2">
-      <button onclick="showAddDogModal()" class="flex items-center gap-2 px-5 py-2.5 text-white text-sm font-semibold rounded-xl shadow-sm hover:opacity-90 transition-opacity" style="background:#6366f1;">
+      <button onclick="showAddDogModal()" class="flex items-center gap-2 px-5 py-2.5 text-white text-sm font-semibold rounded-xl shadow-sm hover:opacity-90 transition-opacity" style="background:#7B4015;">
         + Add Another Pet
       </button>
       <p class="text-xs text-center text-gray-300 mt-1">To update a pet's name — contact Nigel's Place directly.</p>
@@ -5366,7 +5246,7 @@ function buildAddInvoiceModal(){
           <div class="flex items-center justify-between mb-1.5">
             <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Services to Invoice</label>
             <div class="flex gap-3">
-              <button type="button" onclick="selectAllInvoiceBookings(true)" class="text-xs font-medium" style="color:#6366f1;">All</button>
+              <button type="button" onclick="selectAllInvoiceBookings(true)" class="text-xs font-medium" style="color:#7B4015;">All</button>
               <button type="button" onclick="selectAllInvoiceBookings(false)" class="text-xs text-gray-400">None</button>
             </div>
           </div>
@@ -5407,7 +5287,7 @@ function buildAddInvoiceModal(){
             <input id="inv-due" type="date" value="${due}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
         </div>
         <div class="flex gap-2 pt-1">
-          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#6366f1" onmouseover="this.style.background='#4f46e5'" onmouseout="this.style.background='#6366f1'">Create Invoice</button>
+          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">Create Invoice</button>
           <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
         </div>
       </form>
@@ -5475,8 +5355,8 @@ function buildDayModal(ds){
             ${!isAdm&&b.paymentStatus==='deposit_paid'?'<span class="text-xs font-semibold text-blue-600">🔐 Deposit paid</span>':''}
             ${!isAdm&&(b.paymentStatus==='deposit_due'||b.paymentStatus==='checkout_pending')
               ?(b.checkoutUrl
-                ?'<a href="'+b.checkoutUrl+'" target="_blank" class="text-xs font-semibold text-white px-2 py-1 rounded-lg whitespace-nowrap" style="background:#6366f1">💳 Pay Now</a>'
-                :'<button onclick="bannerPayNow(\''+b.id+'\','+(b.depositAmount||b.price||0)+')" class="text-xs font-semibold text-white px-2 py-1 rounded-lg whitespace-nowrap" style="background:#6366f1">💳 Pay Now</button>')
+                ?'<a href="'+b.checkoutUrl+'" target="_blank" class="text-xs font-semibold text-white px-2 py-1 rounded-lg whitespace-nowrap" style="background:#7B4015">💳 Pay Now</a>'
+                :'<button onclick="bannerPayNow(\''+b.id+'\','+(b.depositAmount||b.price||0)+')" class="text-xs font-semibold text-white px-2 py-1 rounded-lg whitespace-nowrap" style="background:#7B4015">💳 Pay Now</button>')
               :''}
             ${!isAdm?'<button onclick="closeModal();showClientCancelConfirm('+b.id+')" class="text-xs text-red-400 hover:text-red-600 whitespace-nowrap mt-1" title="Cancel booking">✕ Cancel</button>':''}
           </div>
@@ -5498,7 +5378,7 @@ function buildDayModal(ds){
             :isPast
               ?''
               :!full
-                ?`<button onclick="openBookingModal('${ds}')" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#6366f1" onmouseover="this.style.background='#4f46e5'" onmouseout="this.style.background='#6366f1'">${isAdm?'+ Add Booking':'📅 Book This Day'}</button>`
+                ?`<button onclick="openBookingModal('${ds}')" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">${isAdm?'+ Add Booking':'📅 Book This Day'}</button>`
                 :`<div class="flex-1 py-2.5 bg-red-50 text-red-400 rounded-xl text-sm text-center font-medium">Day Fully Booked</div>`}
         <button onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Close</button>
       </div>`;})()}
@@ -5518,9 +5398,9 @@ function setBkMain(type){
     const btn=document.getElementById(`bk-type-${t}`);
     if(!btn)return;
     const a=t===type;
-    btn.style.background=a?'#6366f1':'#F9FAFB';
+    btn.style.background=a?'#7B4015':'#F9FAFB';
     btn.style.color=a?'#fff':'#6B7280';
-    btn.style.borderColor=a?'#6366f1':'#E5E7EB';
+    btn.style.borderColor=a?'#7B4015':'#E5E7EB';
   });
   const bSec=document.getElementById('bk-boarding-section');
   const dSec=document.getElementById('bk-daycare-section');
@@ -5563,7 +5443,7 @@ function setBkMain(type){
   if(pn){
     const policyLink=`<button type="button" onclick="showCancellationPolicyModal()" style="background:none;border:none;padding:0;cursor:pointer;text-decoration:underline;font-weight:600;color:inherit;font-size:inherit;">cancellation policy</button>`;
     if(type==='boarding'||type==='combo'){
-      pn.innerHTML=`<div class="flex items-start gap-2 px-3 py-2.5 rounded-xl text-xs leading-snug" style="background:#eef2ff;border:1px solid #c7d2fe;color:#4338ca;">
+      pn.innerHTML=`<div class="flex items-start gap-2 px-3 py-2.5 rounded-xl text-xs leading-snug" style="background:#FFF7ED;border:1px solid #FDE68A;color:#92400E;">
         <span style="flex-shrink:0;font-size:1rem;">🔐</span>
         <span><strong>25% deposit required</strong> to confirm boarding. Remaining balance due at check-in. Refundable per our ${policyLink} (7+ days = full, 3–6 days = 50%, 1–2 days = none).</span>
       </div>`;
@@ -5585,9 +5465,9 @@ function setDaycareMode(mode){
     const btn=document.getElementById(`bk-mode-${m}`);
     if(!btn)return;
     const a=m===mode;
-    btn.style.background=a?'#6366f1':'#F9FAFB';
+    btn.style.background=a?'#7B4015':'#F9FAFB';
     btn.style.color=a?'#fff':'#6B7280';
-    btn.style.borderColor=a?'#6366f1':'#E5E7EB';
+    btn.style.borderColor=a?'#7B4015':'#E5E7EB';
   });
   const pkgPicker=document.getElementById('bk-session-picker');
   const datesSec=document.getElementById('bk-daycare-dates');
@@ -5600,14 +5480,14 @@ function stepSessions(delta){
   const el=document.getElementById('bk-session-qty');if(el)el.textContent=_sessionQty;
   const tier=getDaycareTier(_sessionQty);
   const tierEl=document.getElementById('bk-tier-label');
-  if(tierEl)tierEl.innerHTML=`<span class="font-bold text-indigo-800 text-sm">$${tier.price}/session</span><span class="text-gray-300 mx-1">·</span><span class="text-amber-600 text-xs">${tier.badge}</span>`;
+  if(tierEl)tierEl.innerHTML=`<span class="font-bold text-amber-800 text-sm">$${tier.price}/session</span><span class="text-gray-300 mx-1">·</span><span class="text-amber-600 text-xs">${tier.badge}</span>`;
   // Refresh tier pill highlights
   [[1,4],[5,14],[15,19],[20,999]].forEach(([lo,hi],i)=>{
     const pill=document.getElementById(`bk-tier-pill-${i}`);
     if(!pill)return;
     const a=_sessionQty>=lo&&_sessionQty<=hi;
-    pill.style.background=a?'#c7d2fe':'#F3F4F6';
-    pill.style.color=a?'#3730a3':'#9CA3AF';
+    pill.style.background=a?'#FDE68A':'#F3F4F6';
+    pill.style.color=a?'#78350F':'#9CA3AF';
   });
   updateBookingPrice();
 }
@@ -5626,8 +5506,8 @@ function buildBookingModal(selectedDate){
   const typeBtn=(type,icon,label,sub)=>{
     const a=_bookingMain===type;
     return`<button type="button" id="bk-type-${type}" onclick="setBkMain('${type}')"
-      style="flex:1;padding:0.55rem 0.3rem;border-radius:0.75rem;border:2px solid ${a?'#6366f1':'#E5E7EB'};
-             background:${a?'#6366f1':'#F9FAFB'};color:${a?'#fff':'#6B7280'};cursor:pointer;
+      style="flex:1;padding:0.55rem 0.3rem;border-radius:0.75rem;border:2px solid ${a?'#7B4015':'#E5E7EB'};
+             background:${a?'#7B4015':'#F9FAFB'};color:${a?'#fff':'#6B7280'};cursor:pointer;
              transition:all 0.15s;text-align:center;min-width:0;">
       <div style="font-size:1.2rem;line-height:1.3;">${icon}</div>
       <div style="font-size:0.78rem;font-weight:700;margin-top:2px;white-space:nowrap;">${label}</div>
@@ -5638,7 +5518,7 @@ function buildBookingModal(selectedDate){
   const tierPills=[[1,4,55,'1–4'],[5,14,45,'5–14'],[15,19,40,'15–19'],[20,999,35,'20+']].map(([lo,hi,p,lbl],i)=>{
     const a=_sessionQty>=lo&&_sessionQty<=hi;
     return`<span id="bk-tier-pill-${i}" class="px-2 py-0.5 rounded-full text-xs font-semibold"
-      style="background:${a?'#c7d2fe':'#F3F4F6'};color:${a?'#3730a3':'#9CA3AF'};white-space:nowrap;">${lbl}× = $${p}</span>`;
+      style="background:${a?'#FDE68A':'#F3F4F6'};color:${a?'#78350F':'#9CA3AF'};white-space:nowrap;">${lbl}× = $${p}</span>`;
   }).join('');
 
   return`
@@ -5684,7 +5564,7 @@ function buildBookingModal(selectedDate){
           <select id="bk-dog" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white" onchange="checkDogVaccWarning()">
             ${activeDogs.map(d=>`<option value="${d.id}">${d.name} (${d.breed})</option>`).join('')||'<option>No active pets on file</option>'}
           </select>`}
-          ${pkgBalance>0?`<div class="flex items-center gap-2 mt-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-indigo-800">
+          ${pkgBalance>0?`<div class="flex items-center gap-2 mt-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
             🎫 You have <strong class="mx-1">${pkgBalance} session${pkgBalance===1?'':'s'}</strong> in your package.
           </div>`:''}
         </div>`}
@@ -5705,7 +5585,7 @@ function buildBookingModal(selectedDate){
           <div class="rounded-xl border border-gray-200 overflow-hidden">
             <div class="px-3 py-2 flex items-center gap-2" style="background:#F8F4F0;border-bottom:1px solid #E5E7EB;">
               <span class="text-sm">🏡</span>
-              <span id="bk-boarding-label" class="text-xs font-bold text-indigo-900 uppercase tracking-wider">${_bookingMain==='combo'?'Boarding nights':'Boarding dates'}</span>
+              <span id="bk-boarding-label" class="text-xs font-bold text-amber-900 uppercase tracking-wider">${_bookingMain==='combo'?'Boarding nights':'Boarding dates'}</span>
             </div>
             <div class="p-3 grid grid-cols-2 gap-3">
               <div>
@@ -5728,7 +5608,7 @@ function buildBookingModal(selectedDate){
           <div class="rounded-xl border border-gray-200 overflow-hidden">
             <div class="px-3 py-2 flex items-center gap-2" style="background:#F8F4F0;border-bottom:1px solid #E5E7EB;">
               <span class="text-sm">☀️</span>
-              <span id="bk-daycare-label" class="text-xs font-bold text-indigo-900 uppercase tracking-wider">${_bookingMain==='combo'?'Daycare days':'Daycare sessions'}</span>
+              <span id="bk-daycare-label" class="text-xs font-bold text-amber-900 uppercase tracking-wider">${_bookingMain==='combo'?'Daycare days':'Daycare sessions'}</span>
             </div>
             <div class="p-3 space-y-3">
 
@@ -5736,13 +5616,13 @@ function buildBookingModal(selectedDate){
               <div id="bk-pkg-mode-row" style="display:${_bookingMain==='daycare'&&!(state.role==='client'||state.adminViewAsClient)?'':'none'}">
                 <div class="flex gap-2">
                   <button type="button" id="bk-mode-schedule" onclick="setDaycareMode('schedule')"
-                    style="flex:1;padding:0.5rem;border-radius:0.65rem;border:2px solid ${_daycareMode==='schedule'?'#6366f1':'#E5E7EB'};background:${_daycareMode==='schedule'?'#6366f1':'#F9FAFB'};color:${_daycareMode==='schedule'?'#fff':'#6B7280'};cursor:pointer;text-align:center;transition:all 0.15s;">
+                    style="flex:1;padding:0.5rem;border-radius:0.65rem;border:2px solid ${_daycareMode==='schedule'?'#7B4015':'#E5E7EB'};background:${_daycareMode==='schedule'?'#7B4015':'#F9FAFB'};color:${_daycareMode==='schedule'?'#fff':'#6B7280'};cursor:pointer;text-align:center;transition:all 0.15s;">
                     <div style="font-size:0.85rem;">📅</div>
                     <div style="font-size:0.72rem;font-weight:700;">Schedule Now</div>
                     <div style="font-size:0.62rem;opacity:0.75;">Pick dates</div>
                   </button>
                   <button type="button" id="bk-mode-package" onclick="setDaycareMode('package')"
-                    style="flex:1;padding:0.5rem;border-radius:0.65rem;border:2px solid ${_daycareMode==='package'?'#6366f1':'#E5E7EB'};background:${_daycareMode==='package'?'#6366f1':'#F9FAFB'};color:${_daycareMode==='package'?'#fff':'#6B7280'};cursor:pointer;text-align:center;transition:all 0.15s;">
+                    style="flex:1;padding:0.5rem;border-radius:0.65rem;border:2px solid ${_daycareMode==='package'?'#7B4015':'#E5E7EB'};background:${_daycareMode==='package'?'#7B4015':'#F9FAFB'};color:${_daycareMode==='package'?'#fff':'#6B7280'};cursor:pointer;text-align:center;transition:all 0.15s;">
                     <div style="font-size:0.85rem;">🎫</div>
                     <div style="font-size:0.72rem;font-weight:700;">Add to Package</div>
                     <div style="font-size:0.62rem;opacity:0.75;">Schedule later</div>
@@ -5752,17 +5632,17 @@ function buildBookingModal(selectedDate){
 
               <!-- Session quantity picker (package mode only) -->
               <div id="bk-session-picker" style="display:${_daycareMode==='package'?'':'none'}">
-                <div class="rounded-xl p-3" style="background:#FFFBEB;border:1px solid #c7d2fe;">
+                <div class="rounded-xl p-3" style="background:#FFFBEB;border:1px solid #FDE68A;">
                   <div class="flex items-center gap-3 mb-2.5">
                     <button type="button" onclick="stepSessions(-1)"
                       class="w-9 h-9 rounded-full flex items-center justify-center text-lg font-bold flex-shrink-0"
-                      style="border:2px solid #a5b4fc;color:#4338ca;background:#fff;">−</button>
-                    <span id="bk-session-qty" class="text-2xl font-bold text-indigo-900 min-w-[2.5rem] text-center">${_sessionQty}</span>
+                      style="border:2px solid #D4A96B;color:#92400E;background:#fff;">−</button>
+                    <span id="bk-session-qty" class="text-2xl font-bold text-amber-900 min-w-[2.5rem] text-center">${_sessionQty}</span>
                     <button type="button" onclick="stepSessions(1)"
                       class="w-9 h-9 rounded-full flex items-center justify-center text-lg font-bold flex-shrink-0"
-                      style="border:2px solid #a5b4fc;color:#4338ca;background:#fff;">+</button>
+                      style="border:2px solid #D4A96B;color:#92400E;background:#fff;">+</button>
                     <div id="bk-tier-label" class="flex-1 min-w-0">
-                      <span class="font-bold text-indigo-800 text-sm">$${tier.price}/session</span>
+                      <span class="font-bold text-amber-800 text-sm">$${tier.price}/session</span>
                       <span class="text-gray-300 mx-1">·</span>
                       <span class="text-amber-600 text-xs">${tier.badge}</span>
                     </div>
@@ -5817,7 +5697,7 @@ function buildBookingModal(selectedDate){
           <div class="rounded-xl border border-gray-200 overflow-hidden">
             <div class="px-3 py-2 flex items-center gap-2" style="background:#F8F4F0;border-bottom:1px solid #E5E7EB;">
               <span class="text-sm">✨</span>
-              <span class="text-xs font-bold text-indigo-900 uppercase tracking-wider">Special Service</span>
+              <span class="text-xs font-bold text-amber-900 uppercase tracking-wider">Special Service</span>
             </div>
             <div class="p-3 space-y-3">
               <div>
@@ -5838,7 +5718,7 @@ function buildBookingModal(selectedDate){
         <!-- ⑥ WARNINGS ──────────────────────────────────────────── -->
         <div id="vacc-warning" class="text-xs hidden p-2.5 rounded-xl"></div>
         <div id="vacc-override-row" class="hidden">
-          <label class="flex items-center gap-2 text-xs text-indigo-800 cursor-pointer px-3 py-2 rounded-xl" style="background:#eef2ff;border:1px solid #c7d2fe;">
+          <label class="flex items-center gap-2 text-xs text-amber-800 cursor-pointer px-3 py-2 rounded-xl" style="background:#FFF7ED;border:1px solid #FDE68A;">
             <input type="checkbox" id="vacc-override-cb" class="accent-amber-700 flex-shrink-0">
             <span><strong>Admin override</strong> — proceed despite expired vaccines</span>
           </label>
@@ -5923,10 +5803,10 @@ function buildBookingModal(selectedDate){
         <div id="bk-policy-notice"></div>
 
         <!-- ⑧ PRICE SUMMARY ─────────────────────────────────────── -->
-        <div id="price-preview" class="hidden rounded-xl p-3.5" style="background:#FFFBEB;border:1px solid #c7d2fe;">
-          <div class="font-semibold text-indigo-900 mb-1.5 text-sm flex items-center gap-1.5">💰 Booking Summary</div>
-          <div id="price-lines" class="text-indigo-800 space-y-0.5 text-xs leading-relaxed"></div>
-          <div id="price-total" class="font-bold text-indigo-900 text-base mt-2 pt-2" style="border-top:1px solid #c7d2fe;"></div>
+        <div id="price-preview" class="hidden rounded-xl p-3.5" style="background:#FFFBEB;border:1px solid #FDE68A;">
+          <div class="font-semibold text-amber-900 mb-1.5 text-sm flex items-center gap-1.5">💰 Booking Summary</div>
+          <div id="price-lines" class="text-amber-800 space-y-0.5 text-xs leading-relaxed"></div>
+          <div id="price-total" class="font-bold text-amber-900 text-base mt-2 pt-2" style="border-top:1px solid #FDE68A;"></div>
         </div>
 
         <!-- ⑧ NOTES ─────────────────────────────────────────────── -->
@@ -5947,7 +5827,7 @@ function buildBookingModal(selectedDate){
         <!-- ⑨ SUBMIT ─────────────────────────────────────────────── -->
         <div class="flex gap-2 pt-1">
           <button type="submit" class="flex-1 py-3 text-white rounded-xl text-sm font-bold tracking-wide shadow-sm"
-            style="background:#6366f1;" onmouseover="this.style.background='#4f46e5'" onmouseout="this.style.background='#6366f1'">
+            style="background:#7B4015;" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">
             ${_daycareMode==='package'&&_bookingMain==='daycare'?'🎫 Purchase Package':'✓ Confirm Booking'}
           </button>
           <button type="button" onclick="closeModal()"
@@ -5988,7 +5868,7 @@ function buildServiceModal(editId){
           <input id="svc-price" type="number" min="0" step="0.01" required value="${svc?.price||''}" placeholder="0.00"
             class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
         <div class="flex gap-2 pt-1">
-          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#6366f1" onmouseover="this.style.background='#4f46e5'" onmouseout="this.style.background='#6366f1'">${isEdit?'Save Changes':'Add Service'}</button>
+          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">${isEdit?'Save Changes':'Add Service'}</button>
           <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
         </div>
       </form>
@@ -6005,11 +5885,11 @@ function buildAddClientModal(){
         <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
       </div>
       <!-- Voice / AI intake bar -->
-      <div class="mb-4 rounded-xl p-3 flex flex-col gap-2" style="background:#FFFBEB;border:1px solid #c7d2fe;">
+      <div class="mb-4 rounded-xl p-3 flex flex-col gap-2" style="background:#FFFBEB;border:1px solid #FDE68A;">
         <div class="flex items-center gap-2">
           <button id="voice-intake-btn" type="button" onclick="startVoiceIntake()"
             class="flex items-center gap-1.5 px-3 py-1.5 text-white text-xs font-semibold rounded-lg flex-shrink-0"
-            style="background:#6366f1;border:none;cursor:pointer;${!hasGemini?'opacity:.5;pointer-events:none;':''}"
+            style="background:#7B4015;border:none;cursor:pointer;${!hasGemini?'opacity:.5;pointer-events:none;':''}"
             ${!hasGemini?'title="Add a Gemini API key in Settings to enable voice intake"':''}>
             🎙️ Voice Fill
           </button>
@@ -6042,7 +5922,7 @@ function buildAddClientModal(){
                 <option value="true">Up to Date</option><option value="false">Not Current</option>
               </select></div>
             <div class="col-span-2 bg-amber-50 border border-amber-100 rounded-xl p-3">
-              <p class="text-xs text-indigo-800 font-medium">📄 Vaccine records</p>
+              <p class="text-xs text-amber-800 font-medium">📄 Vaccine records</p>
               <p class="text-xs text-amber-700 mt-0.5">After saving the client, open their card and click <strong>Upload Record</strong> — Gemini AI will read the file and fill in all vaccines and expiry dates automatically.</p>
             </div>
           </div>
@@ -6053,7 +5933,7 @@ function buildAddClientModal(){
               class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none"></textarea></div>
         </div>
         <div class="flex gap-2 pt-1">
-          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#6366f1" onmouseover="this.style.background='#4f46e5'" onmouseout="this.style.background='#6366f1'">Add Client</button>
+          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015" onmouseover="this.style.background='#6A3511'" onmouseout="this.style.background='#7B4015'">Add Client</button>
           <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
         </div>
       </form>
@@ -6081,7 +5961,7 @@ function buildEditClientModal(clientId){
             <input id="ecl-phone" type="tel" value="${fmtPhone(cl.phone||'')}" oninput="phoneInputHandler(this)" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"></div>
         </div>
         <div class="flex gap-2 pt-1">
-          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#6366f1">Save Changes</button>
+          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">Save Changes</button>
           <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
         </div>
       </form>
@@ -6129,7 +6009,7 @@ function buildEditDogModal(clientId,dogId){
           </select>
         </div>
         <div class="flex gap-2 pt-1">
-          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#6366f1">Save Changes</button>
+          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">Save Changes</button>
           <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
         </div>
       </form>
@@ -6180,7 +6060,7 @@ function buildEditInvoiceModal(invoiceId){
             </select></div>
         </div>
         <div class="flex gap-2 pt-1">
-          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#6366f1">Save Changes</button>
+          <button type="submit" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#7B4015">Save Changes</button>
           <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
         </div>
       </form>
@@ -6290,12 +6170,12 @@ function buildVaccinesLightbox(){
     </div>`:''}
 
     <!-- Upload full record button -->
-    <div class="mb-4 rounded-2xl border border-amber-200 p-4" style="background:linear-gradient(135deg,#eef2ff,#e0e7ff);">
-      <div class="text-sm font-semibold text-indigo-800 mb-1">📄 Upload Vaccine Record</div>
+    <div class="mb-4 rounded-2xl border border-amber-200 p-4" style="background:linear-gradient(135deg,#FFFBF0,#FEF3C7);">
+      <div class="text-sm font-semibold text-amber-800 mb-1">📄 Upload Vaccine Record</div>
       <p class="text-xs text-amber-700 mb-3">Take a photo of your vet record or upload a PDF — AI reads all vaccines and dates automatically.</p>
       <button id="cvbtn-lb-${dog.id}" onclick="handleClientVaccUpload(${cl.id},${dog.id})"
         class="w-full py-2.5 rounded-xl text-white text-sm font-semibold hover:opacity-90 transition-opacity"
-        style="background:#818cf8;">
+        style="background:#C4952A;">
         📷 Upload Record (AI Reads All Dates)
       </button>
     </div>
@@ -6484,12 +6364,12 @@ function startVoiceIntake(){
   rec.onerror=(e)=>{
     showToast('Mic error: '+e.error,'#EF4444');
     _voiceRecognizer=null;
-    if(micBtn){micBtn.innerHTML='🎙️ Voice Fill';micBtn.style.background='#6366f1';micBtn.style.animation='';}
+    if(micBtn){micBtn.innerHTML='🎙️ Voice Fill';micBtn.style.background='#7B4015';micBtn.style.animation='';}
     if(micStatus)micStatus.textContent='';
   };
   rec.onend=async()=>{
     _voiceRecognizer=null;
-    if(micBtn){micBtn.innerHTML='🎙️ Voice Fill';micBtn.style.background='#6366f1';micBtn.style.animation='';}
+    if(micBtn){micBtn.innerHTML='🎙️ Voice Fill';micBtn.style.background='#7B4015';micBtn.style.animation='';}
     if(!finalTranscript.trim()){if(micStatus)micStatus.textContent='No speech detected.';return;}
     if(micStatus)micStatus.textContent='🤖 Parsing with Gemini AI…';
     try{
@@ -6665,7 +6545,7 @@ function renderDailyScheduleGrid(){
       const em=s.name.toLowerCase().includes('board')?'🏡':s.name.toLowerCase().includes('half')?'½':'☀️';
       return `<button type="button" onclick="setDayType('${ds}','${s.name.replace(/'/g,"&#39;")}')"
         class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap"
-        style="${active?'background:#818cf8;color:#fff;border:2px solid #818cf8':'background:#F9FAFB;color:#6B7280;border:2px solid #E5E7EB'}">${em} ${s.name}</button>`;
+        style="${active?'background:#C4952A;color:#fff;border:2px solid #C4952A':'background:#F9FAFB;color:#6B7280;border:2px solid #E5E7EB'}">${em} ${s.name}</button>`;
     };
     const isBoarding=cur.toLowerCase().includes('board');
     const rateLabel=`$${curSvc.price}${isBoarding?'/nt':'/day'}`;
@@ -6691,23 +6571,23 @@ function renderDailyScheduleGrid(){
   // Chip badges — one per unique service type
   const chips=svcTypes.map(n=>{
     const em=n.toLowerCase().includes('board')?'🏡':n.toLowerCase().includes('half')?'½':'☀️';
-    return`<span style="background:#e0e7ff;color:#4338ca;border:1px solid #c7d2fe;border-radius:999px;padding:1px 8px;font-size:.68rem;font-weight:600;">${em} ${n}</span>`;
+    return`<span style="background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;border-radius:999px;padding:1px 8px;font-size:.68rem;font-weight:600;">${em} ${n}</span>`;
   }).join(' ');
   const collapsed=_schedGridCollapsed;
   const chevron=collapsed
-    ?`<svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="flex-shrink:0;transition:transform .2s"><path d="M3 4.5L6 7.5L9 4.5" stroke="#4338ca" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
-    :`<svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="flex-shrink:0;transition:transform .2s"><path d="M3 7.5L6 4.5L9 7.5" stroke="#4338ca" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    ?`<svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="flex-shrink:0;transition:transform .2s"><path d="M3 4.5L6 7.5L9 4.5" stroke="#92400E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+    :`<svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="flex-shrink:0;transition:transform .2s"><path d="M3 7.5L6 4.5L9 7.5" stroke="#92400E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   container.innerHTML=`
     <div style="border:1px solid #F3E8D6;border-radius:12px;overflow:hidden;">
       <!-- Collapsible header -->
       <button type="button" onclick="toggleSchedGrid()"
         style="width:100%;display:flex;align-items:center;justify-content:space-between;background:#FBF7F3;border:none;padding:.55rem .75rem;cursor:pointer;gap:.5rem;">
         <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;min-width:0;">
-          <span style="font-size:.72rem;font-weight:700;color:#6366f1;white-space:nowrap;">📋 ${dates.length} days</span>
+          <span style="font-size:.72rem;font-weight:700;color:#7B4015;white-space:nowrap;">📋 ${dates.length} days</span>
           ${chips}
         </div>
         <div style="display:flex;align-items:center;gap:.4rem;flex-shrink:0;">
-          <span style="font-size:.75rem;font-weight:700;color:#6366f1;">$${subtotal}</span>
+          <span style="font-size:.75rem;font-weight:700;color:#7B4015;">$${subtotal}</span>
           ${chevron}
         </div>
       </button>
@@ -6761,9 +6641,9 @@ function renderMiniCal(){
       bg='#F3F4F6';color='#D1D5DB';cursor='default';
       // Solid grey only — hatching reserved for fully-booked future days
     } else if(isStart||isEnd){
-      bg='#6366f1';color='#fff';
+      bg='#7B4015';color='#fff';
     } else if(inRange){
-      bg='#e0e7ff';color='#4338ca';
+      bg='#FEF3C7';color='#92400E';
     } else if(full){
       // diagonal stripe for fully booked
       stripeOverlay=`background-image:repeating-linear-gradient(135deg,transparent,transparent 5px,rgba(160,160,170,0.45) 5px,rgba(160,160,170,0.45) 6px);`;
@@ -6771,7 +6651,7 @@ function renderMiniCal(){
       label='<div style="font-size:9px;color:#C4C9D4;line-height:1;margin-top:1px;">Full</div>';
     }
 
-    const todayRing=isToday&&!isStart&&!isEnd?'box-shadow:0 0 0 2px #6366f1;':'';
+    const todayRing=isToday&&!isStart&&!isEnd?'box-shadow:0 0 0 2px #7B4015;':'';
     const clickable=!isPast&&!full;
 
     cells.push(`
@@ -6788,7 +6668,7 @@ function renderMiniCal(){
 
   // Range display pill above the grid
   const rangePill=_miniCalStart?`
-    <div style="text-align:center;padding:.35rem .5rem;background:#e0e7ff;border-bottom:1px solid #c7d2fe;font-size:.75rem;color:#4338ca;font-weight:600;">
+    <div style="text-align:center;padding:.35rem .5rem;background:#FEF3C7;border-bottom:1px solid #FDE68A;font-size:.75rem;color:#92400E;font-weight:600;">
       ${_miniCalStart===_miniCalEnd||!_miniCalEnd
         ?`📅 ${fmtDateShort(_miniCalStart)}`
         :`📅 ${fmtDateShort(_miniCalStart)} → ${fmtDateShort(_miniCalEnd)} · ${getDatesInRange(_miniCalStart,_miniCalEnd).length} day${getDatesInRange(_miniCalStart,_miniCalEnd).length===1?'':'s'}`}
@@ -7058,7 +6938,7 @@ function showCourierTerms(){
   ov.innerHTML=`
     <div style="background:white;border-radius:20px;padding:1.75rem;max-width:460px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:85vh;overflow-y:auto;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:1.2rem;">
-        <div style="width:38px;height:38px;background:linear-gradient(135deg,#6366f1,#a5b4fc);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">🚗</div>
+        <div style="width:38px;height:38px;background:linear-gradient(135deg,#7B4015,#D4A96B);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">🚗</div>
         <div>
           <div style="font-weight:800;font-size:1.1rem;color:#111827;">Courier Service Terms</div>
           <div style="font-size:.72rem;color:#9CA3AF;">${biz} Pickup & Dropoff</div>
@@ -7082,7 +6962,7 @@ function showCourierTerms(){
         ${biz} exercises reasonable care during transport. However, we are not liable for incidents caused by pet behavior (e.g., escape, aggression). Pet owners are responsible for ensuring their dog is comfortable with car travel.</p>
       </div>
       <button onclick="document.getElementById('np-courier-tc-modal').remove()"
-        style="width:100%;padding:.7rem;background:#6366f1;color:white;border:none;border-radius:12px;font-size:.9rem;font-weight:700;cursor:pointer;margin-top:.5rem;">
+        style="width:100%;padding:.7rem;background:#7B4015;color:white;border:none;border-radius:12px;font-size:.9rem;font-weight:700;cursor:pointer;margin-top:.5rem;">
         I Understand
       </button>
     </div>`;
@@ -7119,7 +6999,7 @@ function updateBookingPrice(){
     }
     html+=`<div class="font-medium">Subtotal: $${baseTotal.toFixed(2)}</div>`;
     const deposit=Math.ceil(baseTotal*0.25*100)/100;
-    html+=`<div class="mt-1 font-semibold" style="color:#6366f1;">🔐 25% deposit due now: <strong>$${deposit.toFixed(2)}</strong></div>`;
+    html+=`<div class="mt-1 font-semibold" style="color:#7B4015;">🔐 25% deposit due now: <strong>$${deposit.toFixed(2)}</strong></div>`;
     html+=`<div style="color:#9CA3AF;font-size:.7rem;">Remaining $${(baseTotal-deposit).toFixed(2)} due at check-in</div>`;
     total=baseTotal;
   } else if(_bookingMain==='combo'){
@@ -7140,7 +7020,7 @@ function updateBookingPrice(){
           html+=`<div class="text-xs text-amber-700">🐾 ${_dogNames.join(', ')} (${_dogCount} dogs) · 1st dog: $${perDogBoard} · ${_dogCount-1} more at ${_disc}% off</div>`;
         }
         html+=`<div>Boarding subtotal: $${bTotal.toFixed(2)}</div>`;
-        html+=`<div class="mt-0.5 font-semibold" style="color:#6366f1;">🔐 25% deposit due now: <strong>$${bDeposit.toFixed(2)}</strong></div>`;
+        html+=`<div class="mt-0.5 font-semibold" style="color:#7B4015;">🔐 25% deposit due now: <strong>$${bDeposit.toFixed(2)}</strong></div>`;
         total+=bTotal;
         hasContent=true;
       }
@@ -7443,7 +7323,7 @@ function populateInvoiceItems(){
     // Likely already invoiced if dog name + check-in date appear together in captured invoices
     const likely=capturedText.includes(b.dogName.toLowerCase())&&capturedText.includes(b.checkIn);
     return`<label class="flex items-center gap-3 px-3 py-2.5 cursor-pointer" style="${likely?'opacity:.45;':''}background:${likely?'#F9FAFB':'#fff'};" onmouseover="this.style.background='#FFFBEB'" onmouseout="this.style.background='${likely?'#F9FAFB':'#fff'}'">
-      <input type="checkbox" class="inv-bk-cb" style="accent-color:#6366f1;flex-shrink:0;" data-id="${b.id}" data-price="${b.price}" onchange="recalcInvoiceAmount()" ${likely?'':'checked'}>
+      <input type="checkbox" class="inv-bk-cb" style="accent-color:#7B4015;flex-shrink:0;" data-id="${b.id}" data-price="${b.price}" onchange="recalcInvoiceAmount()" ${likely?'':'checked'}>
       <div style="flex:1;min-width:0;">
         <div style="font-size:.82rem;font-weight:600;color:#1F2937;">${b.dogName} · ${svcLabel}</div>
         <div style="font-size:.72rem;color:#9CA3AF;">${dateLabel}${likely?' · likely already invoiced':''}</div>
@@ -8499,7 +8379,7 @@ function showRainbowBridgeConfirm(clientId,dogId){
       <p style="font-size:.85rem;color:#6B7280;margin:0 0 1.5rem;line-height:1.6;">This will restore ${dog.name} to the active roster and allow new bookings.</p>
       <div style="display:flex;gap:.75rem;">
         <button onclick="document.getElementById('np-rb-confirm').remove()" style="flex:1;padding:.65rem;border:1px solid #E5E7EB;border-radius:12px;background:white;color:#6B7280;font-size:.875rem;cursor:pointer;">Cancel</button>
-        <button onclick="toggleDogDeceased(${clientId},${dogId})" style="flex:1;padding:.65rem;border:none;border-radius:12px;background:#6366f1;color:white;font-size:.875rem;font-weight:600;cursor:pointer;">Yes, Mark Active</button>
+        <button onclick="toggleDogDeceased(${clientId},${dogId})" style="flex:1;padding:.65rem;border:none;border-radius:12px;background:#7B4015;color:white;font-size:.875rem;font-weight:600;cursor:pointer;">Yes, Mark Active</button>
       </div>
     </div>`;
   }else{
@@ -8583,7 +8463,7 @@ function showVaccOverrideModal(clientId,dogId){
       <button onclick="document.getElementById('vacc-override-overlay').remove()" style="background:none;border:none;color:#9ca3af;font-size:1.5rem;cursor:pointer;line-height:1;">×</button>
     </div>
     <p style="font-size:.8rem;color:#6b7280;margin-bottom:1rem;line-height:1.5;">Override temporarily unlocks booking for this pet, bypassing all vaccine requirements. Use when a client is actively getting records updated, or as a goodwill gesture.</p>
-    ${hasOverride?`<div style="background:#eef2ff;border:1px solid #FED7AA;border-radius:10px;padding:.6rem .9rem;font-size:.8rem;color:#C2410C;margin-bottom:1rem;">
+    ${hasOverride?`<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:.6rem .9rem;font-size:.8rem;color:#C2410C;margin-bottom:1rem;">
       🔓 Current override: ${current.until==='indefinite'?'Waived indefinitely':`Extended until ${current.until}`}${current.by?` · by ${current.by}`:''}
     </div>`:''}
     <div style="margin-bottom:.75rem;">
@@ -8598,7 +8478,7 @@ function showVaccOverrideModal(clientId,dogId){
     </div>
     <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
       <button onclick="saveVaccOverride(${clientId},${dogId})"
-        style="flex:1;background:#6366f1;color:#fff;border:none;border-radius:10px;padding:.55rem;font-size:.85rem;font-weight:600;cursor:pointer;">
+        style="flex:1;background:#7B4015;color:#fff;border:none;border-radius:10px;padding:.55rem;font-size:.85rem;font-weight:600;cursor:pointer;">
         🔓 Apply Override
       </button>
       ${hasOverride?`<button onclick="clearVaccOverride(${clientId},${dogId})"
@@ -8719,7 +8599,7 @@ function buildAddDogModal(){
       <p class="text-xs text-gray-400 px-1">After adding, bring vaccine records to your first visit — or upload them here once your profile is saved.</p>
       <div class="flex gap-3 pt-1">
         <button type="button" onclick="state.showModal=null;render()" class="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50">Cancel</button>
-        <button id="add-dog-submit" type="submit" class="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style="background:#6366f1;">Add Pet</button>
+        <button id="add-dog-submit" type="submit" class="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold" style="background:#7B4015;">Add Pet</button>
       </div>
     </form>
   </div>
@@ -8806,7 +8686,7 @@ function sendInvoiceText(invId){
   }else{
     // Desktop: copy to clipboard and show the phone number + message
     navigator.clipboard.writeText(msg).then(()=>{
-      showToast(`📱 Message copied! ${phone?'Text to: '+cl?.phone:''}`,'#6366f1');
+      showToast(`📱 Message copied! ${phone?'Text to: '+cl?.phone:''}`,'#7B4015');
     }).catch(()=>{
       // Fallback: show a modal with the message
       prompt('Copy this message and text it to '+(cl?.phone||'the client')+':', msg);
@@ -8820,7 +8700,7 @@ async function sendInvoiceEmail(invId){
   if(!email){showToast('No email address on file for this client.','#EF4444');return;}
   // If Square invoice was already sent, offer to resend via Square or Gmail
   if(inv.squareInvoiceId){
-    showToast(`This invoice was sent via Square. The client received an email at ${email} with automatic reminders.`,'#6366f1');
+    showToast(`This invoice was sent via Square. The client received an email at ${email} with automatic reminders.`,'#7B4015');
     return;
   }
   const owed=inv.amount-(inv.paid||0)-(inv.externalPaid||0);
@@ -8851,27 +8731,6 @@ async function sendInvoiceEmail(invId){
     const body=`Hi ${inv.clientName},\n\nPayment reminder from ${biz}.\n\nServices: ${inv.items}\nAmount due: $${owed.toFixed(2)}\nDue date: ${inv.dueDate}${payUrl?'\n\nPay now: '+payUrl:''}\n\nThank you!\n${biz}`;
     window.open(`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,'_self');
   }
-}
-// ── Sweep unpaid bookings into invoices ──────────────────────────────────
-async function sweepBookingsToInvoices(){
-  const unpaidBks=bookings.filter(b=>b.status==='confirmed'&&(b.paymentStatus==='checkout_pending'||b.paymentStatus==='deposit_due')&&b.price>0);
-  const invoicedBkIds=new Set(invoices.filter(i=>i.paymentNote&&i.paymentNote.startsWith('bk-')).map(i=>i.paymentNote));
-  const sweepBks=unpaidBks.filter(b=>!invoicedBkIds.has('bk-'+b.id));
-  if(sweepBks.length===0){showToast('No new bookings to capture.');return;}
-  let count=0;
-  for(const b of sweepBks){
-    const cl=clients.find(c=>c.id===b.clientId);
-    const ni={
-      id:nextId(invoices),clientId:b.clientId,clientName:cl?.name||b.clientName||'',
-      amount:+b.price||0,paid:0,status:b.checkIn<TODAY?'overdue':'unpaid',
-      dueDate:b.checkIn||'',issueDate:TODAY,
-      items:b.dogName+' · '+(b.service||'Daycare')+' · '+fmtDateShort(b.checkIn),
-      externalPaid:0,paymentNote:'bk-'+b.id,checkoutUrl:b.checkoutUrl||'',squareInvoiceId:''
-    };
-    invoices.push(ni);count++;
-  }
-  render();showToast(`✅ ${count} booking${count===1?'':'s'} captured as invoice${count===1?'':'s'}!`);
-  try{await persistInvoices();}catch(err){showToast('Saved locally; sheet sync failed.','#F97316');}
 }
 async function submitInvoice(e){
   e.preventDefault();
@@ -9207,7 +9066,7 @@ function calcCancelRefund(checkInDateStr, depositAmount){
   const todayDate=new Date(TODAY+'T00:00:00');
   const daysUntil=Math.ceil((checkInDate-todayDate)/864e5);
   if(daysUntil>=7)return{daysUntil,refundPct:100,refundAmt:depositAmount,label:'Full refund',sublabel:'7+ days notice — full deposit returned',color:'#166534',bgColor:'#F0FDF4',borderColor:'#86EFAC',icon:'🟢'};
-  if(daysUntil>=3)return{daysUntil,refundPct:50,refundAmt:Math.round(depositAmount*0.5*100)/100,label:'50% refund',sublabel:`${daysUntil} days notice — half the deposit is returned`,color:'#4338ca',bgColor:'#FFFBEB',borderColor:'#FCD34D',icon:'🟡'};
+  if(daysUntil>=3)return{daysUntil,refundPct:50,refundAmt:Math.round(depositAmount*0.5*100)/100,label:'50% refund',sublabel:`${daysUntil} days notice — half the deposit is returned`,color:'#92400E',bgColor:'#FFFBEB',borderColor:'#FCD34D',icon:'🟡'};
   return{daysUntil,refundPct:0,refundAmt:0,label:'No refund',sublabel:daysUntil<=0?'Check-in has passed — deposit forfeited':`${daysUntil} day${daysUntil===1?'':'s'} notice — deposit forfeited per policy`,color:'#991B1B',bgColor:'#FEF2F2',borderColor:'#FCA5A5',icon:'🔴'};
 }
 
@@ -9223,7 +9082,7 @@ function showBookingWarningModal(checkInDateStr, daysUntil){
       title='Non-Refundable Window';
       body=`Your check-in is <strong>${daysUntil===1?'tomorrow':'in 2 days'} (${fmtDateShort(checkInDateStr)})</strong>.<br><br>You are within the <strong>non-refundable window</strong>. If you need to cancel this booking, <strong>no refund will be issued</strong> per our cancellation policy.`;
     } else if(daysUntil<=6){
-      icon='🟡';btnColor='#4338ca';
+      icon='🟡';btnColor='#92400E';
       title='50% Refund Window';
       body=`Your check-in is <strong>${daysUntil} days away (${fmtDateShort(checkInDateStr)})</strong>.<br><br>You are in the <strong>50% refund window</strong>. If you cancel, you will receive a <strong>50% refund of your deposit</strong> — the remaining 50% is non-refundable per our cancellation policy.`;
     } else {
@@ -9271,7 +9130,7 @@ function showWeekRevenueBreakdown(){
   ov.onclick=function(e){if(e.target===ov)ov.remove();};
   const rows=[
     ...bks.map(b=>`<tr style="border-bottom:1px solid #F3F4F6;"><td style="padding:.45rem .65rem;font-size:.8rem;color:#6B7280;">${b.checkIn}</td><td style="padding:.45rem .65rem;font-size:.8rem;font-weight:500;color:#111827;">${b.clientName}</td><td style="padding:.45rem .65rem;font-size:.8rem;color:#374151;">${b.service||'Service'}</td><td style="padding:.45rem .65rem;font-size:.8rem;font-weight:600;color:#111827;text-align:right;">$${(+b.price||0).toFixed(2)}</td></tr>`),
-    ...pkgs.map(p=>`<tr style="border-bottom:1px solid #F3F4F6;background:#FFFBEB;"><td style="padding:.45rem .65rem;font-size:.8rem;color:#6B7280;">${p.purchaseDate}</td><td style="padding:.45rem .65rem;font-size:.8rem;font-weight:500;color:#111827;">${p.clientName}</td><td style="padding:.45rem .65rem;font-size:.8rem;color:#4338ca;">🎫 Package · ${p.qty} sessions</td><td style="padding:.45rem .65rem;font-size:.8rem;font-weight:600;color:#111827;text-align:right;">$${(+p.totalPaid||0).toFixed(2)}</td></tr>`)
+    ...pkgs.map(p=>`<tr style="border-bottom:1px solid #F3F4F6;background:#FFFBEB;"><td style="padding:.45rem .65rem;font-size:.8rem;color:#6B7280;">${p.purchaseDate}</td><td style="padding:.45rem .65rem;font-size:.8rem;font-weight:500;color:#111827;">${p.clientName}</td><td style="padding:.45rem .65rem;font-size:.8rem;color:#92400E;">🎫 Package · ${p.qty} sessions</td><td style="padding:.45rem .65rem;font-size:.8rem;font-weight:600;color:#111827;text-align:right;">$${(+p.totalPaid||0).toFixed(2)}</td></tr>`)
   ].join('');
   ov.innerHTML=`<div style="background:white;border-radius:20px;padding:1.75rem;max-width:580px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);margin-top:1rem;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;">
@@ -9288,9 +9147,9 @@ function showWeekRevenueBreakdown(){
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`:`<p style="text-align:center;color:#9CA3AF;font-size:.875rem;padding:2rem 0;">No revenue recorded this week yet.</p>`}
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:.85rem 1rem;background:linear-gradient(90deg,#e0e7ff,#FFFBEB);border-radius:12px;border:1px solid #c7d2fe;margin-bottom:${bkTotal>0&&pkgTotal>0?'.6rem':'1rem'};">
-      <span style="font-size:.9rem;font-weight:600;color:#4338ca;">Grand Total This Week</span>
-      <span style="font-size:1.2rem;font-weight:800;color:#6366f1;">$${grandTotal.toFixed(2)}</span>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:.85rem 1rem;background:linear-gradient(90deg,#FEF3C7,#FFFBEB);border-radius:12px;border:1px solid #FDE68A;margin-bottom:${bkTotal>0&&pkgTotal>0?'.6rem':'1rem'};">
+      <span style="font-size:.9rem;font-weight:600;color:#92400E;">Grand Total This Week</span>
+      <span style="font-size:1.2rem;font-weight:800;color:#7B4015;">$${grandTotal.toFixed(2)}</span>
     </div>
     ${bkTotal>0&&pkgTotal>0?`<p style="font-size:.73rem;color:#9CA3AF;text-align:center;margin:0 0 .9rem;">Bookings: $${bkTotal.toFixed(2)} &nbsp;·&nbsp; Packages sold: $${pkgTotal.toFixed(2)}</p>`:''}
     <button onclick="document.getElementById('np-rev-breakdown').remove()" style="width:100%;padding:.65rem;border:1px solid #E5E7EB;border-radius:12px;background:white;color:#374151;font-size:.875rem;font-weight:500;cursor:pointer;">Close</button>
@@ -9325,12 +9184,12 @@ function showBuyPackageModal(){
       </div>`:`<input id="pkg-dog-select" type="hidden" value="${activeDogs[0].id}">`}
       <div style="margin-bottom:1rem;">
         <label style="display:block;font-size:.73rem;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem;">Number of sessions</label>
-        <div style="background:#FFFBEB;border:1px solid #c7d2fe;border-radius:.875rem;padding:.85rem;">
+        <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:.875rem;padding:.85rem;">
           <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;">
-            <button type="button" onclick="pkgModalStep(-1)" style="width:2.25rem;height:2.25rem;border-radius:50%;border:2px solid #a5b4fc;color:#4338ca;background:#fff;font-size:1.2rem;font-weight:700;cursor:pointer;line-height:1;flex-shrink:0;">−</button>
-            <span id="pkg-modal-qty" style="font-size:1.8rem;font-weight:800;color:#3730a3;min-width:2.5rem;text-align:center;">${_pkgModalQty}</span>
-            <button type="button" onclick="pkgModalStep(1)" style="width:2.25rem;height:2.25rem;border-radius:50%;border:2px solid #a5b4fc;color:#4338ca;background:#fff;font-size:1.2rem;font-weight:700;cursor:pointer;line-height:1;flex-shrink:0;">+</button>
-            <div id="pkg-modal-tier" style="flex:1;font-size:.82rem;font-weight:600;color:#4338ca;min-width:0;"></div>
+            <button type="button" onclick="pkgModalStep(-1)" style="width:2.25rem;height:2.25rem;border-radius:50%;border:2px solid #D4A96B;color:#92400E;background:#fff;font-size:1.2rem;font-weight:700;cursor:pointer;line-height:1;flex-shrink:0;">−</button>
+            <span id="pkg-modal-qty" style="font-size:1.8rem;font-weight:800;color:#78350F;min-width:2.5rem;text-align:center;">${_pkgModalQty}</span>
+            <button type="button" onclick="pkgModalStep(1)" style="width:2.25rem;height:2.25rem;border-radius:50%;border:2px solid #D4A96B;color:#92400E;background:#fff;font-size:1.2rem;font-weight:700;cursor:pointer;line-height:1;flex-shrink:0;">+</button>
+            <div id="pkg-modal-tier" style="flex:1;font-size:.82rem;font-weight:600;color:#92400E;min-width:0;"></div>
           </div>
           <div style="display:flex;gap:.4rem;flex-wrap:wrap;" id="pkg-modal-pills"></div>
         </div>
@@ -9339,7 +9198,7 @@ function showBuyPackageModal(){
         <div id="pkg-modal-price-display" style="font-size:1.4rem;font-weight:800;color:#15803D;"></div>
         <div id="pkg-modal-savings-display" style="font-size:.73rem;color:#16A34A;margin-top:.15rem;"></div>
       </div>
-      <button onclick="buyPackageFromProfile()" style="width:100%;padding:.8rem;background:#6366f1;color:#fff;border:none;border-radius:.875rem;font-weight:700;font-size:.95rem;cursor:pointer;letter-spacing:.01em;">
+      <button onclick="buyPackageFromProfile()" style="width:100%;padding:.8rem;background:#7B4015;color:#fff;border:none;border-radius:.875rem;font-weight:700;font-size:.95rem;cursor:pointer;letter-spacing:.01em;">
         💳 Purchase Sessions via Square →
       </button>
       <p style="text-align:center;font-size:.68rem;color:#9CA3AF;margin:.5rem 0 0;line-height:1.4;">You'll be taken to Square's secure checkout to complete payment.</p>
@@ -9368,7 +9227,7 @@ function pkgModalRefresh(){
   if(pillsEl){
     pillsEl.innerHTML=[[1,4,55,'1–4'],[5,14,45,'5–14'],[15,19,40,'15–19'],[20,999,35,'20+']].map(([lo,hi,p,lbl])=>{
       const active=qty>=lo&&qty<=hi;
-      return`<span style="padding:.2rem .55rem;border-radius:.45rem;font-size:.65rem;font-weight:600;background:${active?'#6366f1':'#F3F4F6'};color:${active?'#fff':'#6B7280'};border:1px solid ${active?'#6366f1':'#E5E7EB'};cursor:pointer;" onclick="pkgModalJump(${lo})">${lbl} → $${p}</span>`;
+      return`<span style="padding:.2rem .55rem;border-radius:.45rem;font-size:.65rem;font-weight:600;background:${active?'#7B4015':'#F3F4F6'};color:${active?'#fff':'#6B7280'};border:1px solid ${active?'#7B4015':'#E5E7EB'};cursor:pointer;" onclick="pkgModalJump(${lo})">${lbl} → $${p}</span>`;
     }).join('');
   }
 }
@@ -9455,9 +9314,9 @@ function buildUnpaidBanner(){
   const totalDue=unpaid.reduce((s,b)=>s+b.amountDue,0);
   const hasOverdue=unpaid.some(b=>b.urgency==='overdue');
   const hasUrgent=unpaid.some(b=>b.urgency==='urgent');
-  const bgColor=hasOverdue?'#FEF2F2':hasUrgent?'#eef2ff':'#FFFBEB';
-  const borderColor=hasOverdue?'#FECACA':hasUrgent?'#FED7AA':'#c7d2fe';
-  const textColor=hasOverdue?'#991B1B':hasUrgent?'#4338ca':'#4338ca';
+  const bgColor=hasOverdue?'#FEF2F2':hasUrgent?'#FFF7ED':'#FFFBEB';
+  const borderColor=hasOverdue?'#FECACA':hasUrgent?'#FED7AA':'#FDE68A';
+  const textColor=hasOverdue?'#991B1B':hasUrgent?'#9A3412':'#92400E';
   const iconColor=hasOverdue?'#DC2626':hasUrgent?'#EA580C':'#D97706';
   const label=hasOverdue?'Payment Overdue':hasUrgent?'Payment Due Soon':'Payment Required';
   // Use the most urgent unpaid booking for the Pay Now button
@@ -9562,15 +9421,15 @@ function showPayNowBanner(checkoutUrl, amountDollars, description){
       <div style="font-size:2.8rem;margin-bottom:.5rem;">💳</div>
       <h3 style="font-size:1.15rem;font-weight:700;color:#111827;margin:0 0 .4rem;">Confirm & Pay Now</h3>
       <p style="font-size:.875rem;color:#374151;margin:0 0 .25rem;">${description}</p>
-      <p style="font-size:1.65rem;font-weight:800;color:#6366f1;margin:.25rem 0 .6rem;">$${Number(amountDollars).toFixed(2)}</p>
+      <p style="font-size:1.65rem;font-weight:800;color:#7B4015;margin:.25rem 0 .6rem;">$${Number(amountDollars).toFixed(2)}</p>
       <p style="font-size:.75rem;color:#6B7280;margin:0 0 1.25rem;line-height:1.5;">Complete payment now to confirm your booking. You'll be taken to Square's secure checkout page.</p>
       <div style="display:flex;flex-direction:column;gap:.5rem;">
         <a href="${checkoutUrl}" target="_blank" onclick="document.getElementById('np-paynow-banner').remove()"
-          style="display:block;padding:.85rem 1.5rem;background:#6366f1;color:white;border-radius:14px;font-size:.95rem;font-weight:700;text-decoration:none;box-shadow:0 4px 12px rgba(123,64,21,0.3);">
+          style="display:block;padding:.85rem 1.5rem;background:#7B4015;color:white;border-radius:14px;font-size:.95rem;font-weight:700;text-decoration:none;box-shadow:0 4px 12px rgba(123,64,21,0.3);">
           💳 Confirm & Pay $${Number(amountDollars).toFixed(2)} →
         </a>
         <p style="font-size:.7rem;color:#9CA3AF;margin:.25rem 0 0;line-height:1.4;">
-          Or <button onclick="document.getElementById('np-paynow-banner').remove()" style="background:none;border:none;cursor:pointer;color:#6366f1;font-size:.7rem;text-decoration:underline;padding:0;">pay later from My Account</button> — your booking is saved but unpaid bookings may be subject to our payment policy.
+          Or <button onclick="document.getElementById('np-paynow-banner').remove()" style="background:none;border:none;cursor:pointer;color:#7B4015;font-size:.7rem;text-decoration:underline;padding:0;">pay later from My Account</button> — your booking is saved but unpaid bookings may be subject to our payment policy.
         </p>
       </div>
     </div>`;
@@ -9747,7 +9606,7 @@ function showCancellationPolicyModal(){
     <div class="policy-modal-box">
       <div class="policy-modal-header">
         <div style="display:flex;align-items:center;gap:10px;">
-          <div style="width:34px;height:34px;background:linear-gradient(135deg,#6366f1,#312e81);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">📋</div>
+          <div style="width:34px;height:34px;background:linear-gradient(135deg,#7B4015,#5C3317);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">📋</div>
           <div>
             <div style="font-weight:700;font-size:1rem;color:#111827;">Cancellation Policy</div>
             <div style="font-size:0.72rem;color:#9CA3AF;">Nigel's Place · Effective 2026</div>
@@ -9779,7 +9638,7 @@ function showCancellationPolicyModal(){
         <p>Late pick-ups (after 6:00 PM) will incur an additional fee. If a different time is needed, please contact Nigel's Place in advance.</p>
       </div>
       <div class="policy-modal-footer">
-        <button onclick="document.getElementById('np-cancel-modal').remove()" style="background:#6366f1;color:#fff;border:none;border-radius:10px;padding:.5rem 1.5rem;font-size:.875rem;font-weight:600;cursor:pointer;">Got it</button>
+        <button onclick="document.getElementById('np-cancel-modal').remove()" style="background:#7B4015;color:#fff;border:none;border-radius:10px;padding:.5rem 1.5rem;font-size:.875rem;font-weight:600;cursor:pointer;">Got it</button>
       </div>
     </div>`;
   document.body.appendChild(ov);
@@ -9852,7 +9711,7 @@ function showPolicyModal(type){
     <div class="policy-modal-box">
       <div class="policy-modal-header">
         <div style="display:flex;align-items:center;gap:10px;">
-          <div style="width:34px;height:34px;background:linear-gradient(135deg,#6366f1,#312e81);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">🐾</div>
+          <div style="width:34px;height:34px;background:linear-gradient(135deg,#7B4015,#5C3317);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">🐾</div>
           <div>
             <div style="font-weight:700;font-size:1rem;color:#111827;">${title}</div>
             <div style="font-size:0.72rem;color:#9CA3AF;">${CONFIG.APP_NAME} · ${CONFIG.APP_COMPANY} · Effective March 9, 2026</div>
@@ -9862,7 +9721,7 @@ function showPolicyModal(type){
       </div>
       <div class="policy-modal-body">${content}</div>
       <div class="policy-modal-footer">
-        <button onclick="document.getElementById('np-policy-modal').remove()" style="background:#6366f1;color:white;border:none;padding:0.5rem 1.5rem;border-radius:10px;cursor:pointer;font-size:0.85rem;font-weight:600;">Close</button>
+        <button onclick="document.getElementById('np-policy-modal').remove()" style="background:#7B4015;color:white;border:none;padding:0.5rem 1.5rem;border-radius:10px;cursor:pointer;font-size:0.85rem;font-weight:600;">Close</button>
       </div>
     </div>`;
   document.body.appendChild(ov);
@@ -9963,8 +9822,8 @@ function buildKioskView(adminPreview=false){
   const dateStr=new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const timeStr=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
   const outerStyle=adminPreview
-    ?'background:linear-gradient(135deg,#1e1b4b,#6366f1);border-radius:1rem;overflow:hidden;min-height:520px;'
-    :'position:fixed;inset:0;background:linear-gradient(135deg,#1e1b4b,#312e81,#1e1b4b);overflow:auto;';
+    ?'background:linear-gradient(135deg,#3d1a08,#7B4015);border-radius:1rem;overflow:hidden;min-height:520px;'
+    :'position:fixed;inset:0;background:linear-gradient(135deg,#3d1a08,#5C3317,#3d1a08);overflow:auto;';
   return`
   <div id="kiosk-root" style="${outerStyle}font-family:system-ui,sans-serif;display:flex;flex-direction:column;min-height:${adminPreview?'520px':'100vh'};">
     <!-- Header -->
@@ -10045,7 +9904,7 @@ function buildKioskView(adminPreview=false){
 const _kioskMode=new URLSearchParams(window.location.search).has('kiosk');
 if(_kioskMode){
   if(!CONFIG.KIOSK_API_KEY||!CONFIG.SHEET_ID){
-    document.getElementById('app').innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#1e1b4b;color:white;font-family:sans-serif;text-align:center;padding:2rem;">
+    document.getElementById('app').innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#3d1a08;color:white;font-family:sans-serif;text-align:center;padding:2rem;">
       <div style="font-size:3rem;margin-bottom:1rem;">⚙️</div>
       <div style="font-size:1.4rem;font-weight:700;margin-bottom:.75rem;">Kiosk Not Configured</div>
       <div style="color:rgba(255,255,255,.5);max-width:420px;line-height:1.6;">Set <code>KIOSK_API_KEY</code> and ensure <code>SHEET_ID</code> are filled in the CONFIG section of the HTML file. Then share your Google Sheet as "Anyone with link can view".</div>
