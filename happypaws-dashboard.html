@@ -8982,10 +8982,14 @@ async function syncSquarePayments(){
   if(!_proxyUrl){if(btn){btn.disabled=false;btn.style.opacity='1';btn.innerHTML=origHtml;}return;}
   try{
     const res=await proxyClientWrite('syncSquarePayments',{});
+    // Log full response for debugging
+    console.log('[SYNC] Full response:', JSON.stringify(res));
     if(res?.ok){
       const upd=res.updated||{};
+      const dbg=res.debug||{};
       const bkCount=(upd.bookings||[]).length;
       const invCount=(upd.invoices||[]).length;
+      console.log('[SYNC] Debug:', JSON.stringify(dbg));
       // Apply booking updates locally
       (upd.bookings||[]).forEach(u=>{
         const bk=bookings.find(b=>String(b.id)===String(u.id));
@@ -9000,7 +9004,9 @@ async function syncSquarePayments(){
         render();
         showToast(`✅ Synced! ${bkCount} booking${bkCount===1?'':'s'} + ${invCount} invoice${invCount===1?'':'s'} updated.`);
       }else{
-        showToast('All payments up to date — nothing new from Square.');
+        const pending=dbg.pendingCount||0;
+        const sqPay=dbg.paymentsFromSquare||0;
+        showToast(`All up to date. (${pending} pending bookings checked against ${sqPay} Square payments)`);
       }
     }else{
       showToast(`Sync error: ${res?.error||'unknown'}`,'#EF4444');
