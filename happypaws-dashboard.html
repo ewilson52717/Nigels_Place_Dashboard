@@ -4003,21 +4003,23 @@ function buildServicesView(){
   </div>`;
 }
 function buildInvoicesView(){
-  // ── Build unified items list: invoices + unpaid bookings merged together ──
+  // ── Build unified items list: invoices + ALL priced bookings merged together ──
   const invoicedBkIds=new Set(invoices.filter(i=>i.paymentNote&&i.paymentNote.startsWith('bk-')).map(i=>i.paymentNote));
-  const unpaidBks=bookings.filter(b=>{
+  const relevantBks=bookings.filter(b=>{
     if(b.status==='cancelled')return false;
-    if(b.paymentStatus==='paid'||b.paymentStatus==='refunded')return false;
+    if(b.paymentStatus==='refunded')return false;
     if((+b.price||0)<=0)return false;
     if(invoicedBkIds.has('bk-'+b.id))return false; // already has a matching invoice
     return true;
   });
-  // Create virtual invoice-like items from unpaid bookings
-  const bkItems=unpaidBks.map(b=>{
+  // Create virtual invoice-like items from bookings (including paid ones)
+  const bkItems=relevantBks.map(b=>{
     const cl=clients.find(c=>c.id===b.clientId);
+    const isPaid=b.paymentStatus==='paid'||b.paymentStatus==='deposit_paid';
+    const amt=+b.price||0;
     return{_isBooking:true,_bkId:b.id,id:'bk-'+b.id,clientName:cl?.name||b.clientName||'',
-      items:b.dogName+' · '+(b.service||'Daycare'),amount:+b.price||0,paid:0,externalPaid:0,
-      status:b.checkIn<TODAY?'overdue':'unpaid',dueDate:b.checkIn||'',issueDate:b.checkIn||'',
+      items:b.dogName+' · '+(b.service||'Daycare'),amount:amt,paid:isPaid?amt:0,externalPaid:0,
+      status:isPaid?'paid':(b.checkIn<TODAY?'overdue':'unpaid'),dueDate:b.checkIn||'',issueDate:b.checkIn||'',
       checkoutUrl:b.checkoutUrl||'',squareInvoiceId:'',paymentNote:'bk-'+b.id,
       _dogName:b.dogName,_service:b.service,_checkIn:b.checkIn};
   });
@@ -4042,6 +4044,7 @@ function buildInvoicesView(){
         <p class="text-sm text-gray-400 mt-1">Everything owed, collected, and outstanding — all in one place</p>
       </div>
       <div class="flex items-center gap-2">
+        <button onclick="clearAllTestData()" class="px-3 py-2.5 rounded-xl text-sm font-medium border border-red-200 text-red-500 bg-red-50 hover:bg-red-100 transition-all" title="Delete all bookings and invoices">🧹 Clear All</button>
         <button onclick="syncSquarePayments()" id="sync-payments-btn" class="btn-glow px-3 py-2.5 rounded-xl text-sm font-medium border border-indigo-200 text-indigo-600 bg-indigo-50 hover:bg-indigo-100" title="Check Square for completed payments">
           <span style="display:inline-block;transition:transform 0.3s" onmouseover="this.style.transform='rotate(180deg)'" onmouseout="this.style.transform='rotate(0)'">🔄</span> Sync
         </button>
@@ -4134,10 +4137,12 @@ function buildInvoicesView(){
                 :'<button onclick="sendInvoiceText('+item.id+')" class="btn-glow text-xs px-3 py-1.5 rounded-lg text-white font-medium" style="background:linear-gradient(135deg,#6366f1,#818cf8)">📱 Text</button>'
                  +'<button onclick="sendInvoiceEmail('+item.id+')" class="btn-glow text-xs px-3 py-1.5 rounded-lg text-white font-medium" style="background:linear-gradient(135deg,#2563eb,#3b82f6)">📧 Email</button>'
                  +'<button onclick="markInvoicePaid('+item.id+')" class="btn-glow text-xs px-4 py-2 rounded-lg text-white font-semibold" style="background:linear-gradient(135deg,#10b981,#059669)">💰 Mark as Paid</button>')))
-          // Edit/Delete for real invoices only
-          +(!isBk?'<div class="flex-1"></div>'
-            +'<button onclick="openEditInvoiceModal('+item.id+')" class="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 hover:border-gray-300 transition-all">✏️ Edit</button>'
-            +'<button onclick="deleteInvoice('+item.id+')" class="text-xs px-2.5 py-1.5 rounded-lg border border-red-100 text-red-400 hover:bg-red-50 hover:border-red-200 transition-all">🗑️</button>':'')
+          // Edit/Delete actions
+          +'<div class="flex-1"></div>'
+          +(!isBk
+            ?'<button onclick="openEditInvoiceModal('+item.id+')" class="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 hover:border-gray-300 transition-all">✏️ Edit</button>'
+             +'<button onclick="deleteInvoice('+item.id+')" class="text-xs px-2.5 py-1.5 rounded-lg border border-red-100 text-red-400 hover:bg-red-50 hover:border-red-200 transition-all">🗑️ Delete</button>'
+            :'<button onclick="deleteBooking('+item._bkId+')" class="text-xs px-2.5 py-1.5 rounded-lg border border-red-100 text-red-400 hover:bg-red-50 hover:border-red-200 transition-all">🗑️ Delete</button>')
           +'</div></div>';
       }).join('')}
     </div>`}
@@ -8479,6 +8484,25 @@ async function deleteInvoice(id){
   if(idx>=0)invoices.splice(idx,1);
   render();showToast('Invoice deleted.');
   try{await persistInvoices();}catch(e){showToast('Sheet sync failed.','#F97316');}
+}
+async function deleteBooking(id){
+  const bk=bookings.find(b=>b.id===id);if(!bk)return;
+  if(!confirm(`Delete booking for ${bk.dogName} — ${bk.clientName} ($${(+bk.price||0).toFixed(2)})? This cannot be undone.`))return;
+  const idx=bookings.findIndex(b=>b.id===id);
+  if(idx>=0)bookings.splice(idx,1);
+  render();showToast(`🗑️ Booking for ${bk.dogName} deleted.`);
+  try{await persistBookings();}catch(e){showToast('Sheet sync failed.','#F97316');}
+}
+async function clearAllTestData(){
+  const bkCount=bookings.length;
+  const invCount=invoices.length;
+  if(bkCount===0&&invCount===0){showToast('Nothing to clear!');return;}
+  if(!confirm(`⚠️ This will permanently delete ALL ${bkCount} bookings and ALL ${invCount} invoices. Are you sure?`))return;
+  if(!confirm('This is your last chance — all booking and invoice data will be wiped. Continue?'))return;
+  bookings.length=0;
+  invoices.length=0;
+  render();showToast(`🧹 Cleared ${bkCount} bookings and ${invCount} invoices.`);
+  try{await persistBookings();await persistInvoices();}catch(e){showToast('Sheet sync failed.','#F97316');}
 }
 // ─── RAINBOW BRIDGE TOGGLE ────────────────────────────────────────────────────
 function showRainbowBridgeConfirm(clientId,dogId){
