@@ -8864,11 +8864,11 @@ async function sendInvoiceEmail(invId){
       if(res.ok)showToast(`📧 Email sent to ${email}!`);
       else showToast('Email failed: '+(res.error||'Unknown error'),'#EF4444');
     }catch(err){
-      console.error('[sendInvoiceEmail]',err);
-      showToast('Email send failed: '+err.message+'. Opening mail client instead...','#F97316');
-      // Fallback to mailto:
+      console.warn('[sendInvoiceEmail] Proxy failed, falling back to mail client:',err.message);
+      // Silently fall back to mailto: — this is expected when Gmail permissions aren't granted
       const body=`Hi ${inv.clientName},\n\nPayment reminder from ${biz}.\n\nServices: ${inv.items}\nAmount due: $${owed.toFixed(2)}\nDue date: ${inv.dueDate}${payUrl?'\n\nPay now: '+payUrl:''}\n\nThank you!\n${biz}`;
       window.open(`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,'_self');
+      showToast('📧 Opening your email client…');
     }
   }else{
     // No proxy — fall back to mailto: link
