@@ -962,7 +962,7 @@ function sendSquareInvoice(ss, req, callerEmail) {
 // Checks Square for completed payments and updates booking/invoice statuses.
 //
 // How it works:
-//   1. Reads all bookings with paymentStatus='checkout_pending' or 'deposit_due'
+//   1. Reads all bookings that aren't yet paid/refunded/cancelled
 //   2. Queries Square Payments API for recent completed payments at the location
 //   3. Matches payments to bookings by reference_id or checkout URL order ID
 //   4. Updates the Bookings sheet paymentStatus to 'paid' or 'deposit_paid'
@@ -1020,123 +1020,62 @@ function syncSquarePayments(ss, req, callerEmail) {
         }
       }
 
+      debug.pendingCount = pendingRows.length;
+
       if (pendingRows.length > 0) {
         // Fetch recent completed payments from Square (last 30 days)
         const beginTime = new Date(Date.now() - 30 * 86400000).toISOString();
-        const paymentsResp = UrlFetchApp.fetch(
-          sqBase + '/v2/payments?location_id=' + squareLocationId + '&begin_time=' + encodeURIComponent(beginTime) + '&sort_order=DESC&limit=100',
-          { method: 'get', headers: headers, muteHttpExceptions: true }
-        );
-        const paymentsData = JSON.parse(paymentsResp.getContentText());
-        const completedPayments = (paymentsData.payments || []).filter(p => p.status === 'COMPLETED');
+        let completedPayments = [];
+        try {
+          const paymentsResp = UrlFetchApp.fetch(
+            sqBase + '/v2/payments?location_id=' + squareLocationId + '&begin_time=' + encodeURIComponent(beginTime) + '&sort_order=DESC&limit=100',
+            { method: 'get', headers: headers, muteHttpExceptions: true }
+          );
+          const paymentsData = JSON.parse(paymentsResp.getContentText());
+          completedPayments = (paymentsData.payments || []).filter(p => p.status === 'COMPLETED');
+        } catch (e) {
+          debug.paymentsError = e.message;
+        }
 
-        // Build a set of completed order IDs from payments
-        const completedOrderIds = new Set();
-        completedPayments.forEach(p => {
-          if (p.order_id) completedOrderIds.add(p.order_id);
-        });
-
-        // Also fetch recent orders to cross-reference checkout links
-        // Square Payment Links create orders — when paid, the order state becomes COMPLETED
-        const ordersResp = UrlFetchApp.fetch(sqBase + '/v2/orders/search', {
-          method: 'post', contentType: 'application/json', headers: headers,
-          payload: JSON.stringify({
-            location_ids: [squareLocationId],
-            query: {
-              filter: {
-                state_filter: { states: ['COMPLETED'] },
-                date_time_filter: { created_at: { start_at: beginTime } }
-              }
-            },
-            limit: 100
-          }),
-          muteHttpExceptions: true
-        });
-        const ordersData = JSON.parse(ordersResp.getContentText());
-        const completedOrders = ordersData.orders || [];
-
-        // Build a set of completed checkout URLs (from order metadata)
-        const completedCheckoutOrderIds = new Set();
-        completedOrders.forEach(o => {
-          completedCheckoutOrderIds.add(o.id);
-        });
-
-        // Debug info
-        debug.pendingCount = pendingRows.length;
         debug.paymentsFromSquare = completedPayments.length;
-        debug.completedOrdersFromSquare = completedOrders.length;
-        // Include first few payment summaries for debugging
         debug.samplePayments = completedPayments.slice(0, 5).map(p => ({
-          id: p.id, amount: p.amount_money, note: p.note || '', ref: p.reference_id || '', status: p.status
+          id: p.id, amountCents: (p.amount_money && p.amount_money.amount) || 0,
+          note: (p.note || '').substring(0, 80), ref: p.reference_id || '', orderId: p.order_id || ''
         }));
 
-        // Match pending bookings to completed payments
-        // Track which payments have already been matched to avoid double-counting
+        // Track which payments have been matched to avoid double-counting
         const usedPaymentIds = new Set();
 
         for (const pb of pendingRows) {
           let matched = false;
           let matchedPaymentId = null;
+          const bkId = String(pb.data[0]);
+          const dogName = String(pb.data[3] || '').toLowerCase();
+          const clientName = String(pb.data[4] || '').toLowerCase();
+          const bkPriceCents = Math.round(Number(pb.data[11] || 0) * 100);
 
-          // Strategy 1: Match by note/reference containing booking ID, dog name, or client name
           for (const payment of completedPayments) {
             if (usedPaymentIds.has(payment.id)) continue;
+            const paidCents = (payment.amount_money && payment.amount_money.amount) || 0;
             const note = (payment.note || '').toLowerCase();
             const refId = (payment.reference_id || '').toLowerCase();
-            const bkId = String(pb.data[0]);
-            const dogName = String(pb.data[3] || '').toLowerCase();
-            const clientName = String(pb.data[4] || '').toLowerCase();
-            if (note.includes(bkId) || refId.includes(bkId) ||
-                (dogName && note.includes(dogName)) || (clientName && note.includes(clientName))) {
+
+            // Match 1: note or reference contains booking ID, dog name, or client name
+            const nameMatch = (note.includes(bkId) || refId.includes(bkId) ||
+                (dogName && note.includes(dogName)) || (clientName && note.includes(clientName)));
+
+            // Match 2: exact amount match (in cents)
+            const amountMatch = (bkPriceCents > 0 && paidCents === bkPriceCents);
+
+            if (nameMatch || amountMatch) {
               matched = true;
               matchedPaymentId = payment.id;
               break;
             }
           }
 
-          // Strategy 2: Match by checkout URL order ID (if checkout URL exists)
-          if (!matched && pb.checkoutUrl) {
-            // Extract order ID from checkout URL if possible
-            const urlMatch = pb.checkoutUrl.match(/order[_\/]?([A-Za-z0-9]+)/i);
-            if (urlMatch) {
-              const orderId = urlMatch[1];
-              if (completedCheckoutOrderIds.has(orderId)) {
-                matched = true;
-              }
-            }
-          }
-
-          // Strategy 3: Match by exact amount (in cents) — most bookings won't have checkout URLs
-          if (!matched) {
-            const bkPrice = Math.round(Number(pb.data[11] || 0) * 100); // price in cents
-            const bkDeposit = Math.round(Number(pb.data[13] || 0) * 100); // deposit in cents
-            if (bkPrice > 0) {
-              for (const payment of completedPayments) {
-                if (usedPaymentIds.has(payment.id)) continue;
-                const paidCents = (payment.amount_money && payment.amount_money.amount) || 0;
-                if (paidCents === bkPrice || (bkDeposit > 0 && paidCents === bkDeposit)) {
-                  matched = true;
-                  matchedPaymentId = payment.id;
-                  break;
-                }
-              }
-            }
-          }
-
-          // Strategy 4: Check Square Invoices API for invoices paid matching this booking's amount
-          if (!matched) {
-            const bkPrice = Math.round(Number(pb.data[11] || 0) * 100);
-            for (const order of completedOrders) {
-              const orderTotal = (order.total_money && order.total_money.amount) || 0;
-              if (orderTotal === bkPrice) {
-                matched = true;
-                break;
-              }
-            }
-          }
-
           if (matched) {
-            if (matchedPaymentId) usedPaymentIds.add(matchedPaymentId);
+            usedPaymentIds.add(matchedPaymentId);
             const rowIdx = pb.row + 1; // 1-indexed for Sheets
             const wasDeposit = String(pb.data[12]).toLowerCase() === 'deposit_due';
             const newStatus = wasDeposit ? 'deposit_paid' : 'paid';
