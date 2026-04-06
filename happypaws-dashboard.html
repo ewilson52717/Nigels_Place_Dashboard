@@ -6412,30 +6412,60 @@ function buildAddCareNotesModal(clientId, dogId){
   const cl=clients.find(c=>c.id===clientId);
   const dog=cl?.dogs.find(d=>d.id===dogId);
   if(!dog)return'';
+  const hasSpeech=!!((window.SpeechRecognition||window.webkitSpeechRecognition));
+  // Pre-fill with existing notes if any
+  const existing=dog.careProfile||{};
+  let prefill='';
+  if(existing.behavior)prefill+=existing.behavior+'\n';
+  if(existing.medications?.length)prefill+=existing.medications.map(m=>`${m.name} ${m.dose} ${m.frequency}${m.times?.length?' at '+m.times.join(' and '):''}`).join('. ')+'.\n';
+  if(existing.feeding?.instructions)prefill+=existing.feeding.instructions+'\n';
+  if(existing.grooming)prefill+=existing.grooming+'\n';
+  if(existing.specialInstructions)prefill+=existing.specialInstructions+'\n';
   return`
   <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 slide-in max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between mb-5">
-        <h2 class="text-lg font-bold text-gray-800">Add Care Notes — ${dog.name}</h2>
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-lg font-bold text-gray-800">Care Notes — ${dog.name}</h2>
+          <p class="text-xs text-gray-400 mt-0.5">Tell us everything about ${dog.name}'s care — we'll sort it out</p>
+        </div>
         <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
       </div>
       <div class="space-y-4">
-        <div>
-          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Paste or type care information:</label>
-          <textarea id="care-notes-input" rows="6" placeholder="e.g. Bella gets half a benadryl at noon and 6pm, give it with food. She's allergic to chicken. She needs to go out every 2 hours. She gets anxious around big dogs and loves belly rubs..." class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none"></textarea>
-          <p class="text-xs text-gray-400 mt-1">Include medications, feeding times, behavior notes, grooming preferences, and special instructions.</p>
+        <!-- Brain dump area with mic button -->
+        <div class="relative">
+          <textarea id="care-notes-input" rows="8" placeholder="Just talk or type everything you know about ${dog.name}...\n\nExamples:\n• Bella gets half a benadryl at noon and 6pm, give it with food\n• She's allergic to chicken so no chicken treats\n• Anxious around big dogs, loves belly rubs\n• Needs to go out every 2 hours\n• For grooming, use blade 7 on body and scissors on face\n• Eats Blue Buffalo kibble, 1 cup morning and evening" class="w-full border-2 border-indigo-200 rounded-2xl px-4 py-3 text-sm resize-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all" style="min-height:180px;">${prefill.trim()}</textarea>
+          ${hasSpeech?`
+          <button onclick="toggleVoiceInput()" id="voice-input-btn" type="button"
+            class="absolute bottom-3 right-3 w-12 h-12 rounded-full flex items-center justify-center text-xl transition-all shadow-lg hover:scale-110 active:scale-95"
+            style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;"
+            title="Hold to speak — release to stop">
+            🎙️
+          </button>
+          <div id="voice-status" class="hidden absolute bottom-16 right-3 px-3 py-1.5 rounded-full text-xs font-semibold text-white shadow-lg" style="background:linear-gradient(135deg,#EF4444,#DC2626);">
+            <span style="display:inline-block;width:8px;height:8px;background:white;border-radius:50%;margin-right:6px;animation:medPulseRed 0.8s infinite;"></span>
+            Listening…
+          </div>`:`
+          <div class="absolute bottom-3 right-3 text-xs text-gray-300 bg-white px-2 py-1 rounded-lg">No mic available</div>`}
         </div>
-        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3">
+
+        <!-- What gets parsed info -->
+        <div class="bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-200 rounded-xl p-3">
           <div class="flex items-start gap-2">
             <span class="text-lg flex-shrink-0">✨</span>
-            <div class="text-sm text-blue-800">
-              <strong>Smart Parsing:</strong> We'll automatically extract medications, times, allergies, behavior notes, and special instructions from your text.
+            <div class="text-xs text-indigo-700 leading-relaxed">
+              <strong>We'll automatically sort this into:</strong> medications & schedules, behavior & temperament, feeding instructions, grooming preferences, and special instructions. You can fine-tune everything after.
             </div>
           </div>
         </div>
-        <div class="flex gap-2 pt-2">
-          <button onclick="submitCareNotes(${clientId},${dogId})" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#6366f1">✨ Summarize & Save</button>
-          <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+
+        <!-- Preview area (hidden until parsed) -->
+        <div id="care-parse-preview" class="hidden"></div>
+
+        <div class="flex gap-2 pt-1">
+          <button onclick="submitCareNotes(${clientId},${dogId})" class="flex-1 py-3 text-white rounded-xl text-sm font-bold shadow-lg hover:shadow-xl transition-all" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);">✨ Summarize & Save</button>
+          <button onclick="previewCareNotes(${clientId},${dogId})" class="px-4 py-3 border-2 border-indigo-200 rounded-xl text-sm font-semibold text-indigo-600 hover:bg-indigo-50 transition-all">Preview</button>
+          <button type="button" onclick="closeModal()" class="px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
         </div>
       </div>
     </div>
@@ -6515,7 +6545,93 @@ function buildCareProfileModal(clientId, dogId){
   </div>`;
 }
 
+// ─── Voice Input for Care Notes (Web Speech API) ──────────────────────────
+let _careVoiceRecog=null;
+let _voiceActive=false;
+function toggleVoiceInput(){
+  if(_voiceActive){stopVoiceInput();return;}
+  const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SpeechRecognition){showToast('Speech recognition not supported in this browser.','#EF4444');return;}
+  _careVoiceRecog=new SpeechRecognition();
+  _careVoiceRecog.continuous=true;
+  _careVoiceRecog.interimResults=true;
+  _careVoiceRecog.lang='en-US';
+  const textarea=document.getElementById('care-notes-input');
+  const btn=document.getElementById('voice-input-btn');
+  const statusEl=document.getElementById('voice-status');
+  // If there's existing text, add a newline before new voice input
+  if(textarea&&textarea.value.trim())textarea.value+='\n';
+  _careVoiceRecog.onresult=(event)=>{
+    let final='';
+    for(let i=event.resultIndex;i<event.results.length;i++){
+      if(event.results[i].isFinal)final+=event.results[i][0].transcript;
+    }
+    if(textarea&&final){
+      textarea.value+=final+' ';
+      textarea.scrollTop=textarea.scrollHeight;
+    }
+  };
+  _careVoiceRecog.onstart=()=>{
+    _voiceActive=true;
+    if(btn){btn.style.background='linear-gradient(135deg,#EF4444,#DC2626)';btn.innerHTML='⏹️';}
+    if(statusEl)statusEl.classList.remove('hidden');
+  };
+  _careVoiceRecog.onend=()=>{
+    _voiceActive=false;
+    if(btn){btn.style.background='linear-gradient(135deg,#6366f1,#8b5cf6)';btn.innerHTML='🎙️';}
+    if(statusEl)statusEl.classList.add('hidden');
+  };
+  _careVoiceRecog.onerror=(e)=>{
+    console.warn('[Voice]',e.error);
+    if(e.error==='not-allowed')showToast('Microphone access denied. Check browser permissions.','#EF4444');
+    else if(e.error!=='aborted')showToast('Voice error: '+e.error,'#F97316');
+    stopVoiceInput();
+  };
+  _careVoiceRecog.start();
+}
+function stopVoiceInput(){
+  if(_careVoiceRecog){try{_careVoiceRecog.stop();}catch(e){}_careVoiceRecog=null;}
+  _voiceActive=false;
+  const btn=document.getElementById('voice-input-btn');
+  const statusEl=document.getElementById('voice-status');
+  if(btn){btn.style.background='linear-gradient(135deg,#6366f1,#8b5cf6)';btn.innerHTML='🎙️';}
+  if(statusEl)statusEl.classList.add('hidden');
+}
+
+// ─── Preview parsed care notes ─────────────────────────────────────────────
+function previewCareNotes(clientId,dogId){
+  const textarea=document.getElementById('care-notes-input');
+  const freeText=(textarea?.value||'').trim();
+  if(!freeText){showToast('Type or speak some notes first!','#F97316');return;}
+  const parsed=parseCareNotesLocal(freeText);
+  const preview=document.getElementById('care-parse-preview');
+  if(!preview)return;
+  let html='<div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-3">';
+  html+='<div class="text-xs font-bold text-emerald-700 uppercase tracking-wide">✅ Parsed Preview</div>';
+  if(parsed.medications?.length){
+    html+='<div><span class="text-xs font-bold text-gray-700">💊 Medications:</span><div class="mt-1 space-y-1">';
+    parsed.medications.forEach(m=>{
+      html+='<div class="text-sm text-gray-700 bg-white rounded-lg px-3 py-1.5 border border-gray-100">'+m.name+(m.dose?' — '+m.dose:'')+(m.frequency?' ('+m.frequency+')':'')+(m.times?.length?' at '+m.times.join(', '):'')+(m.notes?' · '+m.notes:'')+'</div>';
+    });
+    html+='</div></div>';
+  }
+  if(parsed.behavior)html+='<div><span class="text-xs font-bold text-gray-700">🐕 Behavior:</span><div class="text-sm text-gray-700 mt-1">'+parsed.behavior+'</div></div>';
+  if(parsed.feeding?.instructions||parsed.feeding?.times?.length){
+    html+='<div><span class="text-xs font-bold text-gray-700">🍽️ Feeding:</span><div class="text-sm text-gray-700 mt-1">'+(parsed.feeding.instructions||'')+(parsed.feeding.times?.length?' ('+parsed.feeding.times.join(', ')+')':'')+'</div></div>';
+  }
+  if(parsed.grooming)html+='<div><span class="text-xs font-bold text-gray-700">✂️ Grooming:</span><div class="text-sm text-gray-700 mt-1">'+parsed.grooming+'</div></div>';
+  if(parsed.specialInstructions)html+='<div><span class="text-xs font-bold text-gray-700">⚠️ Special:</span><div class="text-sm text-gray-700 mt-1">'+parsed.specialInstructions+'</div></div>';
+  if(!parsed.medications?.length&&!parsed.behavior&&!parsed.feeding?.instructions&&!parsed.grooming&&!parsed.specialInstructions){
+    html+='<div class="text-sm text-gray-500">No structured data could be extracted. The text will be saved as general notes. Try using keywords like "takes", "give", "allergic", "feed", "groom", etc.</div>';
+  }
+  html+='<div class="text-xs text-emerald-600 mt-2">Looks good? Click <strong>Summarize & Save</strong> to save, or keep editing above.</div>';
+  html+='</div>';
+  preview.innerHTML=html;
+  preview.classList.remove('hidden');
+}
+
 async function submitCareNotes(clientId, dogId){
+  stopVoiceInput(); // stop mic if active
   const cl=clients.find(c=>c.id===clientId);
   const dog=cl?.dogs.find(d=>d.id===dogId);
   if(!dog)return;
@@ -6523,6 +6639,20 @@ async function submitCareNotes(clientId, dogId){
   const freeText=(textarea?.value||'').trim();
   if(!freeText){showToast('Please enter some care notes.','#F97316');return;}
   const parsed=parseCareNotesLocal(freeText);
+  // Merge with existing profile rather than overwriting (preserve fields not mentioned)
+  const existing=dog.careProfile||{};
+  if(!parsed.medications?.length&&existing.medications?.length)parsed.medications=existing.medications;
+  if(!parsed.behavior&&existing.behavior)parsed.behavior=existing.behavior;
+  if(!parsed.feeding?.instructions&&existing.feeding?.instructions){
+    parsed.feeding=parsed.feeding||{};
+    parsed.feeding.instructions=existing.feeding.instructions;
+  }
+  if(!parsed.feeding?.times?.length&&existing.feeding?.times?.length){
+    parsed.feeding=parsed.feeding||{};
+    parsed.feeding.times=existing.feeding.times;
+  }
+  if(!parsed.grooming&&existing.grooming)parsed.grooming=existing.grooming;
+  if(!parsed.specialInstructions&&existing.specialInstructions)parsed.specialInstructions=existing.specialInstructions;
   dog.careProfile=parsed;
   render();
   try{
