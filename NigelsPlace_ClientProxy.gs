@@ -104,6 +104,8 @@ function doPost(e) {
     if (action === 'sendSquareInvoice') return sendSquareInvoice(ss, req, email);
     if (action === 'syncSquarePayments') return syncSquarePayments(ss, req, email);
     if (action === 'cancelSquareInvoice') return cancelSquareInvoice(ss, req, email);
+    if (action === 'listSquarePayments') return listSquarePayments(ss, req, email);
+    if (action === 'refundSquarePayment') return refundSquarePayment(ss, req, email);
 
     return respond({ ok: false, error: `Unknown action: ${action}` });
 
@@ -1298,6 +1300,151 @@ function sendInvoiceEmail(ss, req, callerEmail) {
     return respond({ ok: true, message: 'Email sent to ' + clientEmail });
   } catch (err) {
     return respond({ ok: false, error: 'Failed to send email: ' + err.message });
+  }
+}
+
+// ─── HELPER: Read Square credentials from Settings sheet ─────────────────────
+function getSquareConfig_(ss) {
+  const settingsSheet = ss.getSheetByName('Settings');
+  if (!settingsSheet) return null;
+  let squareApiKey = '', squareLocationId = '', squareSandbox = false;
+  const sRows = settingsSheet.getDataRange().getValues();
+  for (let i = 1; i < sRows.length; i++) {
+    const k = String(sRows[i][0]);
+    if (k === 'squareApiKey')     squareApiKey     = String(sRows[i][1] || '');
+    if (k === 'squareLocationId') squareLocationId = String(sRows[i][1] || '');
+    if (k === 'squareSandbox')    squareSandbox    = String(sRows[i][1]).toLowerCase() === 'true';
+  }
+  if (!squareApiKey) return null;
+  const sqBase = squareSandbox ? 'https://connect.squareupsandbox.com' : 'https://connect.squareup.com';
+  const headers = {
+    'Authorization': 'Bearer ' + squareApiKey,
+    'Square-Version': '2024-01-18',
+    'Content-Type': 'application/json'
+  };
+  return { squareApiKey, squareLocationId, squareSandbox, sqBase, headers };
+}
+
+// ─── ACTION: listSquarePayments ──────────────────────────────────────────────
+// Returns recent Square payments so the dashboard can show unmatched ones.
+// Admin-only.
+function listSquarePayments(ss, req, callerEmail) {
+  const ADMIN_EMAILS = ['elyserwilson@gmail.com', 'kellyhendrickson1@yahoo.com'];
+  if (!ADMIN_EMAILS.some(a => a.toLowerCase() === callerEmail.toLowerCase())) {
+    return respond({ ok: false, error: 'Only admins can list payments.' });
+  }
+
+  const sq = getSquareConfig_(ss);
+  if (!sq) return respond({ ok: false, error: 'Square credentials not configured.' });
+
+  try {
+    const daysBack = Number(req.daysBack) || 90;
+    const beginTime = new Date(Date.now() - daysBack * 86400000).toISOString();
+    const paymentsResp = UrlFetchApp.fetch(
+      sq.sqBase + '/v2/payments?location_id=' + sq.squareLocationId +
+        '&begin_time=' + encodeURIComponent(beginTime) + '&sort_order=DESC&limit=100',
+      { method: 'get', headers: sq.headers, muteHttpExceptions: true }
+    );
+    const paymentsData = JSON.parse(paymentsResp.getContentText());
+    if (paymentsData.errors) {
+      return respond({ ok: false, error: (paymentsData.errors[0] || {}).detail || 'Square API error' });
+    }
+    const payments = (paymentsData.payments || []).map(p => ({
+      id: p.id,
+      orderId: p.order_id || '',
+      amountCents: (p.amount_money && p.amount_money.amount) || 0,
+      currency: (p.amount_money && p.amount_money.currency) || 'USD',
+      status: p.status,
+      createdAt: p.created_at,
+      note: p.note || '',
+      referenceId: p.reference_id || '',
+      receiptUrl: p.receipt_url || '',
+      cardBrand: (p.card_details && p.card_details.card && p.card_details.card.card_brand) || '',
+      last4: (p.card_details && p.card_details.card && p.card_details.card.last_4) || '',
+      refundIds: p.refund_ids || [],
+      totalRefundedCents: (p.refunded_money && p.refunded_money.amount) || 0
+    }));
+    return respond({ ok: true, payments: payments });
+  } catch (e) {
+    return respond({ ok: false, error: 'Failed to list payments: ' + e.message });
+  }
+}
+
+// ─── ACTION: refundSquarePayment ─────────────────────────────────────────────
+// Refunds a Square payment (full or partial).
+// Required: req.paymentId, optional: req.amountCents (defaults to full refund)
+// Admin-only.
+function refundSquarePayment(ss, req, callerEmail) {
+  const ADMIN_EMAILS = ['elyserwilson@gmail.com', 'kellyhendrickson1@yahoo.com'];
+  if (!ADMIN_EMAILS.some(a => a.toLowerCase() === callerEmail.toLowerCase())) {
+    return respond({ ok: false, error: 'Only admins can refund payments.' });
+  }
+
+  const { paymentId, amountCents, reason } = req;
+  if (!paymentId) return respond({ ok: false, error: 'Missing paymentId.' });
+
+  const sq = getSquareConfig_(ss);
+  if (!sq) return respond({ ok: false, error: 'Square credentials not configured.' });
+
+  try {
+    // First get the payment to know the amount if doing full refund
+    const payResp = UrlFetchApp.fetch(sq.sqBase + '/v2/payments/' + paymentId, {
+      method: 'get', headers: sq.headers, muteHttpExceptions: true
+    });
+    const payData = JSON.parse(payResp.getContentText());
+    if (!payData.payment) {
+      return respond({ ok: false, error: 'Payment not found on Square.' });
+    }
+
+    const payment = payData.payment;
+    if (payment.status !== 'COMPLETED') {
+      return respond({ ok: false, error: 'Can only refund completed payments. This payment is: ' + payment.status });
+    }
+
+    // Calculate refund amount
+    const alreadyRefunded = (payment.refunded_money && payment.refunded_money.amount) || 0;
+    const originalAmount = (payment.amount_money && payment.amount_money.amount) || 0;
+    const maxRefundable = originalAmount - alreadyRefunded;
+    const refundAmount = amountCents ? Math.min(Number(amountCents), maxRefundable) : maxRefundable;
+
+    if (refundAmount <= 0) {
+      return respond({ ok: false, error: 'Nothing to refund — payment has already been fully refunded.' });
+    }
+
+    // Issue the refund
+    const refundResp = UrlFetchApp.fetch(sq.sqBase + '/v2/refunds', {
+      method: 'post', contentType: 'application/json', headers: sq.headers,
+      payload: JSON.stringify({
+        idempotency_key: Utilities.getUuid(),
+        payment_id: paymentId,
+        amount_money: {
+          amount: refundAmount,
+          currency: (payment.amount_money && payment.amount_money.currency) || 'USD'
+        },
+        reason: reason || 'Refund from Nigel\'s Place dashboard'
+      }),
+      muteHttpExceptions: true
+    });
+    const refundCode = refundResp.getResponseCode();
+    const refundData = JSON.parse(refundResp.getContentText());
+
+    if (refundCode !== 200 && refundCode !== 201) {
+      const err = (refundData.errors && refundData.errors[0] && refundData.errors[0].detail) || ('Refund failed: HTTP ' + refundCode);
+      return respond({ ok: false, error: err });
+    }
+
+    const refund = refundData.refund || {};
+    return respond({
+      ok: true,
+      message: 'Refund of $' + (refundAmount / 100).toFixed(2) + ' issued successfully.',
+      refund: {
+        id: refund.id,
+        status: refund.status,
+        amountCents: refundAmount
+      }
+    });
+  } catch (e) {
+    return respond({ ok: false, error: 'Refund failed: ' + e.message });
   }
 }
 

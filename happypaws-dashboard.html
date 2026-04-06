@@ -4146,6 +4146,27 @@ function buildInvoicesView(){
           +'</div></div>';
       }).join('')}
     </div>`}
+
+    <!-- ═══ SQUARE PAYMENTS RECONCILIATION ═══ -->
+    <div class="mt-10 pt-8 border-t border-gray-200">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+            <span style="display:inline-block;width:28px;height:28px;background:linear-gradient(135deg,#1e1b4b,#4338ca);border-radius:8px;text-align:center;line-height:28px;font-size:14px;">💳</span>
+            Square Payments
+          </h2>
+          <p class="text-xs text-gray-400 mt-0.5">Payments from Square — link to bookings, refund, or dismiss</p>
+        </div>
+        <button onclick="loadSquarePayments()" id="load-sq-payments-btn" class="btn-glow px-3 py-2 rounded-xl text-xs font-medium border border-indigo-200 text-indigo-600 bg-indigo-50 hover:bg-indigo-100">
+          🔍 Load from Square
+        </button>
+      </div>
+      <div id="sq-payments-container">
+        <div class="text-center py-8">
+          <p class="text-sm text-gray-400">Click <strong>Load from Square</strong> to see recent payments</p>
+        </div>
+      </div>
+    </div>
   </div>`;
 }
 function buildSettingsView(){
@@ -8503,6 +8524,180 @@ async function clearAllTestData(){
   invoices.length=0;
   render();showToast(`🧹 Cleared ${bkCount} bookings and ${invCount} invoices.`);
   try{await persistBookings();await persistInvoices();}catch(e){showToast('Sheet sync failed.','#F97316');}
+}
+// ─── SQUARE PAYMENTS RECONCILIATION ──────────────────────────────────────────
+window._sqPayments=[];
+async function loadSquarePayments(){
+  const btn=document.getElementById('load-sq-payments-btn');
+  const origHtml=btn?btn.innerHTML:'';
+  if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner" style="width:12px;height:12px;border-width:2px;border-color:rgba(99,102,241,0.2);border-top-color:#6366f1;display:inline-block;vertical-align:middle;margin-right:4px"></span> Loading…';}
+  try{
+    const res=await proxyClientWrite('listSquarePayments',{daysBack:90});
+    if(!res.ok){showToast('Failed: '+(res.error||'Unknown'),'#EF4444');return;}
+    window._sqPayments=res.payments||[];
+    renderSquarePayments();
+  }catch(err){
+    showToast('Failed to load Square payments: '+err.message,'#EF4444');
+  }finally{
+    if(btn){btn.disabled=false;btn.innerHTML=origHtml;}
+  }
+}
+function renderSquarePayments(){
+  const container=document.getElementById('sq-payments-container');
+  if(!container)return;
+  const payments=window._sqPayments||[];
+  if(payments.length===0){
+    container.innerHTML='<div class="text-center py-6"><p class="text-sm text-gray-400">No payments found in Square for the last 90 days.</p></div>';
+    return;
+  }
+  // Determine which payments are "matched" to a booking or invoice
+  // A payment is matched if any booking has paymentStatus=paid and price matches, or if it's been refunded
+  const matchedPaymentIds=new Set();
+  bookings.forEach(b=>{
+    if(b.paymentStatus==='paid'&&b.squarePaymentId){matchedPaymentIds.add(b.squarePaymentId);}
+  });
+
+  let html='<div class="space-y-2">';
+  payments.forEach((p,idx)=>{
+    const amt=(p.amountCents/100).toFixed(2);
+    const refunded=p.totalRefundedCents>0;
+    const fullyRefunded=refunded&&p.totalRefundedCents>=p.amountCents;
+    const isMatched=matchedPaymentIds.has(p.id);
+    const dt=new Date(p.createdAt);
+    const dateStr=dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    const timeStr=dt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    const isCompleted=p.status==='COMPLETED';
+
+    // Status badge
+    let statusBadge='';
+    if(fullyRefunded){
+      statusBadge='<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200">↩️ Refunded</span>';
+    }else if(refunded){
+      statusBadge='<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-600 border border-amber-200">↩️ Partial refund</span>';
+    }else if(isMatched){
+      statusBadge='<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200">✅ Matched</span>';
+    }else if(isCompleted){
+      statusBadge='<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-600 border border-indigo-200">💳 Unmatched</span>';
+    }else{
+      statusBadge='<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-50 text-gray-500 border border-gray-200">'+p.status+'</span>';
+    }
+
+    // Card brand display
+    const cardInfo=p.cardBrand&&p.last4?p.cardBrand+' ••'+p.last4:'';
+
+    // Action buttons
+    let actions='';
+    if(isCompleted&&!fullyRefunded&&!isMatched){
+      actions+='<button onclick="openLinkPaymentModal('+idx+')" class="text-xs px-3 py-1.5 rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50 font-medium transition-all">🔗 Link to Booking</button>';
+      actions+='<button onclick="refundSquarePayment('+idx+')" class="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 font-medium transition-all">↩️ Refund</button>';
+    }else if(isCompleted&&!fullyRefunded&&isMatched){
+      actions+='<button onclick="refundSquarePayment('+idx+')" class="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 font-medium transition-all">↩️ Refund</button>';
+    }
+    if(p.receiptUrl){
+      actions+='<a href="'+p.receiptUrl+'" target="_blank" class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 font-medium no-underline transition-all">🧾 Receipt</a>';
+    }
+
+    const borderCls=fullyRefunded?'border-gray-200 opacity-60':isMatched?'border-emerald-100':isCompleted&&!refunded?'border-indigo-100':'border-gray-100';
+
+    html+='<div class="bg-white rounded-xl border '+borderCls+' p-4 card-hover">'
+      +'<div class="flex items-center justify-between gap-4">'
+      +'<div class="flex items-center gap-3 flex-1 min-w-0">'
+      +'<div class="w-9 h-9 rounded-lg flex items-center justify-center text-base flex-shrink-0" style="background:linear-gradient(135deg,'+(fullyRefunded?'#9ca3af,#6b7280':isMatched?'#10b981,#059669':'#6366f1,#818cf8')+');color:white;font-size:16px">'+(fullyRefunded?'↩️':isMatched?'✅':'💳')+'</div>'
+      +'<div class="min-w-0">'
+      +'<div class="flex items-center gap-2 flex-wrap"><span class="font-semibold text-gray-800">$'+amt+'</span>'+statusBadge+'</div>'
+      +'<div class="text-xs text-gray-400 mt-0.5">'+dateStr+' at '+timeStr+(cardInfo?' · '+cardInfo:'')+(p.note?' · '+p.note:'')+'</div>'
+      +'</div></div>'
+      +'<div class="flex items-center gap-2 flex-shrink-0">'+actions+'</div>'
+      +'</div></div>';
+  });
+  html+='</div>';
+  container.innerHTML=html;
+}
+
+function openLinkPaymentModal(paymentIdx){
+  const payment=window._sqPayments[paymentIdx];
+  if(!payment)return;
+  const amt=(payment.amountCents/100).toFixed(2);
+  // Show modal with list of unpaid bookings to link to
+  const unpaid=bookings.filter(b=>b.status!=='cancelled'&&b.paymentStatus!=='paid'&&b.paymentStatus!=='refunded'&&(+b.price||0)>0);
+  const existing=document.getElementById('np-link-payment-modal');if(existing)existing.remove();
+  const ov=document.createElement('div');
+  ov.id='np-link-payment-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;';
+  let bookingRows='';
+  if(unpaid.length===0){
+    bookingRows='<div class="py-6 text-center text-sm text-gray-400">No unpaid bookings to link to.<br>You can create a booking first, then come back to link it.</div>';
+  }else{
+    bookingRows=unpaid.map(b=>{
+      const amtMatch=Math.round((+b.price||0)*100)===payment.amountCents;
+      return '<div onclick="linkPaymentToBooking('+paymentIdx+','+b.id+')" class="flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all '+(amtMatch?'bg-emerald-50 border border-emerald-200 hover:bg-emerald-100':'bg-gray-50 border border-gray-200 hover:bg-gray-100')+'" style="margin-bottom:6px">'
+        +'<div>'
+        +'<div class="font-semibold text-sm text-gray-800">'+b.dogName+' <span class="text-gray-400 font-normal">— '+(b.clientName||'')+'</span></div>'
+        +'<div class="text-xs text-gray-400">'+(b.service||'Daycare')+' · '+(b.checkIn||'No date')+'</div>'
+        +'</div>'
+        +'<div class="text-right">'
+        +'<div class="font-bold text-sm '+(amtMatch?'text-emerald-600':'text-gray-700')+'">$'+(+b.price||0).toFixed(2)+'</div>'
+        +(amtMatch?'<div class="text-xs text-emerald-500 font-medium">Amount matches!</div>':'')
+        +'</div></div>';
+    }).join('');
+  }
+  ov.innerHTML=`
+    <div style="background:white;border-radius:20px;padding:1.75rem;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:80vh;overflow-y:auto;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;">
+        <div style="width:34px;height:34px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">🔗</div>
+        <div>
+          <div style="font-weight:700;font-size:1rem;color:#111827;">Link Square Payment</div>
+          <div style="font-size:0.75rem;color:#9CA3AF;">$${amt} payment — select a booking to link it to</div>
+        </div>
+      </div>
+      <div style="margin-bottom:1rem;">${bookingRows}</div>
+      <button onclick="document.getElementById('np-link-payment-modal').remove()" style="width:100%;padding:10px;border-radius:12px;border:1px solid #e5e7eb;background:white;color:#6b7280;font-weight:600;font-size:0.875rem;cursor:pointer;">Cancel</button>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+}
+
+async function linkPaymentToBooking(paymentIdx,bookingId){
+  const payment=window._sqPayments[paymentIdx];
+  if(!payment)return;
+  const bk=bookings.find(b=>b.id===bookingId);
+  if(!bk)return;
+  const modal=document.getElementById('np-link-payment-modal');
+  if(modal)modal.remove();
+  // Mark booking as paid and store the Square payment ID
+  bk.paymentStatus='paid';
+  bk.squarePaymentId=payment.id;
+  render();
+  showToast(`✅ Linked $${(payment.amountCents/100).toFixed(2)} payment to ${bk.dogName}'s booking!`);
+  try{await persistBookings();}catch(e){showToast('Sheet sync failed.','#F97316');}
+  // Refresh the Square payments display
+  renderSquarePayments();
+}
+
+async function refundSquarePayment(paymentIdx){
+  const payment=window._sqPayments[paymentIdx];
+  if(!payment)return;
+  const amt=(payment.amountCents/100).toFixed(2);
+  if(!confirm(`Refund $${amt} back to the customer's card (${payment.cardBrand||'card'} ••${payment.last4||'????'})? This cannot be undone.`))return;
+  showToast('Processing refund…','#0EA5E9');
+  try{
+    const res=await proxyClientWrite('refundSquarePayment',{paymentId:payment.id});
+    if(res.ok){
+      showToast(`✅ ${res.message}`);
+      // Update local state
+      payment.totalRefundedCents=payment.amountCents;
+      payment.status='COMPLETED'; // still completed, but refunded
+      // If any booking was linked to this payment, mark it as refunded
+      const linkedBk=bookings.find(b=>b.squarePaymentId===payment.id);
+      if(linkedBk){linkedBk.paymentStatus='refunded';try{await persistBookings();}catch(e){}}
+      render();
+      renderSquarePayments();
+    }else{
+      showToast('Refund failed: '+(res.error||'Unknown error'),'#EF4444');
+    }
+  }catch(err){
+    showToast('Refund failed: '+err.message,'#EF4444');
+  }
 }
 // ─── RAINBOW BRIDGE TOGGLE ────────────────────────────────────────────────────
 function showRainbowBridgeConfirm(clientId,dogId){
