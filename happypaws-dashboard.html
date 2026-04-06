@@ -6,6 +6,7 @@
   <title>Nigel's Place · PawDesk</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://accounts.google.com/gsi/client" async></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
@@ -123,6 +124,15 @@
     .np-collapse-header:hover{filter:brightness(0.96);}
     .np-collapse-header:hover .np-collapse-arrow{background:rgba(99,102,241,0.15);}
     .np-collapse-header:active{filter:brightness(0.94);}
+    /* ── Medication badge animations ── */
+    @keyframes medPulseRed { 0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 50% { box-shadow: 0 0 12px 4px rgba(239, 68, 68, 0.6); } }
+    @keyframes medPulseAmber { 0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); } 50% { box-shadow: 0 0 12px 4px rgba(245, 158, 11, 0.5); } }
+    .med-badge { display:inline-flex; align-items:center; gap:0.4rem; padding:0.45rem 0.75rem; border-radius:999px; font-size:0.75rem; font-weight:600; white-space:nowrap; }
+    .med-badge.ok { background:#D1FAE5; color:#065F46; }
+    .med-badge.soon { background:#FEF3C7; color:#B45309; animation:medPulseAmber 1.5s infinite; }
+    .med-badge.urgent { background:#FEE2E2; color:#7F1D1D; animation:medPulseRed 1.2s infinite; }
+    .med-badge.overdue { background:#DC2626; color:white; animation:medPulseRed 0.8s infinite; }
+    .med-badge.done { background:rgba(255,255,255,0.15); color:rgba(255,255,255,0.6); }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -1695,7 +1705,9 @@ async function loadAllData(){
     const vetName=String(r[17]||'');
     const vetPhone=String(r[18]||'');
     const vetWebsite=String(r[19]||'');
-    const dog={id:+r[0],name:String(r[2]||''),breed:String(r[3]||''),age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',notes:String(r[6]||''),birthday,vaccExpiry,vaccines,driveFileLink:String(r[10]||''),photoLink:String(r[11]||''),playPhotos,photoOffset,emergencyVetLimit,deceased,vaccOverride,vetName,vetPhone,vetWebsite};
+    let careProfile={medications:[],behavior:'',feeding:{instructions:'',times:[]},grooming:'',specialInstructions:''};
+    try{if(r[20])careProfile=JSON.parse(r[20]);}catch(e){}
+    const dog={id:+r[0],name:String(r[2]||''),breed:String(r[3]||''),age:+r[4]||0,vaccinated:String(r[5]).toLowerCase()==='true',notes:String(r[6]||''),birthday,vaccExpiry,vaccines,driveFileLink:String(r[10]||''),photoLink:String(r[11]||''),playPhotos,photoOffset,emergencyVetLimit,deceased,vaccOverride,vetName,vetPhone,vetWebsite,careProfile};
     const cl=clients.find(c=>c.id===+r[1]);if(cl)cl.dogs.push(dog);
   });
   bookings.length=0;
@@ -1798,14 +1810,14 @@ async function persistBookings(){
 async function persistClients(){
   if(state.mode!=='live')return;
   const cRows=[['id','name','email','phone','photoConsent'],...clients.map(c=>[c.id,c.name,c.email,c.phone,c.photoConsent?'true':'false'])];
-  const dRows=[['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit','deceased','vaccOverride','vetName','vetPhone','vetWebsite'],
-    ...clients.flatMap(c=>c.dogs.map(d=>{const off=d.photoOffset||{x:50,y:50};return[d.id,c.id,d.name,d.breed,d.age,d.vaccinated,d.notes,d.birthday||'',d.vaccExpiry||'',JSON.stringify(d.vaccines||[]),d.driveFileLink||'',d.photoLink||'',JSON.stringify(d.playPhotos||[]),`${off.x},${off.y}`,d.emergencyVetLimit||'',d.deceased?'true':'false',d.vaccOverride||'',d.vetName||'',d.vetPhone||'',d.vetWebsite||''];}))];
+  const dRows=[['id','clientId','name','breed','age','vaccinated','notes','birthday','vaccExpiry','vaccines','driveFileLink','photoLink','playPhotos','photoOffset','emergencyVetLimit','deceased','vaccOverride','vetName','vetPhone','vetWebsite','careProfile'],
+    ...clients.flatMap(c=>c.dogs.map(d=>{const off=d.photoOffset||{x:50,y:50};return[d.id,c.id,d.name,d.breed,d.age,d.vaccinated,d.notes,d.birthday||'',d.vaccExpiry||'',JSON.stringify(d.vaccines||[]),d.driveFileLink||'',d.photoLink||'',JSON.stringify(d.playPhotos||[]),`${off.x},${off.y}`,d.emergencyVetLimit||'',d.deceased?'true':'false',d.vaccOverride||'',d.vetName||'',d.vetPhone||'',d.vetWebsite||'',JSON.stringify(d.careProfile||{})];}))];
   // Write first (data always present), then clear any leftover rows below.
   // NEVER clear before writing — a failed write after a clear = permanent data loss.
   await writeRange(`Clients!A1:E${cRows.length}`,cRows);
   if(cRows.length<9999)await clearRange(`Clients!A${cRows.length+1}:E9999`);
-  await writeRange(`Dogs!A1:T${dRows.length}`,dRows);
-  if(dRows.length<9999)await clearRange(`Dogs!A${dRows.length+1}:T9999`);
+  await writeRange(`Dogs!A1:U${dRows.length}`,dRows);
+  if(dRows.length<9999)await clearRange(`Dogs!A${dRows.length+1}:U9999`);
 }
 async function persistInvoices(){
   if(state.mode!=='live')return;
@@ -4044,6 +4056,7 @@ function buildInvoicesView(){
         <p class="text-sm text-gray-400 mt-1">Everything owed, collected, and outstanding — all in one place</p>
       </div>
       <div class="flex items-center gap-2">
+        <button onclick="exportDailyAssignments()" class="px-3 py-2.5 rounded-xl text-sm font-medium border border-emerald-200 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 transition-all" title="Export today's care assignments as PDF">📋 Daily Sheet</button>
         <button onclick="clearAllTestData()" class="px-3 py-2.5 rounded-xl text-sm font-medium border border-red-200 text-red-500 bg-red-50 hover:bg-red-100 transition-all" title="Delete all bookings and invoices">🧹 Clear All</button>
         <button onclick="syncSquarePayments()" id="sync-payments-btn" class="btn-glow px-3 py-2.5 rounded-xl text-sm font-medium border border-indigo-200 text-indigo-600 bg-indigo-50 hover:bg-indigo-100" title="Check Square for completed payments">
           <span style="display:inline-block;transition:transform 0.3s" onmouseover="this.style.transform='rotate(180deg)'" onmouseout="this.style.transform='rotate(0)'">🔄</span> Sync
@@ -5293,6 +5306,59 @@ function buildClientDog(){
         <div class="text-sm text-gray-600 leading-relaxed whitespace-pre-line">${dog.notes}</div>
       </div>`:''}
 
+      <!-- ④ Care Profile Section -->
+      <div class="rounded-2xl border border-gray-100 bg-white p-4 mb-3 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+          <div class="text-xs font-bold text-gray-500 uppercase tracking-wide">🏥 Care Profile</div>
+          <button onclick="showCareProfileModal(${cl.id},${dog.id})" class="text-xs px-2 py-1 rounded-lg border" style="border-color:#a5b4fc;color:#6366f1;background:#eef2ff;font-size:10px;">✏️ Edit</button>
+        </div>
+
+        <!-- Medications -->
+        ${(dog.careProfile?.medications&&dog.careProfile.medications.length>0)?`
+          <div class="mb-3 pb-3 border-b border-gray-100">
+            <div class="font-semibold text-sm text-gray-700 mb-2">💊 Medications</div>
+            ${buildCareMedicationsTable(dog.careProfile.medications)}
+          </div>
+        `:''}
+
+        <!-- Behavior -->
+        ${dog.careProfile?.behavior?`
+          <div class="mb-3 pb-3 border-b border-gray-100">
+            <div class="font-semibold text-sm text-gray-700 mb-2">🐕 Behavior</div>
+            <div class="text-sm text-gray-600">${dog.careProfile.behavior}</div>
+          </div>
+        `:''}
+
+        <!-- Feeding -->
+        ${(dog.careProfile?.feeding?.instructions||dog.careProfile?.feeding?.times?.length>0)?`
+          <div class="mb-3 pb-3 border-b border-gray-100">
+            <div class="font-semibold text-sm text-gray-700 mb-2">🍽️ Feeding</div>
+            ${dog.careProfile.feeding.instructions?`<div class="text-sm text-gray-600 mb-1.5">${dog.careProfile.feeding.instructions}</div>`:''}
+            ${dog.careProfile.feeding.times&&dog.careProfile.feeding.times.length>0?`<div class="flex gap-1.5 flex-wrap">${dog.careProfile.feeding.times.map(t=>`<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium" style="background:#dcfce7;color:#166534;">🕐 ${t}</span>`).join('')}</div>`:''}
+          </div>
+        `:''}
+
+        <!-- Grooming -->
+        ${dog.careProfile?.grooming?`
+          <div class="mb-3 pb-3 border-b border-gray-100">
+            <div class="font-semibold text-sm text-gray-700 mb-2">✂️ Grooming</div>
+            <div class="text-sm text-gray-600">${dog.careProfile.grooming}</div>
+          </div>
+        `:''}
+
+        <!-- Special Instructions -->
+        ${dog.careProfile?.specialInstructions?`
+          <div>
+            <div class="font-semibold text-sm text-gray-700 mb-2">⚠️ Special Instructions</div>
+            <div class="text-sm text-gray-600">${dog.careProfile.specialInstructions}</div>
+          </div>
+        `:''}
+
+        ${!dog.careProfile?.medications?.length&&!dog.careProfile?.behavior&&!dog.careProfile?.feeding?.instructions&&!dog.careProfile?.feeding?.times?.length&&!dog.careProfile?.grooming&&!dog.careProfile?.specialInstructions?`
+          <button onclick="showAddCareNotesModal(${cl.id},${dog.id})" class="w-full py-2 text-sm font-semibold rounded-lg transition-all text-white" style="background:#6366f1;">📝 Add Care Notes</button>
+        `:''}
+      </div>
+
       <!-- Rainbow Bridge toggle -->
       <div class="flex justify-end">
         <button onclick="showRainbowBridgeConfirm(${cl.id},${dog.id})"
@@ -5336,6 +5402,79 @@ async function updateClientVetLimit(clientId,dogId,value){
   }catch(e){showToast('Saved locally; sync failed.','#F97316');}
 }
 
+// ─── CARE PROFILE HELPERS ────────────────────────────────────────────────────
+function initCareProfile(){
+  return {medications:[],behavior:'',feeding:{instructions:'',times:[]},grooming:'',specialInstructions:''};
+}
+
+function parseCareNotesLocal(freeText){
+  const profile=initCareProfile();
+  if(!freeText||!freeText.trim())return profile;
+  const text=freeText.toLowerCase();
+  // Extract medications: look for patterns like "give X at YZ", "medication X", "takes X"
+  const medRegex=/(?:give|medication|takes?|benadryl|supplement|medicine|drug|pill|tablet)[\s:]*([^,.]*?)(?:\s+(?:at|every|twice|once|daily|morning|evening|noon|am|pm|\d{1,2}[:0]?0?))[,.]?/gi;
+  const timeRegex=/(?:\d{1,2}(?:[:0]\d)?\s*(?:am|pm|a\.m\.|p\.m\.)|noon|midnight|\d{1,2}:\d{2})/gi;
+  const freqRegex=/(?:once|twice|three times|daily|bid|tid|every\s+\d+\s+hours?|morning|evening|afternoon)/gi;
+  const matches=freeText.matchAll(medRegex);
+  for(const m of matches){
+    if(m[1]&&m[1].length<50){
+      const times=[];
+      const timeMatches=freeText.matchAll(timeRegex);
+      for(const tm of timeMatches){
+        const normalized=tm[0].toLowerCase().replace(/[^0-9:apm]/g,'');
+        if(normalized.includes(':')){times.push(normalized.substring(0,5));}
+        else if(normalized.includes('am')||normalized.includes('pm')){
+          const h=parseInt(normalized)||12;times.push(String(h).padStart(2,'0')+':00');
+        }
+      }
+      profile.medications.push({name:m[1].trim(),dose:'',frequency:'',times:times.slice(0,2),notes:''});
+    }
+  }
+  // Extract allergies and feeding
+  const allergyRegex=/(?:allergic?|allergy|can't eat|no)[\s:]*([^,.]*?)(?:treats?|food|kibble)?[,.]?/gi;
+  const feedRegex=/(?:feed|kibble|food)[\s:]*([^,.]*?)(?:cup|scoop|oz|gram)?s?[\s]*(?:morning|evening|twice|daily)?[,.]?/gi;
+  // Extract times from feeding context
+  if(text.includes('feed')||text.includes('kibble')||text.includes('food')){
+    const feedTimes=[];
+    if(text.includes('morning'))feedTimes.push('07:00');
+    if(text.includes('evening')||text.includes('dinner'))feedTimes.push('17:00');
+    if(text.includes('lunch')||text.includes('noon'))feedTimes.push('12:00');
+    if(feedTimes.length>0)profile.feeding.times=feedTimes;
+    const feedMatch=freeText.match(feedRegex);
+    if(feedMatch)profile.feeding.instructions=feedMatch[0].trim();
+  }
+  // Extract behavior notes
+  if(text.includes('anxiety')||text.includes('anxious')||text.includes('scary')||text.includes('aggressive')||text.includes('bite')||text.includes('shy')){
+    const behaviorMatch=freeText.match(/(?:(?:gets?|is|can be|becomes?|gets?)\s+)?(?:anxious?|aggressive?|shy|nervous|scared|fearful|nippy)[\s]*(?:around|with|about|of)?[\s]*([^,.]*?)(?:\.|,|—|-)/i);
+    if(behaviorMatch)profile.behavior=behaviorMatch[0].trim();
+  }
+  // Extract grooming preferences
+  if(text.includes('groom')||text.includes('bathe')||text.includes('brush')||text.includes('nail')||text.includes('ear')){
+    const groomMatch=freeText.match(/(?:grooming?|bathing?|brushing?|nails?|ears?|sensitive)[\s:]*([^,.]*?)(?:\.|,|—|-|;)/i);
+    if(groomMatch)profile.grooming=groomMatch[0].trim();
+  }
+  // Extract special instructions
+  if(text.includes('must')||text.includes('need')||text.includes('every')||text.includes('alert')||text.includes('call')){
+    const specialMatch=freeText.match(/(?:must|need|every|alert|call|should|don't|do not)[\s]*([^,.]*?)(?:\.|,|—|-|;|$)/i);
+    if(specialMatch)profile.specialInstructions=specialMatch[0].trim();
+  }
+  return profile;
+}
+
+function buildCareMedicationsTable(medications){
+  if(!medications||medications.length===0)return'<p class="text-xs text-gray-400 italic">No medications recorded.</p>';
+  return`<div class="space-y-2">${medications.map((m,i)=>`
+    <div class="rounded-lg border border-gray-100 bg-gray-50 p-2.5 flex items-start gap-3">
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold text-sm text-gray-800">${m.name}</div>
+        <div class="text-xs text-gray-600 mt-0.5">${m.dose}${m.dose&&m.frequency?' • ':m.dose?'':''} ${m.frequency}</div>
+        ${m.times&&m.times.length>0?`<div class="flex gap-1.5 mt-1.5 flex-wrap">${m.times.map(t=>`<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium" style="background:#dbeafe;color:#0369A1;">🕐 ${t}</span>`).join('')}</div>`:''}
+        ${m.notes?`<div class="text-xs text-gray-500 mt-1 italic">${m.notes}</div>`:''}
+      </div>
+    </div>
+  `).join('')}</div>`;
+}
+
 // ═══════════════════════════════════════════════════
 //  ⑩  MODALS
 // ═══════════════════════════════════════════════════
@@ -5355,6 +5494,8 @@ function buildModal(){
   if(m.type==='whatsNew')         return buildWhatsNewModal();
   if(m.type==='vaccinesLightbox') return buildVaccinesLightbox();
   if(m.type==='addVetClinic')     return buildAddVetClinicModal();
+  if(m.type==='addCareNotes')     return buildAddCareNotesModal(m.clientId,m.dogId);
+  if(m.type==='careProfile')      return buildCareProfileModal(m.clientId,m.dogId);
   return'';
 }
 function buildAddInvoiceModal(){
@@ -6142,6 +6283,11 @@ function buildEditDogModal(clientId,dogId){
         </div>
         <div><label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Notes</label>
           <textarea id="edog-notes" rows="2" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none">${dog.notes||''}</textarea></div>
+        <div class="rounded-xl border border-indigo-200 bg-indigo-50 p-3">
+          <p class="text-xs text-indigo-800 font-semibold mb-2">📋 Care Profile</p>
+          <p class="text-xs text-indigo-700 mb-3">Manage medications, behavior notes, feeding schedules, grooming preferences, and special care instructions.</p>
+          <button type="button" onclick="closeModal();showCareProfileModal(${clientId},${dogId})" class="w-full py-1.5 text-xs font-semibold text-white rounded-lg" style="background:#6366f1;">Edit Care Profile →</button>
+        </div>
         <div>
           <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">🏥 Emergency Vet Spending Limit</label>
           <select id="edog-vet-limit" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
@@ -6253,6 +6399,223 @@ function viewClientProfile(clientId){
     if(el)el.scrollIntoView({behavior:'smooth',block:'center'});
   });
 }
+// ── Care Profile Handlers ────────────────────────────────────────────────────
+function showAddCareNotesModal(clientId, dogId){
+  state.showModal={type:'addCareNotes',clientId,dogId};
+  render();
+}
+function showCareProfileModal(clientId, dogId){
+  state.showModal={type:'careProfile',clientId,dogId};
+  render();
+}
+function buildAddCareNotesModal(clientId, dogId){
+  const cl=clients.find(c=>c.id===clientId);
+  const dog=cl?.dogs.find(d=>d.id===dogId);
+  if(!dog)return'';
+  return`
+  <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 slide-in max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-lg font-bold text-gray-800">Add Care Notes — ${dog.name}</h2>
+        <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
+      </div>
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-2">Paste or type care information:</label>
+          <textarea id="care-notes-input" rows="6" placeholder="e.g. Bella gets half a benadryl at noon and 6pm, give it with food. She's allergic to chicken. She needs to go out every 2 hours. She gets anxious around big dogs and loves belly rubs..." class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none"></textarea>
+          <p class="text-xs text-gray-400 mt-1">Include medications, feeding times, behavior notes, grooming preferences, and special instructions.</p>
+        </div>
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3">
+          <div class="flex items-start gap-2">
+            <span class="text-lg flex-shrink-0">✨</span>
+            <div class="text-sm text-blue-800">
+              <strong>Smart Parsing:</strong> We'll automatically extract medications, times, allergies, behavior notes, and special instructions from your text.
+            </div>
+          </div>
+        </div>
+        <div class="flex gap-2 pt-2">
+          <button onclick="submitCareNotes(${clientId},${dogId})" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#6366f1">✨ Summarize & Save</button>
+          <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function buildCareProfileModal(clientId, dogId){
+  const cl=clients.find(c=>c.id===clientId);
+  const dog=cl?.dogs.find(d=>d.id===dogId);
+  if(!dog)return'';
+  const profile=dog.careProfile||initCareProfile();
+  return`
+  <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl p-6 slide-in max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-lg font-bold text-gray-800">Edit Care Profile — ${dog.name}</h2>
+        <button onclick="closeModal()" class="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
+      </div>
+      <div class="space-y-5">
+        <!-- Medications -->
+        <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold text-gray-800">💊 Medications</h3>
+            <button type="button" onclick="addMedicationRow(${clientId},${dogId})" class="text-xs px-2 py-1 rounded-lg" style="background:#6366f1;color:white;">+ Add</button>
+          </div>
+          <div id="meds-container" class="space-y-2">
+            ${(profile.medications||[]).map((med,i)=>`
+              <div class="flex gap-2 items-end">
+                <input type="text" value="${med.name}" placeholder="Med name" class="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs" onchange="updateMedication(${clientId},${dogId},${i},'name',this.value)">
+                <input type="text" value="${med.dose}" placeholder="Dose" class="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-xs" onchange="updateMedication(${clientId},${dogId},${i},'dose',this.value)">
+                <input type="text" value="${med.frequency}" placeholder="Freq" class="w-32 border border-gray-200 rounded-lg px-2 py-1.5 text-xs" onchange="updateMedication(${clientId},${dogId},${i},'frequency',this.value)">
+                <button type="button" onclick="removeMedication(${clientId},${dogId},${i})" class="px-2 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold">Remove</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Behavior -->
+        <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+          <h3 class="font-semibold text-gray-800 mb-2">🐕 Behavior Notes</h3>
+          <textarea placeholder="e.g. Anxious around large dogs. Loves belly rubs. Can be nippy during nail trims." class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none" rows="2" onchange="updateCareField(${clientId},${dogId},'behavior',this.value)">${profile.behavior||''}</textarea>
+        </div>
+
+        <!-- Feeding -->
+        <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+          <h3 class="font-semibold text-gray-800 mb-2">🍽️ Feeding Instructions</h3>
+          <textarea placeholder="e.g. Blue Buffalo kibble, 1 cup morning and evening. No chicken treats - allergic." class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none" rows="2" onchange="updateCareField(${clientId},${dogId},'feeding.instructions',this.value)">${profile.feeding?.instructions||''}</textarea>
+          <div class="text-xs text-gray-600 mt-2 mb-2">Feeding times:</div>
+          <div id="feed-times-container" class="flex gap-2 flex-wrap">
+            ${(profile.feeding?.times||[]).map((time,i)=>`
+              <div class="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-2 py-1">
+                <input type="time" value="${time}" class="text-xs" onchange="updateFeedingTime(${clientId},${dogId},${i},this.value)">
+                <button type="button" onclick="removeFeedingTime(${clientId},${dogId},${i})" class="text-red-600 font-bold">×</button>
+              </div>
+            `).join('')}
+            <button type="button" onclick="addFeedingTime(${clientId},${dogId})" class="text-xs px-2 py-1 rounded-lg" style="background:#dbeafe;color:#0369A1;">+ Time</button>
+          </div>
+        </div>
+
+        <!-- Grooming -->
+        <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+          <h3 class="font-semibold text-gray-800 mb-2">✂️ Grooming Preferences</h3>
+          <textarea placeholder="e.g. Sensitive ears - use gentle cleanser. Prefers blade 7 on body, scissors on face." class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none" rows="2" onchange="updateCareField(${clientId},${dogId},'grooming',this.value)">${profile.grooming||''}</textarea>
+        </div>
+
+        <!-- Special Instructions -->
+        <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+          <h3 class="font-semibold text-gray-800 mb-2">⚠️ Special Instructions</h3>
+          <textarea placeholder="e.g. Must go out every 2 hours. Scared of thunder - give calming chew during storms." class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none" rows="2" onchange="updateCareField(${clientId},${dogId},'specialInstructions',this.value)">${profile.specialInstructions||''}</textarea>
+        </div>
+
+        <div class="flex gap-2 pt-2">
+          <button onclick="saveCareProfile(${clientId},${dogId})" class="flex-1 py-2.5 text-white rounded-xl text-sm font-semibold" style="background:#6366f1">Save Changes</button>
+          <button type="button" onclick="closeModal()" class="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function submitCareNotes(clientId, dogId){
+  const cl=clients.find(c=>c.id===clientId);
+  const dog=cl?.dogs.find(d=>d.id===dogId);
+  if(!dog)return;
+  const textarea=document.getElementById('care-notes-input');
+  const freeText=(textarea?.value||'').trim();
+  if(!freeText){showToast('Please enter some care notes.','#F97316');return;}
+  const parsed=parseCareNotesLocal(freeText);
+  dog.careProfile=parsed;
+  render();
+  try{
+    if((state.role==='client'||state.role==='onboarding')&&state.mode==='live'){
+      await proxyClientWrite('updateCareProfile',{dogId,careProfile:parsed});
+    }else{
+      await persistClients();
+    }
+    showToast('Care profile updated ✓');
+  }catch(e){showToast('Saved locally; sync failed.','#F97316');}
+  closeModal();
+}
+
+async function saveCareProfile(clientId, dogId){
+  const cl=clients.find(c=>c.id===clientId);
+  const dog=cl?.dogs.find(d=>d.id===dogId);
+  if(!dog)return;
+  try{
+    if((state.role==='client'||state.role==='onboarding')&&state.mode==='live'){
+      await proxyClientWrite('updateCareProfile',{dogId,careProfile:dog.careProfile});
+    }else{
+      await persistClients();
+    }
+    showToast('Care profile saved ✓');
+  }catch(e){showToast('Saved locally; sync failed.','#F97316');}
+  closeModal();
+}
+
+function updateCareField(clientId, dogId, field, value){
+  const cl=clients.find(c=>c.id===clientId);
+  const dog=cl?.dogs.find(d=>d.id===dogId);
+  if(!dog)return;
+  if(!dog.careProfile)dog.careProfile=initCareProfile();
+  const parts=field.split('.');
+  if(parts.length===2){
+    if(!dog.careProfile[parts[0]])dog.careProfile[parts[0]]={};
+    dog.careProfile[parts[0]][parts[1]]=value;
+  }else{
+    dog.careProfile[field]=value;
+  }
+}
+
+function addMedicationRow(clientId, dogId){
+  const cl=clients.find(c=>c.id===clientId);
+  const dog=cl?.dogs.find(d=>d.id===dogId);
+  if(!dog)return;
+  if(!dog.careProfile)dog.careProfile=initCareProfile();
+  if(!dog.careProfile.medications)dog.careProfile.medications=[];
+  dog.careProfile.medications.push({name:'',dose:'',frequency:'',times:[],notes:''});
+  render();
+}
+
+function updateMedication(clientId, dogId, index, field, value){
+  const cl=clients.find(c=>c.id===clientId);
+  const dog=cl?.dogs.find(d=>d.id===dogId);
+  if(!dog||!dog.careProfile||!dog.careProfile.medications)return;
+  if(dog.careProfile.medications[index])dog.careProfile.medications[index][field]=value;
+}
+
+function removeMedication(clientId, dogId, index){
+  const cl=clients.find(c=>c.id===clientId);
+  const dog=cl?.dogs.find(d=>d.id===dogId);
+  if(!dog||!dog.careProfile||!dog.careProfile.medications)return;
+  dog.careProfile.medications.splice(index,1);
+  render();
+}
+
+function addFeedingTime(clientId, dogId){
+  const cl=clients.find(c=>c.id===clientId);
+  const dog=cl?.dogs.find(d=>d.id===dogId);
+  if(!dog)return;
+  if(!dog.careProfile)dog.careProfile=initCareProfile();
+  if(!dog.careProfile.feeding)dog.careProfile.feeding={instructions:'',times:[]};
+  if(!dog.careProfile.feeding.times)dog.careProfile.feeding.times=[];
+  dog.careProfile.feeding.times.push('09:00');
+  render();
+}
+
+function updateFeedingTime(clientId, dogId, index, value){
+  const cl=clients.find(c=>c.id===clientId);
+  const dog=cl?.dogs.find(d=>d.id===dogId);
+  if(!dog||!dog.careProfile||!dog.careProfile.feeding||!dog.careProfile.feeding.times)return;
+  if(dog.careProfile.feeding.times[index])dog.careProfile.feeding.times[index]=value;
+}
+
+function removeFeedingTime(clientId, dogId, index){
+  const cl=clients.find(c=>c.id===clientId);
+  const dog=cl?.dogs.find(d=>d.id===dogId);
+  if(!dog||!dog.careProfile||!dog.careProfile.feeding||!dog.careProfile.feeding.times)return;
+  dog.careProfile.feeding.times.splice(index,1);
+  render();
+}
+
 // ── Required Vaccine Settings Helpers ─────────────────────────────────────────
 function addRequiredVaccine(){
   const inp=document.getElementById('new-vacc-input');
@@ -10172,6 +10535,7 @@ async function loadKioskData(){
     const el=document.getElementById('kiosk-sync');if(el)el.textContent='⚠️ '+e.message;
   }
 }
+let _kioskMedTimer=null;
 function startKioskTimers(){
   if(!_kioskClockTimer){
     _kioskClockTimer=setInterval(()=>{const el=document.getElementById('kiosk-clock');if(el)el.textContent=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});},1000);
@@ -10179,7 +10543,203 @@ function startKioskTimers(){
   if(!_kioskRefreshTimer){
     _kioskRefreshTimer=setInterval(loadKioskData,5*60*1000); // refresh every 5 min
   }
+  if(!_kioskMedTimer){
+    _kioskMedTimer=setInterval(updateMedicationBadges,30*1000); // update meds every 30 sec
+  }
 }
+// ═════════════════════════════════════════════════════════════════
+//  MEDICATION COUNTDOWN UTILITIES
+// ═════════════════════════════════════════════════════════════════
+function getMedStatus(timeStr) {
+  if(!timeStr) return { status: 'ok', label: 'No time', color: '#6B7280', pulse: false };
+  const now = new Date();
+  const [h, m] = timeStr.split(':').map(Number);
+  if(isNaN(h) || isNaN(m)) return { status: 'ok', label: 'Invalid time', color: '#6B7280', pulse: false };
+  const dueTime = new Date();
+  dueTime.setHours(h, m, 0, 0);
+  const diffMin = (dueTime - now) / 60000;
+  if(diffMin < -30) return { status: 'done', label: 'Given', color: 'transparent', pulse: false };
+  if(diffMin < 0) return { status: 'overdue', label: 'OVERDUE', color: '#DC2626', pulse: true };
+  if(diffMin <= 30) return { status: 'urgent', label: `${Math.ceil(diffMin)} min`, color: '#FEE2E2', pulse: true };
+  if(diffMin <= 60) return { status: 'soon', label: `${Math.ceil(diffMin)} min`, color: '#FEF3C7', pulse: true };
+  return { status: 'ok', label: `${Math.floor(diffMin/60)}h ${Math.ceil(diffMin%60)}m`, color: '#D1FAE5', pulse: false };
+}
+
+function updateMedicationBadges() {
+  const badges = document.querySelectorAll('[data-med-badge]');
+  badges.forEach(badge => {
+    const timeStr = badge.getAttribute('data-med-time');
+    const status = getMedStatus(timeStr);
+    const icon = status.status === 'overdue' ? '🔴' : status.status === 'urgent' ? '🔴' : status.status === 'soon' ? '🟡' : '🟢';
+    badge.textContent = (status.status !== 'done' ? (icon + ' ') : '') + status.label;
+    badge.className = `med-badge ${status.status}`;
+  });
+}
+
+// ═════════════════════════════════════════════════════════════════
+//  EXPORT DAILY ASSIGNMENTS PDF
+// ═════════════════════════════════════════════════════════════════
+async function exportDailyAssignments() {
+  const { jsPDF } = window.jspdf;
+  if (!jsPDF) {
+    showToast('PDF library not loaded', '#EF4444');
+    return;
+  }
+
+  const doc = new jsPDF();
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const timeStr = today.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  let yPos = 15;
+
+  doc.setFillColor(99, 102, 241);
+  doc.rect(0, 0, pageWidth, 35, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.setTextColor(255, 255, 255);
+  doc.text("Nigel's Place — Daily Care Sheet", 15, 22);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(255, 255, 255);
+  doc.text(dateStr, 15, 31);
+
+  yPos = 45;
+  doc.setTextColor(99, 102, 241);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+
+  const todayStr = today.toISOString().split('T')[0];
+  const dogsToday = (bookings || []).filter(b =>
+    b.checkIn <= todayStr && todayStr <= b.checkOut && b.status !== 'cancelled'
+  ).map(b => {
+    const cl = clients.find(c => c.id === b.clientId);
+    const dog = cl?.dogs.find(d => d.id === b.dogId);
+    return { dogName: b.dogName || dog?.name || '?', breed: dog?.breed || '', clientName: b.clientName || cl?.name || '', dog };
+  }).filter((d, i, a) => a.findIndex(x => x.dogName === d.dogName) === i);
+
+  if (dogsToday.length === 0) {
+    doc.setTextColor(150, 150, 150);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    doc.text('No guests scheduled for today.', 15, 55);
+  } else {
+    dogsToday.forEach((item, idx) => {
+      if (yPos > pageHeight - 35) {
+        doc.addPage();
+        yPos = 15;
+      }
+
+      doc.setTextColor(99, 102, 241);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text(`${idx + 1}. ${item.dogName}`, 15, yPos);
+      yPos += 6;
+
+      doc.setTextColor(80, 80, 80);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.text(`Breed: ${item.breed || 'Not specified'}`, 20, yPos);
+      yPos += 4;
+      doc.text(`Client: ${item.clientName}`, 20, yPos);
+      yPos += 6;
+
+      const dog = item.dog;
+      const profile = dog?.careProfile || {};
+
+      if (profile.medications && profile.medications.length > 0) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(99, 102, 241);
+        doc.text('Medications:', 20, yPos);
+        yPos += 5;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(80, 80, 80);
+        profile.medications.forEach(med => {
+          const times = (med.times || []).join(', ') || 'As needed';
+          const line = `• ${med.name}${med.dose ? ' (' + med.dose + ')' : ''} - ${times}`;
+          yPos += 4;
+          doc.text(line, 25, yPos);
+        });
+        yPos += 2;
+      }
+
+      if (profile.feeding && (profile.feeding.instructions || (profile.feeding.times && profile.feeding.times.length))) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(99, 102, 241);
+        doc.text('Feeding:', 20, yPos);
+        yPos += 5;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(80, 80, 80);
+        if (profile.feeding.instructions) {
+          doc.text(`• ${profile.feeding.instructions}`, 25, yPos);
+          yPos += 4;
+        }
+        if (profile.feeding.times && profile.feeding.times.length > 0) {
+          doc.text(`• Times: ${profile.feeding.times.join(', ')}`, 25, yPos);
+          yPos += 4;
+        }
+        yPos += 2;
+      }
+
+      if (profile.behavior) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(99, 102, 241);
+        doc.text('Behavior:', 20, yPos);
+        yPos += 5;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(80, 80, 80);
+        doc.text(`• ${profile.behavior}`, 25, yPos);
+        yPos += 6;
+      }
+
+      if (profile.grooming) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(99, 102, 241);
+        doc.text('Grooming:', 20, yPos);
+        yPos += 5;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(80, 80, 80);
+        doc.text(`• ${profile.grooming}`, 25, yPos);
+        yPos += 6;
+      }
+
+      if (profile.specialInstructions) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(99, 102, 241);
+        doc.text('Special Instructions:', 20, yPos);
+        yPos += 5;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(80, 80, 80);
+        doc.text(`• ${profile.specialInstructions}`, 25, yPos);
+        yPos += 6;
+      }
+
+      yPos += 4;
+    });
+  }
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(150, 150, 150);
+  doc.text(`Generated from PawDesk • ${timeStr} on ${dateStr}`, 15, pageHeight - 10);
+
+  const filename = `nigels-place-daily-${today.toISOString().split('T')[0]}.pdf`;
+  doc.save(filename);
+  showToast('Daily assignments exported!', '#10b981');
+}
+
 // adminPreview=true means it's embedded in the admin panel (slightly different styling)
 function buildKioskView(adminPreview=false){
   // Password gate — skip for admin preview or if already verified or no password set
@@ -10189,7 +10749,7 @@ function buildKioskView(adminPreview=false){
   const today=new Date().toISOString().split('T')[0];
   const dogs=adminPreview
     ?bookings.filter(b=>b.checkIn<=today&&today<=b.checkOut&&b.status!=='cancelled')
-      .map(b=>{const cl=clients.find(c=>c.id===b.clientId);const dog=cl?.dogs.find(d=>d.id===b.dogId);return{dogId:b.dogId,dogName:b.dogName||dog?.name||'?',breed:dog?.breed||'',clientName:b.clientName||cl?.name||'',checkIn:b.checkIn,checkOut:b.checkOut};})
+      .map(b=>{const cl=clients.find(c=>c.id===b.clientId);const dog=cl?.dogs.find(d=>d.id===b.dogId);return{dogId:b.dogId,dogName:b.dogName||dog?.name||'?',breed:dog?.breed||'',clientName:b.clientName||cl?.name||'',checkIn:b.checkIn,checkOut:b.checkOut,careProfile:dog?.careProfile||{}};})
       .filter((d,i,a)=>a.findIndex(x=>x.dogId===d.dogId)===i)
     :state.kioskDogs||[];
   // Upcoming — next 7 days' arrivals/departures
@@ -10225,8 +10785,11 @@ function buildKioskView(adminPreview=false){
           <div style="color:rgba(255,200,100,0.7);font-size:0.8rem;margin-top:2px;">${dateStr}</div>
         </div>
       </div>
-      <div style="text-align:right;">
-        <div id="kiosk-clock" style="color:white;font-size:${adminPreview?'1.8rem':'3rem'};font-weight:200;letter-spacing:3px;font-variant-numeric:tabular-nums;">${timeStr}</div>
+      <div style="display:flex;align-items:center;gap:1.2rem;">
+        ${adminPreview?`<button onclick="exportDailyAssignments()" style="color:rgba(255,200,100,0.8);background:rgba(255,255,255,0.08);border:1px solid rgba(255,200,100,0.3);border-radius:8px;padding:0.4rem 0.8rem;font-size:0.75rem;cursor:pointer;transition:all 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.12)'" onmouseout="this.style.background='rgba(255,255,255,0.08)'">📋 Export PDF</button>`:''}
+        <div style="text-align:right;">
+          <div id="kiosk-clock" style="color:white;font-size:${adminPreview?'1.5rem':'3rem'};font-weight:200;letter-spacing:3px;font-variant-numeric:tabular-nums;">${timeStr}</div>
+        </div>
       </div>
     </div>
     <!-- Two-column body: today's guests + upcoming week -->
@@ -10242,14 +10805,34 @@ function buildKioskView(adminPreview=false){
             <div style="font-size:1.1rem;font-weight:600;">No guests today</div>
             <div style="font-size:0.8rem;margin-top:0.35rem;">Check back soon!</div>
           </div>`:`
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(${adminPreview?'150px':'180px'},1fr));gap:1rem;">
-            ${dogs.map(d=>`
-            <div style="background:rgba(255,255,255,0.09);border:1px solid rgba(255,255,255,0.14);border-radius:1.15rem;padding:1.25rem 0.9rem;text-align:center;backdrop-filter:blur(8px);transition:transform .2s;" onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform=''">
-              <div style="width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,0.08);border:2px solid rgba(255,200,100,0.35);display:flex;align-items:center;justify-content:center;font-size:2rem;margin:0 auto 0.75rem;">🐶</div>
-              <div style="color:white;font-size:1rem;font-weight:700;line-height:1.2;">${d.dogName}</div>
-              ${d.breed?`<div style="color:rgba(255,200,100,0.7);font-size:0.72rem;margin-top:3px;">${d.breed}</div>`:''}
-              <div style="color:rgba(255,255,255,0.35);font-size:0.7rem;margin-top:5px;">${d.clientName}</div>
-            </div>`).join('')}
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(${adminPreview?'160px':'200px'},1fr));gap:1rem;">
+            ${dogs.map(d=>{
+              const profile=d.careProfile||{};
+              const meds=profile.medications||[];
+              const behaviorNote=profile.behavior?profile.behavior.split('\n')[0].substring(0,50):'';
+              const allergies=profile.behavior&&profile.behavior.toLowerCase().includes('allerg')?'⚠️ Allergies':'';
+              return`
+            <div style="background:rgba(255,255,255,0.09);border:1px solid rgba(255,255,255,0.14);border-radius:1.15rem;padding:1.2rem 0.85rem;text-align:center;backdrop-filter:blur(8px);transition:transform .2s;display:flex;flex-direction:column;min-height:${adminPreview?'320px':'380px'};" onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform=''">
+              <div style="width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,0.08);border:2px solid rgba(255,200,100,0.35);display:flex;align-items:center;justify-content:center;font-size:2rem;margin:0 auto 0.6rem;">🐶</div>
+              <div style="color:white;font-size:0.95rem;font-weight:700;line-height:1.2;">${d.dogName}</div>
+              ${d.breed?`<div style="color:rgba(255,200,100,0.7);font-size:0.68rem;margin-top:2px;">${d.breed}</div>`:''}
+              <div style="color:rgba(255,255,255,0.35);font-size:0.65rem;margin-top:4px;">${d.clientName}</div>
+              ${behaviorNote||allergies?`
+              <div style="margin-top:0.6rem;padding-top:0.6rem;border-top:1px solid rgba(255,255,255,0.1);text-align:left;flex-grow:1;">
+                ${allergies?`<div style="color:#FCA5A5;font-size:0.65rem;font-weight:600;margin-bottom:3px;">${allergies}</div>`:''}
+                ${behaviorNote?`<div style="color:rgba(255,200,100,0.75);font-size:0.65rem;line-height:1.3;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${behaviorNote}</div>`:''}
+              </div>`:''}
+              ${meds.length>0?`
+              <div style="margin-top:0.6rem;padding-top:0.6rem;border-top:1px solid rgba(255,255,255,0.1);display:flex;flex-direction:column;gap:0.35rem;">
+                ${meds.map((med,idx)=>{
+                  const nextTime=med.times&&med.times[0]?med.times[0]:'';
+                  const status=getMedStatus(nextTime);
+                  const icon=status.status==='overdue'?'🔴':status.status==='urgent'?'🔴':status.status==='soon'?'🟡':'🟢';
+                  return`<span id="med-badge-${d.dogId}-${idx}" class="med-badge ${status.status}" data-med-badge="true" data-med-time="${nextTime}" style="font-size:0.7rem;justify-content:center;">${icon} ${med.name} ${status.label}</span>`;
+                }).join('')}
+              </div>`:''}
+            </div>`;
+            }).join('')}
           </div>`}
       </div>
       <!-- RIGHT: Upcoming week -->
