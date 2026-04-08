@@ -1105,6 +1105,7 @@ document.addEventListener('visibilitychange',()=>{
 // ═══════════════════════════════════════════════════
 let tokenClient=null,silentSignIn=false;
 let _mobileMenuOpen=false;
+let _adminNavOpen=false;
 // driveToken mirrors state.accessToken — they are the same token now that all scopes are consolidated.
 let driveToken=null;
 // Persistent folder ID cache — avoids duplicate folder creation across sessions.
@@ -2911,13 +2912,14 @@ function buildAdminLayout(){
     {id:'clients',   icon:'👥',label:'Clients & Pets'},
     {id:'vetclinics',icon:'🏥',label:'Vet Clinics'},
     {id:'invoices',  icon:'💰',label:'Invoices'},
+    {id:'kiosk',     icon:'🖥️',label:'Kiosk Preview'},
   ];
   const adminNav=[
     {id:'inventory', icon:'📦',label:'Inventory'},
     {id:'services',  icon:'🛎️',label:'Services'},
     {id:'settings',  icon:'⚙️',label:'Settings'},
-    {id:'kiosk',     icon:'🖥️',label:'Kiosk Preview'},
   ];
+  const adminOpen=_adminNavOpen||adminNav.some(n=>state.view===n.id);
   const dbNavItem=state.mode==='live'&&state.sheetUrl?`
     <button onclick="window.open('${state.sheetUrl}','_blank')"
       class="nav-item w-full text-left px-3 py-2.5 rounded-xl text-white flex items-center gap-3">
@@ -2977,13 +2979,18 @@ function buildAdminLayout(){
             <span>${n.icon}</span><span class="text-sm font-medium">${n.label}</span>
           </button>`).join('')}
         <div class="pt-3 pb-0.5">
-          <div class="text-xs px-3 uppercase tracking-widest font-semibold mb-1.5" style="color:rgba(255,255,255,0.3)">Admin</div>
-          ${adminNav.map(n=>`
-            <button onclick="setView('${n.id}')"
-              class="nav-item w-full text-left px-3 py-2.5 rounded-xl text-white flex items-center gap-3 ${state.view===n.id?'active':''}">
-              <span>${n.icon}</span><span class="text-sm font-medium">${n.label}</span>
-            </button>`).join('')}
-          ${dbNavItem}
+          <button onclick="_adminNavOpen=!_adminNavOpen;render();" class="w-full flex items-center justify-between px-3 py-1.5 rounded-lg transition-colors" style="background:none;border:none;cursor:pointer;">
+            <span class="text-xs uppercase tracking-widest font-semibold" style="color:rgba(255,255,255,0.3)">Admin</span>
+            <span class="text-xs transition-transform" style="color:rgba(255,255,255,0.3);display:inline-block;transform:rotate(${adminOpen?'0':'-90'}deg);">▾</span>
+          </button>
+          <div style="overflow:hidden;max-height:${adminOpen?'300px':'0'};transition:max-height 0.25s ease;opacity:${adminOpen?'1':'0'};">
+            ${adminNav.map(n=>`
+              <button onclick="setView('${n.id}')"
+                class="nav-item w-full text-left px-3 py-2.5 rounded-xl text-white flex items-center gap-3 ${state.view===n.id?'active':''}">
+                <span>${n.icon}</span><span class="text-sm font-medium">${n.label}</span>
+              </button>`).join('')}
+            ${dbNavItem}
+          </div>
         </div>
       </nav>
       <div class="p-3 border-t border-white/10 space-y-0.5">
