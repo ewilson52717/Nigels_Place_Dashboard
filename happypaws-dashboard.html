@@ -1106,6 +1106,20 @@ document.addEventListener('visibilitychange',()=>{
 let tokenClient=null,silentSignIn=false;
 let _mobileMenuOpen=false;
 let _adminNavOpen=false;
+function toggleAdminNav(){
+  _adminNavOpen=!_adminNavOpen;
+  const drawer=document.getElementById('admin-nav-drawer');
+  const arrow=document.getElementById('admin-nav-arrow');
+  if(!drawer)return;
+  if(_adminNavOpen){
+    drawer.style.maxHeight='0';drawer.style.opacity='0';
+    requestAnimationFrame(()=>{drawer.style.maxHeight='300px';drawer.style.opacity='1';});
+    if(arrow)arrow.style.transform='rotate(0deg)';
+  }else{
+    drawer.style.maxHeight='0';drawer.style.opacity='0';
+    if(arrow)arrow.style.transform='rotate(-90deg)';
+  }
+}
 // driveToken mirrors state.accessToken — they are the same token now that all scopes are consolidated.
 let driveToken=null;
 // Persistent folder ID cache — avoids duplicate folder creation across sessions.
@@ -2979,11 +2993,11 @@ function buildAdminLayout(){
             <span>${n.icon}</span><span class="text-sm font-medium">${n.label}</span>
           </button>`).join('')}
         <div class="pt-3 pb-0.5">
-          <button onclick="_adminNavOpen=!_adminNavOpen;render();" class="w-full flex items-center justify-between px-3 py-2 rounded-xl transition-colors" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.12)'" onmouseout="this.style.background='rgba(255,255,255,0.06)'">
+          <button onclick="toggleAdminNav()" class="w-full flex items-center justify-between px-3 py-2 rounded-xl transition-colors" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.12)'" onmouseout="this.style.background='rgba(255,255,255,0.06)'">
             <span class="text-xs uppercase tracking-widest font-semibold" style="color:rgba(255,255,255,0.45)">⚙️ Admin</span>
-            <span style="color:rgba(255,255,255,0.45);display:inline-block;transform:rotate(${adminOpen?'0':'-90'}deg);transition:transform 0.25s ease;font-size:0.85rem;">▾</span>
+            <span id="admin-nav-arrow" style="color:rgba(255,255,255,0.45);display:inline-block;transform:rotate(${adminOpen?'0':'-90'}deg);transition:transform 0.35s cubic-bezier(0.4,0,0.2,1);font-size:0.85rem;">▾</span>
           </button>
-          <div style="overflow:hidden;max-height:${adminOpen?'300px':'0'};transition:max-height 0.25s ease;opacity:${adminOpen?'1':'0'};">
+          <div id="admin-nav-drawer" style="overflow:hidden;max-height:${adminOpen?'300px':'0'};opacity:${adminOpen?'1':'0'};transition:max-height 0.4s cubic-bezier(0.4,0,0.2,1),opacity 0.3s ease;">
             ${adminNav.map(n=>`
               <button onclick="setView('${n.id}')"
                 class="nav-item w-full text-left px-3 py-2.5 rounded-xl text-white flex items-center gap-3 ${state.view===n.id?'active':''}">
