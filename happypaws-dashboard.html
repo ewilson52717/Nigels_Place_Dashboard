@@ -331,7 +331,7 @@ const DEFAULT_SERVICES=[
 //  ②  STATE
 // ═══════════════════════════════════════════════════
 const state={
-  role:'login',view:'dashboard',clientView:'home',
+  role:'login',view:'dashboard',clientView:'home',clientsTab:'clients',
   calendarDate:new Date(),
   showModal:null,currentClientId:null,selectedDogId:null,selectedClientId:null,
   adminViewAsClient:false,  // admin toggling to client-perspective view
@@ -1536,10 +1536,13 @@ async function onToken(resp){
     // Restore last-viewed section so refreshing the page lands back where you were
     if(state.role==='admin'){
       const sv=localStorage.getItem('np_view');
-      const validViews=['dashboard','calendar','clients','dogs','invoices','settings','services'];
+      const validViews=['dashboard','calendar','clients','invoices','settings','services','vetclinics','kiosk'];
       if(sv&&validViews.includes(sv))state.view=sv;
+      if(sv==='dogs'){state.view='clients';state.clientsTab='pets';}
+      const st=localStorage.getItem('np_clients_tab');
+      if(st==='pets'||st==='clients')state.clientsTab=st;
       const sd=parseInt(localStorage.getItem('np_dog_id')||'0');
-      if(sd&&state.view==='dogs')state.selectedDogId=sd;
+      if(sd&&state.clientsTab==='pets')state.selectedDogId=sd;
     }
   }catch(e){showToast('Error: '+e.message,'#EF4444');console.error(e);state.role='login';}
   state.isLoading=false;render();
@@ -2858,7 +2861,7 @@ async function submitOnboarding(){
 function buildAdminLayout(){
   const nav=[
     {id:'dashboard', icon:'📊',label:'Dashboard'}, {id:'calendar',  icon:'📅',label:'Calendar'},
-    {id:'clients',   icon:'👥',label:'Clients'},   {id:'dogs',      icon:'🐾',label:'Pets'},
+    {id:'clients',   icon:'👥',label:'Clients & Pets'},
     {id:'vetclinics',icon:'🏥',label:'Vet Clinics'},{id:'services',  icon:'🛎️',label:'Services'},
     {id:'invoices',  icon:'💰',label:'Invoices'},  {id:'settings',  icon:'⚙️',label:'Settings'},
     {id:'kiosk',     icon:'🖥️',label:'Kiosk Preview'},
@@ -2870,7 +2873,7 @@ function buildAdminLayout(){
     </button>`:'';
   const views={
     dashboard:buildDashboard(),calendar:buildCalendarView('admin'),
-    clients:buildClientsView(),dogs:buildDogsView(),
+    clients:buildClientsAndPetsView(),dogs:buildClientsAndPetsView(),
     vetclinics:buildVetClinicsView(),
     services:buildServicesView(),
     invoices:buildInvoicesView(),settings:buildSettingsView(),
@@ -2917,7 +2920,7 @@ function buildAdminLayout(){
       <nav class="flex-1 p-3 space-y-1 overflow-y-auto">
         ${nav.map(n=>`
           <button onclick="setView('${n.id}')"
-            class="nav-item w-full text-left px-3 py-2.5 rounded-xl text-white flex items-center gap-3 ${state.view===n.id?'active':''}">
+            class="nav-item w-full text-left px-3 py-2.5 rounded-xl text-white flex items-center gap-3 ${state.view===n.id||(n.id==='clients'&&state.view==='dogs')?'active':''}">
             <span>${n.icon}</span><span class="text-sm font-medium">${n.label}</span>
           </button>`).join('')}
         ${dbNavItem?`<div class="pt-2 pb-0.5"><div class="text-xs px-3 uppercase tracking-widest font-semibold mb-1" style="color:rgba(255,255,255,0.3)">Admin</div>${dbNavItem}</div>`:''}
@@ -3346,82 +3349,116 @@ function buildCalendarView(role){
       </div>`:''}
   </div>`;
 }
-function buildClientsView(){
+function switchClientsTab(tab){state.clientsTab=tab;state.selectedDogId=null;_clientsPetSearch='';try{localStorage.setItem('np_clients_tab',tab);}catch(e){}render();}
+let _clientsPetSearch='';
+function buildClientsAndPetsView(){
+  // If pets tab and a specific dog is selected, delegate to dog detail
+  if(state.clientsTab==='pets'&&state.selectedDogId){return buildDogsView();}
+  const isClientsTab=state.clientsTab!=='pets';
+  const allDogsRaw=clients.flatMap(c=>c.dogs.map(d=>({...d,clientId:c.id,clientName:c.name})));
+  const activeDogCt=allDogsRaw.filter(d=>!d.deceased).length;
+  const searchTerm=_clientsPetSearch.toLowerCase().trim();
   return`
   <div class="p-6 slide-in">
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
       <div>
-        <h1 class="text-2xl font-bold text-gray-800 font-headline">Clients</h1>
-        <p class="text-gray-400 text-sm mt-1">${clients.length} client${clients.length!==1?'s':''} · click a pet to view their profile</p>
+        <h1 class="text-2xl font-bold text-gray-800 font-headline">Clients & Pets</h1>
+        <p class="text-gray-400 text-sm mt-1">${clients.length} client${clients.length!==1?'s':''} · ${activeDogCt} pet${activeDogCt!==1?'s':''}</p>
       </div>
       <button onclick="openAddClientModal()" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#6366f1" onmouseover="this.style.background='#4f46e5'" onmouseout="this.style.background='#6366f1'">+ Add Client</button>
     </div>
-    ${clients.length===0?`<div class="text-center text-gray-300 py-16"><div class="text-5xl mb-3">👥</div><p>No clients yet. Add your first one!</p></div>`:''}
-    <div class="space-y-3">
-      ${clients.map(cl=>{
-        const total=bookings.filter(b=>b.clientId===cl.id&&b.status!=='cancelled').length;
-        const vaccAlert=cl.dogs.some(d=>vaccStatus(d)==='expired');
-        const vaccWarn=!vaccAlert&&cl.dogs.some(d=>vaccStatus(d)==='expiring');
-        const clPkgBalance=packages.filter(p=>p.clientId===cl.id&&p.remaining>0).reduce((s,p)=>s+p.remaining,0);
-        return`
-        <div id="client-card-${cl.id}" class="bg-white rounded-2xl p-5 shadow-sm border transition-all ${state.selectedClientId===cl.id?'border-amber-400 ring-2 ring-amber-300':'border-gray-100'}">
-          <div class="flex items-start justify-between mb-4">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 bg-gradient-to-br from-amber-700 to-amber-900 rounded-xl flex items-center justify-center font-bold text-white text-lg">${cl.name[0]}</div>
-              <div>
-                <div class="font-semibold text-gray-800">${cl.name}</div>
-                <div class="text-xs text-gray-400">${cl.email}</div>
-                <div class="text-xs text-gray-400">${fmtPhone(cl.phone)}</div>
-              </div>
-            </div>
-            <div class="flex items-center gap-2 flex-wrap justify-end">
-              ${vaccAlert?`<span class="badge bg-red-100 text-red-600">🚩 Vacc Expired</span>`:''}
-              ${vaccWarn?`<span class="badge bg-amber-100 text-amber-700">⚠️ Vacc Expiring</span>`:''}
-              ${cl.photoConsent?`<span class="badge bg-blue-100 text-blue-600">📸 Photo OK</span>`:`<span class="badge bg-gray-100 text-gray-400">No Photo Consent</span>`}
-              <span class="badge bg-blue-100 text-blue-600">${total} visit${total!==1?'s':''}</span>
-              ${clPkgBalance>0?`<span class="badge bg-amber-100 text-indigo-800">🎫 ${clPkgBalance} session${clPkgBalance===1?'':'s'}</span>`:''}
-              <button onclick="openEditClientModal(${cl.id})" class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100">Edit</button>
-              <button onclick="deleteClient(${cl.id})" class="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100">Delete</button>
-            </div>
-          </div>
-          <!-- Dog quick-links -->
-          <div class="border-t border-gray-50 pt-3">
-            <div class="text-xs text-gray-400 font-medium mb-2 uppercase tracking-wider">Pets</div>
-            <div class="flex gap-2 flex-wrap">
-              ${cl.dogs.map(d=>{
-                const vs=vaccStatus(d);
-                const links=requestVaccInfoLinks(cl,d);
-                const needsRequest=vs==='expired'||vs==='expiring';
-                return`
-                <div class="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2 border ${vs==='expired'?'border-red-200':vs==='expiring'?'border-amber-200':'border-gray-100'}">
-                  ${(()=>{
-                    const off=d.photoOffset||{x:50,y:50};
-                    const fid=d.photoLink?(d.photoLink.match(/^[A-Za-z0-9_-]{25,60}$/)?d.photoLink:(d.photoLink.match(/\/d\/([A-Za-z0-9_-]{25,60})/)||[])[1])||'':'';
-                    return d.photoLink&&fid
-                      ?`<div class="relative cursor-pointer group/tp" onclick="event.stopPropagation();openProfilePhotoLightbox('${fid}',${cl.id},${d.id})" title="View photo">
-                          ${driveImgTag(d.photoLink,'w-7 h-7 rounded-full object-cover',d.name,`object-position:${off.x}% ${off.y}%`)||`<span class="text-base">🐶</span>`}
-                          <div class="absolute inset-0 rounded-full bg-black/0 group-hover/tp:bg-black/30 transition-all flex items-center justify-center"><span class="opacity-0 group-hover/tp:opacity-100 text-white text-xs">🔍</span></div>
-                        </div>`
-                      :`<span class="text-base">🐶</span>`;
-                  })()}
-                  <div>
-                    <button onclick="setView('dogs');setDogDetail(${d.id})" class="text-sm font-semibold text-indigo-700 hover:underline">${d.name}</button>
-                    <div class="text-xs text-gray-400">${d.breed}</div>
-                  </div>
-                  <div class="ml-1">${vaccBadge(d)}</div>
-                  ${needsRequest?`<div class="flex gap-1 ml-1">
-                    <a href="${links.smsHref}" class="text-xs px-1.5 py-0.5 bg-amber-700 text-white rounded-md hover:bg-amber-800 no-underline" title="Text">💬</a>
-                    <a href="${links.emailHref}" class="text-xs px-1.5 py-0.5 bg-amber-100 text-indigo-800 rounded-md hover:bg-amber-200 no-underline" title="Email">✉️</a>
-                  </div>`:''}
-                </div>`;
-              }).join('')}
-              <button onclick="openAddClientModal()" style="display:none"></button>
-            </div>
-          </div>
-        </div>`;}).join('')}
+    <!-- Sub-tabs + Search -->
+    <div class="flex items-center gap-3 mb-5 flex-wrap">
+      <div class="flex rounded-xl overflow-hidden border border-gray-200" style="background:#f1f5f9;">
+        <button onclick="switchClientsTab('clients')" class="px-5 py-2 text-sm font-semibold transition-all ${isClientsTab?'text-white shadow-sm':'text-gray-500 hover:text-gray-700'}" style="${isClientsTab?'background:#4338ca;':''}">
+          <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;margin-right:4px;">group</span>Clients
+        </button>
+        <button onclick="switchClientsTab('pets')" class="px-5 py-2 text-sm font-semibold transition-all ${!isClientsTab?'text-white shadow-sm':'text-gray-500 hover:text-gray-700'}" style="${!isClientsTab?'background:#4338ca;':''}">
+          <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;margin-right:4px;">pets</span>Pets
+        </button>
+      </div>
+      <div class="flex-1 min-w-[200px] max-w-md relative">
+        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" style="font-size:18px;">search</span>
+        <input type="text" id="clients-pets-search" placeholder="${isClientsTab?'Search clients by name, email, or pet...':'Search pets by name, breed, or owner...'}"
+          value="${_clientsPetSearch.replace(/"/g,'&quot;')}"
+          oninput="_clientsPetSearch=this.value;render();requestAnimationFrame(()=>{const el=document.getElementById('clients-pets-search');if(el){el.focus();el.selectionStart=el.selectionEnd=el.value.length;}})"
+          class="w-full pl-9 pr-8 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all" style="background:#fff;">
+        ${_clientsPetSearch?`<button onclick="_clientsPetSearch='';render();" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 text-lg leading-none">&times;</button>`:''}
+      </div>
     </div>
+    ${isClientsTab?buildClientsTabContent(searchTerm):buildPetsTabContent(searchTerm)}
   </div>`;
 }
+function buildClientsTabContent(searchTerm){
+  let filtered=clients;
+  if(searchTerm){filtered=clients.filter(cl=>{
+    if(cl.name.toLowerCase().includes(searchTerm))return true;
+    if(cl.email&&cl.email.toLowerCase().includes(searchTerm))return true;
+    if(cl.phone&&cl.phone.includes(searchTerm))return true;
+    if(cl.dogs.some(d=>d.name.toLowerCase().includes(searchTerm)||d.breed.toLowerCase().includes(searchTerm)))return true;
+    return false;
+  });}
+  if(filtered.length===0&&searchTerm)return`<div class="text-center text-gray-300 py-16"><div class="text-4xl mb-3">🔍</div><p class="text-sm">No clients match "${searchTerm.replace(/</g,'&lt;')}"</p></div>`;
+  if(filtered.length===0)return`<div class="text-center text-gray-300 py-16"><div class="text-5xl mb-3">👥</div><p>No clients yet. Add your first one!</p></div>`;
+  return`<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8" style="overflow:visible;padding-top:1rem;padding-left:0.75rem;">
+    ${filtered.map(cl=>{
+      const total=bookings.filter(b=>b.clientId===cl.id&&b.status!=='cancelled').length;
+      const vaccAlert=cl.dogs.some(d=>vaccStatus(d)==='expired');
+      const vaccWarn=!vaccAlert&&cl.dogs.some(d=>vaccStatus(d)==='expiring');
+      const clPkgBalance=packages.filter(p=>p.clientId===cl.id&&p.remaining>0).reduce((s,p)=>s+p.remaining,0);
+      const dogCount=cl.dogs.filter(d=>!d.deceased).length;
+      // Pick first dog photo as the tilted card image, or use client initial
+      const firstDogWithPhoto=cl.dogs.find(d=>d.photoLink&&!d.deceased);
+      return`
+      <div id="client-card-${cl.id}" class="bg-white rounded-2xl p-5 shadow-sm border hover:shadow-xl hover:shadow-indigo-900/5 transition-all duration-300 cursor-pointer relative group ${state.selectedClientId===cl.id?'border-amber-400 ring-2 ring-amber-300':'border-gray-100'}" onclick="viewClientDetail(${cl.id})" style="padding-left:6.5rem;min-height:120px;">
+        <!-- Stitch-style tilted photo/avatar -->
+        <div class="absolute -top-3 -left-3 w-20 h-20 rounded-xl overflow-hidden shadow-lg" style="transform:rotate(-3deg);transition:transform 0.3s ease;" onmouseover="this.style.transform='rotate(0)'" onmouseout="this.style.transform='rotate(-3deg)'">
+          ${firstDogWithPhoto
+            ?(driveImgTag(firstDogWithPhoto.photoLink,'w-full h-full object-cover',cl.name)||`<div class="w-full h-full flex items-center justify-center text-2xl font-bold text-white" style="background:linear-gradient(135deg,#4338ca,#6366f1);">${cl.name[0]}</div>`)
+            :`<div class="w-full h-full flex items-center justify-center text-2xl font-bold text-white" style="background:linear-gradient(135deg,#4338ca,#6366f1);">${cl.name[0]}</div>`}
+        </div>
+        <div class="flex justify-between items-start">
+          <div>
+            <div class="font-bold font-headline text-gray-800 text-lg">${cl.name}</div>
+            <div class="text-xs text-gray-400 font-medium">${cl.email||''}</div>
+            ${cl.phone?`<div class="text-xs text-gray-400">${fmtPhone(cl.phone)}</div>`:''}
+          </div>
+          ${vaccAlert?`<span class="text-xs font-bold bg-red-100 text-red-600 px-2 py-1 rounded">Vacc Expired</span>`:vaccWarn?`<span class="text-xs font-bold bg-amber-100 text-amber-700 px-2 py-1 rounded">Vacc Expiring</span>`:''}
+        </div>
+        <div class="mt-3 flex items-center gap-3 text-xs text-gray-400 flex-wrap">
+          <span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px">pets</span><span class="font-medium">${dogCount} pet${dogCount!==1?'s':''}</span></span>
+          <span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px">calendar_month</span><span class="font-medium">${total} visit${total!==1?'s':''}</span></span>
+          ${clPkgBalance>0?`<span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px">confirmation_number</span><span class="font-medium">${clPkgBalance} session${clPkgBalance===1?'':'s'}</span></span>`:''}
+          ${cl.photoConsent?`<span class="badge bg-blue-100 text-blue-600" style="font-size:0.65rem;padding:2px 6px;">📸</span>`:''}
+        </div>
+        <!-- Pet pill row -->
+        <div class="mt-3 flex gap-1.5 flex-wrap">
+          ${cl.dogs.filter(d=>!d.deceased).map(d=>`<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium" style="background:#e3dfff;color:#2a14b4;">🐾 ${d.name}</span>`).join('')}
+        </div>
+        <div class="mt-3 flex gap-2">
+          <button class="flex-1 text-xs py-1.5 rounded-full font-bold transition-colors" style="background:#e3dfff;color:#2a14b4;" onclick="event.stopPropagation();viewClientDetail(${cl.id})">View Client</button>
+          <button class="text-xs py-1.5 px-3 rounded-full font-bold transition-colors border border-gray-200 text-gray-500 hover:bg-gray-100" onclick="event.stopPropagation();openEditClientModal(${cl.id})">Edit</button>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+function viewClientDetail(clientId){
+  state.view='clients';state.clientsTab='clients';state.showModal=null;state.selectedDogId=null;
+  state.selectedClientId=clientId===state.selectedClientId?null:clientId;
+  _mobileMenuOpen=false;
+  document.getElementById('admin-sidebar')?.classList.remove('mob-open');
+  document.getElementById('mob-overlay')?.classList.remove('mob-open');
+  document.body.style.overflow='';
+  render();
+  if(state.selectedClientId){
+    requestAnimationFrame(()=>{
+      const el=document.getElementById('client-card-'+clientId);
+      if(el)el.scrollIntoView({behavior:'smooth',block:'center'});
+    });
+  }
+}
+function buildClientsView(){return buildClientsAndPetsView();}
 function buildDogsView(){
   // If a specific dog is selected, show detail view
   if(state.selectedDogId){
@@ -3434,7 +3471,7 @@ function buildDogsView(){
     return`
     <div class="p-6 slide-in">
       <div class="flex items-center gap-3 mb-6">
-        <button onclick="clearDogDetail()" class="flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 font-medium">← Back to All Pets</button>
+        <button onclick="clearDogDetail()" class="flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 font-medium">← Back to Clients & Pets</button>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
         <!-- Left: Dog profile card -->
@@ -3607,13 +3644,28 @@ function buildDogsView(){
   }
   return buildDogsList();
 }
-function buildDogsList(){
+function buildPetsTabContent(searchTerm){
   const allDogsRaw=clients.flatMap(c=>c.dogs.map(d=>({...d,clientId:c.id,clientName:c.name})));
+  let filtered=allDogsRaw;
+  if(searchTerm){filtered=allDogsRaw.filter(d=>{
+    if(d.name.toLowerCase().includes(searchTerm))return true;
+    if(d.breed&&d.breed.toLowerCase().includes(searchTerm))return true;
+    if(d.clientName&&d.clientName.toLowerCase().includes(searchTerm))return true;
+    return false;
+  });}
+  if(filtered.length===0&&searchTerm)return`<div class="text-center text-gray-300 py-16"><div class="text-4xl mb-3">🔍</div><p class="text-sm">No pets match "${searchTerm.replace(/</g,'&lt;')}"</p></div>`;
+  return buildDogsList(filtered);
+}
+function buildDogsList(preFiltered){
+  const allDogsRaw=preFiltered||clients.flatMap(c=>c.dogs.map(d=>({...d,clientId:c.id,clientName:c.name})));
   // Active dogs first, rainbow bridge dogs at bottom
   const allDogs=[...allDogsRaw.filter(d=>!d.deceased),...allDogsRaw.filter(d=>d.deceased)];
   const activeCt=allDogs.filter(d=>!d.deceased).length;
   const rbCt=allDogs.filter(d=>d.deceased).length;
-  return`
+  // When rendered inside the combined Clients & Pets view (with tabs/search above), skip header
+  const insideCombinedView=state.clientsTab==='pets'&&state.view==='clients';
+  let html='';
+  if(!insideCombinedView){html+=`
   <div class="p-6 slide-in">
     <div class="flex items-center justify-between mb-6">
       <div>
@@ -3621,9 +3673,9 @@ function buildDogsList(){
         <p class="text-gray-400 text-sm mt-1">${activeCt} active${rbCt>0?` · <span style="color:#9CA3AF;">🌈 ${rbCt} at the Rainbow Bridge</span>`:''}
         </p>
       </div>
-    </div>
-    ${allDogs.length===0?`<div class="text-center text-gray-300 py-16"><div class="text-5xl mb-3">🐶</div><p>No pets yet. Add a client with a pet first.</p></div>`:''}
-    ${rbCt>0&&activeCt>0?`<div class="text-xs text-gray-400 mb-3 font-medium uppercase tracking-wide">Active Guests</div>`:''}
+    </div>`;}
+  if(allDogs.length===0){return html+`<div class="text-center text-gray-300 py-16"><div class="text-5xl mb-3">🐶</div><p>No pets yet. Add a client with a pet first.</p></div>${insideCombinedView?'':'</div>'}`;}
+  html+=`${rbCt>0&&activeCt>0?`<div class="text-xs text-gray-400 mb-3 font-medium uppercase tracking-wide">Active Guests</div>`:''}
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8" style="overflow:visible;padding-top:1rem;padding-left:0.75rem;">
       ${allDogs.map((dog,i)=>{
         const vs=vaccStatus(dog);
@@ -3672,7 +3724,8 @@ function buildDogsList(){
         </div>`;
       }).join('')}
     </div>
-  </div>`;
+  ${insideCombinedView?'':'</div>'}`;
+  return html;
 }
 // ─── VET CLINICS ADMIN VIEW ────────────────────────────────────────────────────
 function buildVetClinicsView(){
@@ -6495,18 +6548,20 @@ function setView(v){
   document.getElementById('admin-sidebar')?.classList.remove('mob-open');
   document.getElementById('mob-overlay')?.classList.remove('mob-open');
   document.body.style.overflow='';
-  state.view=v;state.showModal=null;
-  if(v!=='dogs')state.selectedDogId=null;
-  if(v!=='clients')state.selectedClientId=null;
+  // Route 'dogs' to 'clients' with pets tab active
+  if(v==='dogs'){state.view='clients';state.clientsTab='pets';state.showModal=null;}
+  else{state.view=v;state.showModal=null;if(v==='clients')state.clientsTab=state.clientsTab||'clients';}
+  if(v!=='dogs'&&v!=='clients')state.selectedDogId=null;
+  if(v!=='clients'&&v!=='dogs')state.selectedClientId=null;
   // Persist so a page refresh returns to the same section
-  try{localStorage.setItem('np_view',v);if(v!=='dogs')localStorage.removeItem('np_dog_id');}catch(e){}
+  try{localStorage.setItem('np_view',state.view);localStorage.setItem('np_clients_tab',state.clientsTab);if(v!=='dogs'&&v!=='clients')localStorage.removeItem('np_dog_id');}catch(e){}
   render();
   // Start kiosk clock when admin previews kiosk
   if(v==='kiosk')startKioskTimers();
 }
 // Navigate to Clients view and highlight a specific client card
 function viewClientProfile(clientId){
-  state.view='clients';state.showModal=null;state.selectedDogId=null;
+  state.view='clients';state.clientsTab='clients';state.showModal=null;state.selectedDogId=null;
   state.selectedClientId=clientId;
   _mobileMenuOpen=false;
   document.getElementById('admin-sidebar')?.classList.remove('mob-open');
@@ -8633,7 +8688,8 @@ async function handlePlayPhotoUpload(clientId, dogId){
 }
 function setDogDetail(dogId){
   state.selectedDogId=dogId;
-  try{localStorage.setItem('np_view','dogs');localStorage.setItem('np_dog_id',String(dogId));}catch(e){}
+  state.view='clients';state.clientsTab='pets';
+  try{localStorage.setItem('np_view','clients');localStorage.setItem('np_clients_tab','pets');localStorage.setItem('np_dog_id',String(dogId));}catch(e){}
   render();
 }
 function clearDogDetail(){ state.selectedDogId=null; render(); }
