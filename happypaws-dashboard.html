@@ -3624,7 +3624,7 @@ function buildDogsList(){
     </div>
     ${allDogs.length===0?`<div class="text-center text-gray-300 py-16"><div class="text-5xl mb-3">🐶</div><p>No pets yet. Add a client with a pet first.</p></div>`:''}
     ${rbCt>0&&activeCt>0?`<div class="text-xs text-gray-400 mb-3 font-medium uppercase tracking-wide">Active Guests</div>`:''}
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8" style="overflow:visible;padding-top:1rem;padding-left:0.75rem;">
       ${allDogs.map((dog,i)=>{
         const vs=vaccStatus(dog);
         const isRb=dog.deceased;
@@ -3647,26 +3647,27 @@ function buildDogsList(){
           </div>`;
         }
         return`
-        <div class="${isRb?'opacity-50 grayscale':''}bg-white rounded-2xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer" onclick="setDogDetail(${dog.id})">
-          <div class="flex items-center gap-3 mb-3">
+        <div class="${isRb?'opacity-50 grayscale ':''}bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-xl hover:shadow-indigo-900/5 transition-all duration-300 cursor-pointer relative group" onclick="setDogDetail(${dog.id})" style="padding-left:6.5rem;min-height:120px;">
+          <!-- Stitch-style tilted photo -->
+          <div class="absolute -top-3 -left-3 w-20 h-20 rounded-xl overflow-hidden shadow-lg" style="transform:rotate(-3deg);transition:transform 0.3s ease;" onmouseover="this.style.transform='rotate(0)'" onmouseout="this.style.transform='rotate(-3deg)'">
             ${dog.photoLink
-              ?(driveImgTag(dog.photoLink,`w-12 h-12 rounded-full object-cover border-2 ${isRb?'border-gray-200':'border-indigo-100'}`,dog.name)||`<div class="w-12 h-12 rounded-full ${isRb?'bg-gray-100':'bg-indigo-50'} flex items-center justify-center text-2xl border-2 ${isRb?'border-gray-200':'border-indigo-100'}">🐶</div>`)
-              :`<div class="w-12 h-12 rounded-full ${isRb?'bg-gray-100':'bg-indigo-50'} flex items-center justify-center text-2xl border-2 ${isRb?'border-gray-200':'border-indigo-100'}">🐶</div>`}
-            <div class="flex-1 min-w-0">
-              <div class="font-semibold ${isRb?'text-gray-500':'text-gray-800'}">${dog.name}</div>
-              <div class="text-xs text-gray-400">${dog.breed} · ${fmtAge(dog.age,dog.birthday)}</div>
-            </div>
-            ${isRb?`<span class="badge" style="background:#F3F4F6;color:#9CA3AF;">🌈</span>`:vs==='expired'?`<span class="badge bg-red-100 text-red-600">🚩</span>`:vs==='expiring'?`<span class="badge bg-amber-100 text-amber-700">⚠️</span>`:vs==='ok'?`<span class="badge bg-green-100 text-green-600">✅</span>`:''}
+              ?(driveImgTag(dog.photoLink,'w-full h-full object-cover',dog.name)||`<div class="w-full h-full bg-indigo-50 flex items-center justify-center text-3xl">🐶</div>`)
+              :`<div class="w-full h-full bg-indigo-50 flex items-center justify-center text-3xl">🐶</div>`}
           </div>
-          <div class="text-xs text-gray-400 mb-2">👤 ${dog.clientName}</div>
-          ${isRb?`<div class="text-xs text-gray-400 italic">In loving memory</div>`:`
-          ${dog.notes?`<div class="text-xs text-gray-400 italic mb-2">"${dog.notes}"</div>`:''}
-          <div class="flex items-center justify-between">
-            <div class="flex gap-1 flex-wrap">
-              ${(dog.playPhotos||[]).length>0?`<span class="badge bg-blue-50 text-blue-600">📷 ${dog.playPhotos.length} photo${dog.playPhotos.length!==1?'s':''}</span>`:''}
-              ${dog.driveFileLink?`<span class="badge bg-green-50 text-green-600">📂 Record</span>`:''}
+          <div class="flex justify-between items-start">
+            <div>
+              <div class="font-bold font-headline ${isRb?'text-gray-500':'text-gray-800'} text-lg">${dog.name}</div>
+              <div class="text-xs text-gray-400 font-medium">${dog.breed} · ${fmtAge(dog.age,dog.birthday)}</div>
             </div>
-            <span class="text-xs text-indigo-600 font-medium">View Profile →</span>
+            ${isRb?`<span class="badge" style="background:#F3F4F6;color:#9CA3AF;">🌈</span>`:vs==='expired'?`<span class="text-xs font-bold bg-red-100 text-red-600 px-2 py-1 rounded">Expired</span>`:vs==='expiring'?`<span class="text-xs font-bold bg-amber-100 text-amber-700 px-2 py-1 rounded">Expiring</span>`:vs==='ok'?`<span class="text-xs font-bold bg-green-100 text-green-600 px-2 py-1 rounded">Current</span>`:''}
+          </div>
+          <div class="mt-3 flex items-center gap-2 text-xs text-gray-400">
+            <span class="material-symbols-outlined" style="font-size:14px">person</span>
+            <span class="font-medium">${dog.clientName}</span>
+          </div>
+          ${isRb?`<div class="text-xs text-gray-400 italic mt-2">In loving memory</div>`:`
+          <div class="mt-3 flex gap-2">
+            <button class="flex-1 text-xs py-1.5 rounded-full font-bold transition-colors" style="background:#e3dfff;color:#2a14b4;" onclick="event.stopPropagation();setDogDetail(${dog.id})">View Profile</button>
           </div>`}
         </div>`;
       }).join('')}
@@ -5501,53 +5502,82 @@ function parseCareNotesLocal(freeText){
   const profile=initCareProfile();
   if(!freeText||!freeText.trim())return profile;
   const text=freeText.toLowerCase();
-  // Extract medications: look for patterns like "give X at YZ", "medication X", "takes X"
-  const medRegex=/(?:give|medication|takes?|benadryl|supplement|medicine|drug|pill|tablet)[\s:]*([^,.]*?)(?:\s+(?:at|every|twice|once|daily|morning|evening|noon|am|pm|\d{1,2}[:0]?0?))[,.]?/gi;
-  const timeRegex=/(?:\d{1,2}(?:[:0]\d)?\s*(?:am|pm|a\.m\.|p\.m\.)|noon|midnight|\d{1,2}:\d{2})/gi;
-  const freqRegex=/(?:once|twice|three times|daily|bid|tid|every\s+\d+\s+hours?|morning|evening|afternoon)/gi;
-  const matches=freeText.matchAll(medRegex);
-  for(const m of matches){
-    if(m[1]&&m[1].length<50){
-      const times=[];
-      const timeMatches=freeText.matchAll(timeRegex);
-      for(const tm of timeMatches){
-        const normalized=tm[0].toLowerCase().replace(/[^0-9:apm]/g,'');
-        if(normalized.includes(':')){times.push(normalized.substring(0,5));}
-        else if(normalized.includes('am')||normalized.includes('pm')){
-          const h=parseInt(normalized)||12;times.push(String(h).padStart(2,'0')+':00');
-        }
+
+  // Split into sentences for smarter extraction
+  const sentences=freeText.split(/[.!?\n]+/).map(s=>s.trim()).filter(s=>s.length>3);
+
+  // ── MEDICATIONS: very broad matching ──
+  const medKeywords=/\b(benadryl|trazodone|gabapentin|apoquel|rimadyl|prednisone|carprofen|denamarin|zyrtec|pepcid|famotidine|vetmedin|phenobarbital|insulin|thyroid|supplement|vitamin|probiotic|medicine|medication|pill|tablet|capsule|treats?|drops?)\b/i;
+  const dosePattern=/\b(half|quarter|whole|one|two|three|four|\d+\.?\d*)\s*(mg|ml|cc|tab(?:let)?s?|pill|capsule|drop|scoop|pump|cup|tsp|tbsp|unit)s?\b/i;
+  const timePattern=/\b(\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)|noon|midnight|morning|evening|afternoon|night|lunch(?:time)?|dinner(?:time)?|breakfast|bedtime)\b/gi;
+  const freqPattern=/\b(once|twice|three times|daily|bid|tid|every\s+\d+\s+hours?|(?:once|twice)\s+(?:a|per)\s+day|morning\s+and\s+(?:evening|night)|as\s+needed)\b/i;
+
+  for(const sent of sentences){
+    const lo=sent.toLowerCase();
+    if(medKeywords.test(lo)||/\b(?:give|takes?|gets?|administer|receives?)\b/i.test(lo)&&(dosePattern.test(lo)||timePattern.test(lo)||freqPattern.test(lo))){
+      // Extract medication name — the keyword itself or the phrase after give/takes
+      let name='';
+      const nameMatch=sent.match(medKeywords);
+      if(nameMatch)name=nameMatch[0];
+      else{
+        const verbMatch=sent.match(/(?:give|takes?|gets?|receives?)\s+(?:a\s+|an\s+|the\s+)?(.+?)(?:\s+(?:at|every|twice|once|daily|in the|with|before|after)|\s*$)/i);
+        if(verbMatch)name=verbMatch[1].replace(/\s+(at|every|in|with|before|after).*$/i,'').trim();
       }
-      profile.medications.push({name:m[1].trim(),dose:'',frequency:'',times:times.slice(0,2),notes:''});
+      if(!name)name=sent.substring(0,40);
+      const dose=sent.match(dosePattern);
+      const freq=sent.match(freqPattern);
+      const times=[];
+      const tm=[...sent.matchAll(timePattern)];
+      for(const t of tm){
+        const v=t[0].toLowerCase();
+        if(v.includes('morning')||v.includes('breakfast'))times.push('07:00');
+        else if(v.includes('noon')||v.includes('lunch'))times.push('12:00');
+        else if(v.includes('evening')||v.includes('dinner'))times.push('17:00');
+        else if(v.includes('night')||v.includes('bedtime'))times.push('21:00');
+        else if(v.includes('afternoon'))times.push('14:00');
+        else{const n=v.replace(/[^0-9:apm]/g,'');if(n.includes(':'))times.push(n.substring(0,5));else{const h=parseInt(n)||12;times.push(String(h).padStart(2,'0')+':00');}}
+      }
+      profile.medications.push({name:name.substring(0,60),dose:dose?dose[0]:'',frequency:freq?freq[0]:'',times:[...new Set(times)].slice(0,4),notes:''});
     }
   }
-  // Extract allergies and feeding
-  const allergyRegex=/(?:allergic?|allergy|can't eat|no)[\s:]*([^,.]*?)(?:treats?|food|kibble)?[,.]?/gi;
-  const feedRegex=/(?:feed|kibble|food)[\s:]*([^,.]*?)(?:cup|scoop|oz|gram)?s?[\s]*(?:morning|evening|twice|daily)?[,.]?/gi;
-  // Extract times from feeding context
-  if(text.includes('feed')||text.includes('kibble')||text.includes('food')){
+
+  // ── BEHAVIOR: broad sentence-level matching ──
+  const behaviorKeywords=/\b(anxious|anxiety|nervous|scared|fearful|shy|aggressive|reactive|bite|nip|bark|lunge|friendly|social|playful|calm|gentle|energetic|hyper|separat(?:ion|e)|resource guard|leash react|dog.?(?:friendly|aggressive)|people.?(?:friendly|shy)|loud noise|thunder|firework|crate|kennel)\b/i;
+  const behaviorSentences=sentences.filter(s=>behaviorKeywords.test(s.toLowerCase()));
+  if(behaviorSentences.length)profile.behavior=behaviorSentences.join('. ').substring(0,500);
+
+  // ── FEEDING: broad matching ──
+  const feedKeywords=/\b(feed|eat|kibble|food|diet|meal|breakfast|dinner|lunch|cup|scoop|portion|allergic|allergy|sensitive stomach|grain.?free|raw|wet food|dry food|chicken|beef|pork|lamb|fish|salmon|peanut butter|treat)\b/i;
+  const feedSentences=sentences.filter(s=>feedKeywords.test(s.toLowerCase()));
+  if(feedSentences.length){
+    profile.feeding.instructions=feedSentences.join('. ').substring(0,500);
     const feedTimes=[];
-    if(text.includes('morning'))feedTimes.push('07:00');
-    if(text.includes('evening')||text.includes('dinner'))feedTimes.push('17:00');
-    if(text.includes('lunch')||text.includes('noon'))feedTimes.push('12:00');
-    if(feedTimes.length>0)profile.feeding.times=feedTimes;
-    const feedMatch=freeText.match(feedRegex);
-    if(feedMatch)profile.feeding.instructions=feedMatch[0].trim();
+    const allFeedText=feedSentences.join(' ').toLowerCase();
+    if(allFeedText.includes('morning')||allFeedText.includes('breakfast'))feedTimes.push('07:00');
+    if(allFeedText.includes('noon')||allFeedText.includes('lunch'))feedTimes.push('12:00');
+    if(allFeedText.includes('evening')||allFeedText.includes('dinner'))feedTimes.push('17:00');
+    const explicitTimes=[...feedSentences.join(' ').matchAll(timePattern)];
+    for(const t of explicitTimes){
+      const v=t[0].toLowerCase().replace(/[^0-9:apm]/g,'');
+      if(v.includes(':'))feedTimes.push(v.substring(0,5));
+    }
+    profile.feeding.times=[...new Set(feedTimes)];
   }
-  // Extract behavior notes
-  if(text.includes('anxiety')||text.includes('anxious')||text.includes('scary')||text.includes('aggressive')||text.includes('bite')||text.includes('shy')){
-    const behaviorMatch=freeText.match(/(?:(?:gets?|is|can be|becomes?|gets?)\s+)?(?:anxious?|aggressive?|shy|nervous|scared|fearful|nippy)[\s]*(?:around|with|about|of)?[\s]*([^,.]*?)(?:\.|,|—|-)/i);
-    if(behaviorMatch)profile.behavior=behaviorMatch[0].trim();
-  }
-  // Extract grooming preferences
-  if(text.includes('groom')||text.includes('bathe')||text.includes('brush')||text.includes('nail')||text.includes('ear')){
-    const groomMatch=freeText.match(/(?:grooming?|bathing?|brushing?|nails?|ears?|sensitive)[\s:]*([^,.]*?)(?:\.|,|—|-|;)/i);
-    if(groomMatch)profile.grooming=groomMatch[0].trim();
-  }
-  // Extract special instructions
-  if(text.includes('must')||text.includes('need')||text.includes('every')||text.includes('alert')||text.includes('call')){
-    const specialMatch=freeText.match(/(?:must|need|every|alert|call|should|don't|do not)[\s]*([^,.]*?)(?:\.|,|—|-|;|$)/i);
-    if(specialMatch)profile.specialInstructions=specialMatch[0].trim();
-  }
+
+  // ── GROOMING ──
+  const groomKeywords=/\b(groom|brush|bathe|bath|shampoo|nail|ear|clean|mat|tangle|shed|haircut|trim|coat|sensitive skin|dry skin|hot spot|flea|tick)\b/i;
+  const groomSentences=sentences.filter(s=>groomKeywords.test(s.toLowerCase()));
+  if(groomSentences.length)profile.grooming=groomSentences.join('. ').substring(0,500);
+
+  // ── SPECIAL INSTRUCTIONS: catch-all for remaining important info ──
+  const specialKeywords=/\b(must|need|require|important|alert|call|emergency|vet|contact|don't|do not|never|always|careful|watch|monitor|special|diabetic|seizure|blind|deaf|wheelchair|harness|muzzle|crate|gate|escape|jump|climb|potty|bathroom|go out|walk|exercise|water)\b/i;
+  const usedSentences=new Set([...behaviorSentences,...feedSentences,...groomSentences]);
+  const specialSentences=sentences.filter(s=>specialKeywords.test(s.toLowerCase())&&!usedSentences.has(s));
+  // Also grab any sentences not matched by other categories
+  const unmatchedSentences=sentences.filter(s=>!usedSentences.has(s)&&!specialSentences.includes(s)&&!profile.medications.some(m=>s.toLowerCase().includes(m.name.toLowerCase())));
+  const allSpecial=[...specialSentences,...unmatchedSentences];
+  if(allSpecial.length)profile.specialInstructions=allSpecial.join('. ').substring(0,800);
+
   return profile;
 }
 
@@ -6763,7 +6793,9 @@ function previewCareNotes(clientId,dogId){
   if(parsed.grooming)html+='<div><span class="text-xs font-bold text-gray-700">✂️ Grooming:</span><div class="text-sm text-gray-700 mt-1">'+parsed.grooming+'</div></div>';
   if(parsed.specialInstructions)html+='<div><span class="text-xs font-bold text-gray-700">⚠️ Special:</span><div class="text-sm text-gray-700 mt-1">'+parsed.specialInstructions+'</div></div>';
   if(!parsed.medications?.length&&!parsed.behavior&&!parsed.feeding?.instructions&&!parsed.grooming&&!parsed.specialInstructions){
-    html+='<div class="text-sm text-gray-500">No structured data could be extracted. The text will be saved as general notes. Try using keywords like "takes", "give", "allergic", "feed", "groom", etc.</div>';
+    html+='<div class="text-sm text-amber-700 bg-amber-50 rounded-lg p-3 border border-amber-200"><strong>Tip:</strong> Your notes will still be saved as Special Instructions. To get better categorization, try phrases like: "takes Benadryl at noon," "allergic to chicken," "gets anxious around big dogs," "brush coat daily."</div>';
+    // Save the raw text as special instructions so nothing is lost
+    parsed.specialInstructions=freeText.substring(0,800);
   }
   html+='<div class="text-xs text-emerald-600 mt-2">Looks good? Click <strong>Summarize & Save</strong> to save, or keep editing above.</div>';
   html+='</div>';
@@ -6794,6 +6826,10 @@ async function submitCareNotes(clientId, dogId){
   }
   if(!parsed.grooming&&existing.grooming)parsed.grooming=existing.grooming;
   if(!parsed.specialInstructions&&existing.specialInstructions)parsed.specialInstructions=existing.specialInstructions;
+  // Fallback: if nothing was parsed into categories, save raw text as special instructions
+  if(!parsed.medications?.length&&!parsed.behavior&&!parsed.feeding?.instructions&&!parsed.grooming&&!parsed.specialInstructions){
+    parsed.specialInstructions=freeText.substring(0,800);
+  }
   dog.careProfile=parsed;
   render();
   try{

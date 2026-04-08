@@ -106,6 +106,7 @@ function doPost(e) {
     if (action === 'cancelSquareInvoice') return cancelSquareInvoice(ss, req, email);
     if (action === 'listSquarePayments') return listSquarePayments(ss, req, email);
     if (action === 'refundSquarePayment') return refundSquarePayment(ss, req, email);
+    if (action === 'updateCareProfile')  return updateCareProfile(ss, req, email);
 
     return respond({ ok: false, error: `Unknown action: ${action}` });
 
@@ -1446,6 +1447,31 @@ function refundSquarePayment(ss, req, callerEmail) {
   } catch (e) {
     return respond({ ok: false, error: 'Refund failed: ' + e.message });
   }
+}
+
+// ─── UPDATE CARE PROFILE ────────────────────────────────────────────────────
+function updateCareProfile(ss, req, email) {
+  const dogId = req.dogId;
+  const careProfile = req.careProfile;
+  if (!dogId || !careProfile) return respond({ ok: false, error: 'Missing dogId or careProfile' });
+
+  const dogsSheet = ss.getSheetByName('Dogs');
+  if (!dogsSheet) return respond({ ok: false, error: 'Dogs sheet not found' });
+
+  const data = dogsSheet.getDataRange().getValues();
+  const headers = data[0];
+  const idCol = headers.indexOf('id');
+  const cpCol = headers.indexOf('careProfile');
+
+  if (cpCol < 0) return respond({ ok: false, error: 'careProfile column not found in Dogs sheet' });
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idCol]) === String(dogId)) {
+      dogsSheet.getRange(i + 1, cpCol + 1).setValue(JSON.stringify(careProfile));
+      return respond({ ok: true, message: 'Care profile updated' });
+    }
+  }
+  return respond({ ok: false, error: 'Dog not found: ' + dogId });
 }
 
 // ─── RESPONSE HELPER ─────────────────────────────────────────────────────────
