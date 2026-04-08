@@ -3407,16 +3407,8 @@ function buildClientsTabContent(searchTerm){
       const vaccWarn=!vaccAlert&&cl.dogs.some(d=>vaccStatus(d)==='expiring');
       const clPkgBalance=packages.filter(p=>p.clientId===cl.id&&p.remaining>0).reduce((s,p)=>s+p.remaining,0);
       const dogCount=cl.dogs.filter(d=>!d.deceased).length;
-      // Pick first dog photo as the tilted card image, or use client initial
-      const firstDogWithPhoto=cl.dogs.find(d=>d.photoLink&&!d.deceased);
       return`
-      <div id="client-card-${cl.id}" class="bg-white rounded-2xl p-5 shadow-sm border hover:shadow-xl hover:shadow-indigo-900/5 transition-all duration-300 cursor-pointer relative group ${state.selectedClientId===cl.id?'border-amber-400 ring-2 ring-amber-300':'border-gray-100'}" onclick="viewClientDetail(${cl.id})" style="padding-left:6.5rem;min-height:120px;">
-        <!-- Stitch-style tilted photo/avatar -->
-        <div class="absolute -top-3 -left-3 w-20 h-20 rounded-xl overflow-hidden shadow-lg" style="transform:rotate(-3deg);transition:transform 0.3s ease;" onmouseover="this.style.transform='rotate(0)'" onmouseout="this.style.transform='rotate(-3deg)'">
-          ${firstDogWithPhoto
-            ?(driveImgTag(firstDogWithPhoto.photoLink,'w-full h-full object-cover',cl.name)||`<div class="w-full h-full flex items-center justify-center text-2xl font-bold text-white" style="background:linear-gradient(135deg,#4338ca,#6366f1);">${cl.name[0]}</div>`)
-            :`<div class="w-full h-full flex items-center justify-center text-2xl font-bold text-white" style="background:linear-gradient(135deg,#4338ca,#6366f1);">${cl.name[0]}</div>`}
-        </div>
+      <div id="client-card-${cl.id}" class="bg-white rounded-2xl p-5 shadow-sm border hover:shadow-xl hover:shadow-indigo-900/5 transition-all duration-300 cursor-pointer relative group ${state.selectedClientId===cl.id?'border-amber-400 ring-2 ring-amber-300':'border-gray-100'}" onclick="viewClientDetail(${cl.id})">
         <div class="flex justify-between items-start">
           <div>
             <div class="font-bold font-headline text-gray-800 text-lg">${cl.name}</div>
