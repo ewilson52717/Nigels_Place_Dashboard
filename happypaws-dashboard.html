@@ -331,7 +331,7 @@ const DEFAULT_SERVICES=[
 //  ②  STATE
 // ═══════════════════════════════════════════════════
 const state={
-  role:'login',view:'dashboard',clientView:'home',clientsTab:'clients',
+  role:'login',view:'dashboard',clientView:'home',clientsTab:'clients',inventoryTab:'items',
   calendarDate:new Date(),
   showModal:null,currentClientId:null,selectedDogId:null,selectedClientId:null,
   adminViewAsClient:false,  // admin toggling to client-perspective view
@@ -369,6 +369,15 @@ const state={
 //  ③  LIVE DATA ARRAYS
 // ═══════════════════════════════════════════════════
 let clients=[],bookings=[],invoices=[],services=[],packages=[];
+let inventory=[],inventoryLog=[];
+const INVENTORY_CATEGORIES=[
+  {id:'grooming',label:'Grooming Supplies',icon:'✂️',color:'#8B5CF6'},
+  {id:'kennel',label:'Kennel & Bedding',icon:'🏠',color:'#F59E0B'},
+  {id:'cleaning',label:'Cleaning Supplies',icon:'🧹',color:'#10B981'},
+  {id:'food',label:'Food & Treats',icon:'🦴',color:'#EF4444'},
+  {id:'firstaid',label:'First Aid',icon:'🩹',color:'#EC4899'},
+  {id:'office',label:'Office & Misc',icon:'📎',color:'#6366F1'},
+];
 let lastSynced=null,autoRefreshTimer=null;
 let _lastDataFingerprint='';
 let _safetyNetTimer=null; // cancelled once onToken fires so it never interrupts a live load
@@ -1536,7 +1545,7 @@ async function onToken(resp){
     // Restore last-viewed section so refreshing the page lands back where you were
     if(state.role==='admin'){
       const sv=localStorage.getItem('np_view');
-      const validViews=['dashboard','calendar','clients','invoices','settings','services','vetclinics','kiosk'];
+      const validViews=['dashboard','calendar','clients','invoices','settings','services','vetclinics','kiosk','inventory'];
       if(sv&&validViews.includes(sv))state.view=sv;
       if(sv==='dogs'){state.view='clients';state.clientsTab='pets';}
       const st=localStorage.getItem('np_clients_tab');
@@ -1818,6 +1827,14 @@ async function loadAllData(){
       purchaseDate:r[5]||'',qty:+r[6]||0,remaining:+r[7]||0,pricePerSession:+r[8]||0,
       totalPaid:+r[9]||0,notes:r[10]||''});
   });
+  // ── Load Inventory + Inventory Log ────────────────────────────────────────
+  try{
+    const[invR,logR]=await Promise.all([readRangeSafe('Inventory!A2:L'),readRangeSafe('InventoryLog!A2:G')]);
+    inventory.length=0;
+    (invR||[]).forEach(r=>{if(r[0])inventory.push({id:+r[0],name:String(r[1]||''),category:String(r[2]||'office'),quantity:+r[3]||0,unit:String(r[4]||'units'),costPerUnit:+r[5]||0,lowStockThreshold:+r[6]||3,notes:String(r[7]||''),addedBy:String(r[8]||''),addedDate:String(r[9]||''),lastUpdatedBy:String(r[10]||''),lastUpdatedDate:String(r[11]||'')});});
+    inventoryLog.length=0;
+    (logR||[]).forEach(r=>{if(r[0])inventoryLog.push({id:+r[0],itemId:+r[1]||0,itemName:String(r[2]||''),quantityUsed:+r[3]||0,date:String(r[4]||''),loggedBy:String(r[5]||''),notes:String(r[6]||'')});});
+  }catch(e){console.warn('[PawDesk] Inventory sheets not found yet — will create on first save.',e);}
 }
 async function persistPackages(){
   if(state.mode!=='live')return;
@@ -1853,6 +1870,36 @@ async function persistInvoices(){
   await writeRange(`Invoices!A1:M${rows.length}`,rows);
   if(rows.length<9999)await clearRange(`Invoices!A${rows.length+1}:M9999`);
 }
+// ─── INVENTORY PERSISTENCE ───────────────────────────────────────────────────
+async function ensureInventorySheets(){
+  try{await readRange('Inventory!A1:A1');}
+  catch(e){try{
+    await sheetsReq(`${CONFIG.API_BASE}/${state.sheetId}:batchUpdate`,{method:'POST',body:JSON.stringify({requests:[{addSheet:{properties:{title:'Inventory'}}}]})});
+    await writeRange('Inventory!A1:L1',[['id','name','category','quantity','unit','costPerUnit','lowStockThreshold','notes','addedBy','addedDate','lastUpdatedBy','lastUpdatedDate']]);
+  }catch(e2){}}
+  try{await readRange('InventoryLog!A1:A1');}
+  catch(e){try{
+    await sheetsReq(`${CONFIG.API_BASE}/${state.sheetId}:batchUpdate`,{method:'POST',body:JSON.stringify({requests:[{addSheet:{properties:{title:'InventoryLog'}}}]})});
+    await writeRange('InventoryLog!A1:G1',[['id','itemId','itemName','quantityUsed','date','loggedBy','notes']]);
+  }catch(e2){}}
+}
+async function persistInventory(){
+  if(state.mode!=='live')return;
+  await ensureInventorySheets();
+  const rows=[['id','name','category','quantity','unit','costPerUnit','lowStockThreshold','notes','addedBy','addedDate','lastUpdatedBy','lastUpdatedDate'],
+    ...inventory.map(it=>[it.id,it.name,it.category,it.quantity,it.unit||'units',it.costPerUnit||0,it.lowStockThreshold||3,it.notes||'',it.addedBy||'',it.addedDate||'',it.lastUpdatedBy||'',it.lastUpdatedDate||''])];
+  await writeRange(`Inventory!A1:L${rows.length}`,rows);
+  if(rows.length<9999)await clearRange(`Inventory!A${rows.length+1}:L9999`);
+}
+async function persistInventoryLog(){
+  if(state.mode!=='live')return;
+  await ensureInventorySheets();
+  const rows=[['id','itemId','itemName','quantityUsed','date','loggedBy','notes'],
+    ...inventoryLog.map(l=>[l.id,l.itemId,l.itemName||'',l.quantityUsed,l.date||'',l.loggedBy||'',l.notes||''])];
+  await writeRange(`InventoryLog!A1:G${rows.length}`,rows);
+  if(rows.length<9999)await clearRange(`InventoryLog!A${rows.length+1}:G9999`);
+}
+function saveData(){persistInventory().catch(e=>console.warn('Inventory save error:',e));persistInventoryLog().catch(e=>console.warn('InventoryLog save error:',e));}
 // ─── ARCHIVE DELETED CLIENT ──────────────────────────────────────────────────
 async function ensureArchivedSheet(){
   try{await readRange('Archived!A1:A1');}
@@ -2859,11 +2906,16 @@ async function submitOnboarding(){
 }
 
 function buildAdminLayout(){
-  const nav=[
+  const mainNav=[
     {id:'dashboard', icon:'📊',label:'Dashboard'}, {id:'calendar',  icon:'📅',label:'Calendar'},
     {id:'clients',   icon:'👥',label:'Clients & Pets'},
-    {id:'vetclinics',icon:'🏥',label:'Vet Clinics'},{id:'services',  icon:'🛎️',label:'Services'},
-    {id:'invoices',  icon:'💰',label:'Invoices'},  {id:'settings',  icon:'⚙️',label:'Settings'},
+    {id:'vetclinics',icon:'🏥',label:'Vet Clinics'},
+    {id:'invoices',  icon:'💰',label:'Invoices'},
+  ];
+  const adminNav=[
+    {id:'inventory', icon:'📦',label:'Inventory'},
+    {id:'services',  icon:'🛎️',label:'Services'},
+    {id:'settings',  icon:'⚙️',label:'Settings'},
     {id:'kiosk',     icon:'🖥️',label:'Kiosk Preview'},
   ];
   const dbNavItem=state.mode==='live'&&state.sheetUrl?`
@@ -2875,6 +2927,7 @@ function buildAdminLayout(){
     dashboard:buildDashboard(),calendar:buildCalendarView('admin'),
     clients:buildClientsAndPetsView(),dogs:buildClientsAndPetsView(),
     vetclinics:buildVetClinicsView(),
+    inventory:buildInventoryView(),
     services:buildServicesView(),
     invoices:buildInvoicesView(),settings:buildSettingsView(),
     kiosk:buildKioskView(true),
@@ -2918,12 +2971,20 @@ function buildAdminLayout(){
         </div>
       </div>
       <nav class="flex-1 p-3 space-y-1 overflow-y-auto">
-        ${nav.map(n=>`
+        ${mainNav.map(n=>`
           <button onclick="setView('${n.id}')"
             class="nav-item w-full text-left px-3 py-2.5 rounded-xl text-white flex items-center gap-3 ${state.view===n.id||(n.id==='clients'&&state.view==='dogs')?'active':''}">
             <span>${n.icon}</span><span class="text-sm font-medium">${n.label}</span>
           </button>`).join('')}
-        ${dbNavItem?`<div class="pt-2 pb-0.5"><div class="text-xs px-3 uppercase tracking-widest font-semibold mb-1" style="color:rgba(255,255,255,0.3)">Admin</div>${dbNavItem}</div>`:''}
+        <div class="pt-3 pb-0.5">
+          <div class="text-xs px-3 uppercase tracking-widest font-semibold mb-1.5" style="color:rgba(255,255,255,0.3)">Admin</div>
+          ${adminNav.map(n=>`
+            <button onclick="setView('${n.id}')"
+              class="nav-item w-full text-left px-3 py-2.5 rounded-xl text-white flex items-center gap-3 ${state.view===n.id?'active':''}">
+              <span>${n.icon}</span><span class="text-sm font-medium">${n.label}</span>
+            </button>`).join('')}
+          ${dbNavItem}
+        </div>
       </nav>
       <div class="p-3 border-t border-white/10 space-y-0.5">
         ${syncDisplay}
@@ -3119,6 +3180,19 @@ function buildDashboard(){
           }).join('')}
           </div>
         </div>
+        ${(()=>{
+          const lowInv=inventory.filter(it=>it.quantity>0&&it.quantity<=it.lowStockThreshold);
+          const outInv=inventory.filter(it=>it.quantity<=0);
+          if(lowInv.length===0&&outInv.length===0)return'';
+          return`<div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="font-semibold text-gray-800">📦 Inventory Alerts</h2>
+              <button onclick="setView('inventory')" class="text-xs text-indigo-600 hover:underline">View All →</button>
+            </div>
+            ${outInv.length>0?`<div class="mb-2"><div class="text-xs font-bold text-red-500 uppercase tracking-wider mb-1">Out of Stock</div>${outInv.slice(0,5).map(it=>`<div class="flex items-center justify-between py-1"><span class="text-sm text-gray-700">${getInvCategory(it.category).icon} ${it.name}</span><span class="text-xs font-bold text-red-500">0 ${it.unit||'units'}</span></div>`).join('')}${outInv.length>5?`<div class="text-xs text-gray-400">+${outInv.length-5} more</div>`:''}</div>`:''}
+            ${lowInv.length>0?`<div><div class="text-xs font-bold text-amber-500 uppercase tracking-wider mb-1">Low Stock</div>${lowInv.slice(0,5).map(it=>`<div class="flex items-center justify-between py-1"><span class="text-sm text-gray-700">${getInvCategory(it.category).icon} ${it.name}</span><span class="text-xs font-bold text-amber-600">${it.quantity} ${it.unit||'units'}</span></div>`).join('')}${lowInv.length>5?`<div class="text-xs text-gray-400">+${lowInv.length-5} more</div>`:''}</div>`:''}
+          </div>`;
+        })()}
         <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
           <h2 class="font-semibold text-gray-800 mb-3">Invoices</h2>
           ${[
@@ -3718,6 +3792,532 @@ function buildDogsList(preFiltered){
     </div>
   ${insideCombinedView?'':'</div>'}`;
   return html;
+}
+// ─── INVENTORY MANAGEMENT VIEW ─────────────────────────────────────────────────
+let _invSearch='';
+function switchInventoryTab(tab){state.inventoryTab=tab;render();}
+function getInvCategory(id){return INVENTORY_CATEGORIES.find(c=>c.id===id)||{id:'office',label:'Office & Misc',icon:'📎',color:'#6366F1'};}
+function invItemStatus(item){
+  if(item.quantity<=0)return{label:'Out of Stock',cls:'bg-red-100 text-red-600',color:'#EF4444'};
+  if(item.quantity<=item.lowStockThreshold)return{label:'Low Stock',cls:'bg-amber-100 text-amber-700',color:'#F59E0B'};
+  return{label:'In Stock',cls:'bg-green-100 text-green-600',color:'#10B981'};
+}
+function buildInventoryView(){
+  const isItems=state.inventoryTab!=='reports';
+  const searchTerm=_invSearch.toLowerCase().trim();
+  // Stats
+  const totalItems=inventory.length;
+  const lowStockItems=inventory.filter(it=>it.quantity>0&&it.quantity<=it.lowStockThreshold);
+  const outOfStock=inventory.filter(it=>it.quantity<=0);
+  const totalValue=inventory.reduce((s,it)=>s+(it.quantity*(it.costPerUnit||0)),0);
+  return`
+  <div class="p-6 slide-in">
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-800 font-headline">📦 Inventory</h1>
+        <p class="text-gray-400 text-sm mt-1">${totalItems} item${totalItems!==1?'s':''} tracked · $${totalValue.toFixed(2)} total value</p>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="showInventoryBrainDump()" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);">🎙️ Brain Dump</button>
+        <button onclick="showAddInventoryModal()" class="px-4 py-2 text-white rounded-xl text-sm font-medium shadow-sm" style="background:#4338ca;">+ Add Item</button>
+      </div>
+    </div>
+    <!-- Stat cards row -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Total Items</div>
+        <div class="text-2xl font-extrabold text-gray-800">${totalItems}</div>
+      </div>
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
+        <div class="text-xs font-bold text-emerald-500 uppercase tracking-wider mb-1">In Stock</div>
+        <div class="text-2xl font-extrabold text-emerald-600">${totalItems-lowStockItems.length-outOfStock.length}</div>
+      </div>
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center cursor-pointer hover:shadow-md transition-shadow" onclick="_invSearch='low stock';render();">
+        <div class="text-xs font-bold text-amber-500 uppercase tracking-wider mb-1">Low Stock</div>
+        <div class="text-2xl font-extrabold text-amber-600">${lowStockItems.length}</div>
+      </div>
+      <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center cursor-pointer hover:shadow-md transition-shadow" onclick="_invSearch='out of stock';render();">
+        <div class="text-xs font-bold text-red-500 uppercase tracking-wider mb-1">Out of Stock</div>
+        <div class="text-2xl font-extrabold text-red-600">${outOfStock.length}</div>
+      </div>
+    </div>
+    <!-- Sub-tabs + Search -->
+    <div class="flex items-center gap-3 mb-5 flex-wrap">
+      <div class="flex rounded-xl overflow-hidden border border-gray-200" style="background:#f1f5f9;">
+        <button onclick="switchInventoryTab('items')" class="px-5 py-2 text-sm font-semibold transition-all ${isItems?'text-white shadow-sm':'text-gray-500 hover:text-gray-700'}" style="${isItems?'background:#4338ca;':''}">
+          <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;margin-right:4px;">inventory_2</span>Items
+        </button>
+        <button onclick="switchInventoryTab('reports')" class="px-5 py-2 text-sm font-semibold transition-all ${!isItems?'text-white shadow-sm':'text-gray-500 hover:text-gray-700'}" style="${!isItems?'background:#4338ca;':''}">
+          <span class="material-symbols-outlined" style="font-size:16px;vertical-align:middle;margin-right:4px;">analytics</span>Reports
+        </button>
+      </div>
+      ${isItems?`<div class="flex-1 min-w-[200px] max-w-md relative">
+        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" style="font-size:18px;">search</span>
+        <input type="text" id="inv-search" placeholder="Search items by name, category..."
+          value="${_invSearch.replace(/"/g,'&quot;')}"
+          oninput="_invSearch=this.value;render();requestAnimationFrame(()=>{const el=document.getElementById('inv-search');if(el){el.focus();el.selectionStart=el.selectionEnd=el.value.length;}})"
+          class="w-full pl-9 pr-8 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all" style="background:#fff;">
+        ${_invSearch?`<button onclick="_invSearch='';render();" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 text-lg leading-none">&times;</button>`:''}
+      </div>`:''}
+    </div>
+    ${isItems?buildInventoryItemsTab(searchTerm):buildInventoryReportsTab()}
+  </div>`;
+}
+function buildInventoryItemsTab(searchTerm){
+  let filtered=inventory;
+  if(searchTerm){
+    // Special filters
+    if(searchTerm==='low stock')filtered=inventory.filter(it=>it.quantity>0&&it.quantity<=it.lowStockThreshold);
+    else if(searchTerm==='out of stock')filtered=inventory.filter(it=>it.quantity<=0);
+    else filtered=inventory.filter(it=>{
+      const cat=getInvCategory(it.category);
+      return it.name.toLowerCase().includes(searchTerm)||cat.label.toLowerCase().includes(searchTerm)||(it.notes||'').toLowerCase().includes(searchTerm);
+    });
+  }
+  if(inventory.length===0)return`
+    <div class="text-center py-16">
+      <div class="text-5xl mb-4">📦</div>
+      <p class="text-lg font-semibold text-gray-600 mb-2">No inventory items yet</p>
+      <p class="text-sm text-gray-400 mb-5">Use <strong>Brain Dump</strong> to quickly add items by telling us what you have, or add them one at a time.</p>
+      <div class="flex gap-3 justify-center">
+        <button onclick="showInventoryBrainDump()" class="px-5 py-2.5 text-white rounded-xl text-sm font-semibold shadow-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);">🎙️ Brain Dump Inventory</button>
+        <button onclick="showAddInventoryModal()" class="px-5 py-2.5 rounded-xl text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50">+ Add Single Item</button>
+      </div>
+    </div>`;
+  if(filtered.length===0&&searchTerm)return`<div class="text-center text-gray-300 py-16"><div class="text-4xl mb-3">🔍</div><p class="text-sm">No items match "${searchTerm.replace(/</g,'&lt;')}"</p></div>`;
+  // Group by category
+  const groups={};
+  filtered.forEach(it=>{if(!groups[it.category])groups[it.category]=[];groups[it.category].push(it);});
+  return`<div class="space-y-6">
+    ${INVENTORY_CATEGORIES.filter(c=>groups[c.id]&&groups[c.id].length>0).map(cat=>{
+      const items=groups[cat.id]||[];
+      return`
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="px-5 py-3 flex items-center justify-between" style="background:${cat.color}10;border-bottom:2px solid ${cat.color}20;">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">${cat.icon}</span>
+            <span class="font-bold font-headline text-gray-800">${cat.label}</span>
+            <span class="text-xs text-gray-400 ml-1">(${items.length})</span>
+          </div>
+        </div>
+        <div class="divide-y divide-gray-50">
+          ${items.map(it=>{
+            const st=invItemStatus(it);
+            const costStr=it.costPerUnit?`$${it.costPerUnit.toFixed(2)}/${it.unit||'ea'}`:'';
+            const updStr=it.lastUpdatedDate?`Updated ${it.lastUpdatedDate}${it.lastUpdatedBy?' by '+it.lastUpdatedBy:''}`:'';
+            return`
+            <div class="px-5 py-3 flex items-center gap-4 hover:bg-gray-50/50 transition-colors group">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="font-semibold text-gray-800">${it.name}</span>
+                  <span class="text-xs font-bold px-2 py-0.5 rounded-full ${st.cls}">${st.label}</span>
+                </div>
+                <div class="text-xs text-gray-400 mt-0.5">${costStr}${costStr&&updStr?' · ':''}${updStr}</div>
+                ${it.notes?`<div class="text-xs text-gray-400 italic mt-0.5">${it.notes}</div>`:''}
+              </div>
+              <div class="text-center min-w-[80px]">
+                <div class="text-2xl font-extrabold" style="color:${st.color}">${it.quantity}</div>
+                <div class="text-xs text-gray-400">${it.unit||'units'}</div>
+              </div>
+              <div class="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onclick="showLogUsageModal(${it.id})" class="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100" title="Log usage">📝 Use</button>
+                <button onclick="showAddInventoryModal(${it.id})" class="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100" title="Edit">✏️</button>
+                <button onclick="deleteInventoryItem(${it.id})" class="text-xs px-2 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100" title="Delete">🗑️</button>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }).join('')}
+    ${Object.keys(groups).filter(k=>!INVENTORY_CATEGORIES.find(c=>c.id===k)).length>0?`
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div class="px-5 py-3 flex items-center gap-2" style="background:#f1f5f920;border-bottom:2px solid #e5e7eb;">
+        <span class="text-xl">📎</span><span class="font-bold font-headline text-gray-800">Uncategorized</span>
+      </div>
+      <div class="divide-y divide-gray-50">
+        ${Object.keys(groups).filter(k=>!INVENTORY_CATEGORIES.find(c=>c.id===k)).flatMap(k=>groups[k]).map(it=>{
+          const st=invItemStatus(it);
+          return`<div class="px-5 py-3 flex items-center gap-4 hover:bg-gray-50/50 transition-colors group">
+            <div class="flex-1"><span class="font-semibold text-gray-800">${it.name}</span> <span class="text-xs font-bold px-2 py-0.5 rounded-full ${st.cls}">${st.label}</span></div>
+            <div class="text-center min-w-[80px]"><div class="text-2xl font-extrabold" style="color:${st.color}">${it.quantity}</div><div class="text-xs text-gray-400">${it.unit||'units'}</div></div>
+            <div class="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button onclick="showLogUsageModal(${it.id})" class="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100">📝 Use</button>
+              <button onclick="showAddInventoryModal(${it.id})" class="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100">✏️</button>
+              <button onclick="deleteInventoryItem(${it.id})" class="text-xs px-2 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100">🗑️</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`:''}
+  </div>`;
+}
+// ─── INVENTORY REPORTS TAB ─────────────────────────────────────────────────────
+function buildInventoryReportsTab(){
+  const hasLog=inventoryLog.length>0;
+  if(!hasLog)return`
+    <div class="text-center py-16">
+      <div class="text-5xl mb-4">📊</div>
+      <p class="text-lg font-semibold text-gray-600 mb-2">No usage data yet</p>
+      <p class="text-sm text-gray-400">Once you start logging usage with the <strong>📝 Use</strong> button, reports will appear here showing trends, costs, and reorder suggestions.</p>
+    </div>`;
+  // Aggregate usage by month
+  const monthlyUsage={};const itemUsage={};
+  inventoryLog.forEach(log=>{
+    const mo=(log.date||'').slice(0,7)||'Unknown';
+    if(!monthlyUsage[mo])monthlyUsage[mo]={count:0,cost:0};
+    monthlyUsage[mo].count+=log.quantityUsed||0;
+    const item=inventory.find(it=>it.id===log.itemId);
+    const unitCost=item?.costPerUnit||0;
+    monthlyUsage[mo].cost+=(log.quantityUsed||0)*unitCost;
+    const iname=log.itemName||item?.name||'Unknown';
+    if(!itemUsage[iname])itemUsage[iname]={count:0,cost:0};
+    itemUsage[iname].count+=log.quantityUsed||0;
+    itemUsage[iname].cost+=(log.quantityUsed||0)*unitCost;
+  });
+  const months=Object.keys(monthlyUsage).sort();
+  const topItems=Object.entries(itemUsage).sort((a,b)=>b[1].count-a[1].count).slice(0,10);
+  const totalUsageCost=Object.values(monthlyUsage).reduce((s,m)=>s+m.cost,0);
+  return`
+  <div class="space-y-5">
+    <!-- Summary cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Total Uses Logged</div>
+        <div class="text-3xl font-extrabold text-indigo-600">${inventoryLog.length}</div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Items Used</div>
+        <div class="text-3xl font-extrabold text-gray-800">${inventoryLog.reduce((s,l)=>s+(l.quantityUsed||0),0)}</div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 text-center">
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Est. Total Cost</div>
+        <div class="text-3xl font-extrabold text-emerald-600">$${totalUsageCost.toFixed(2)}</div>
+      </div>
+    </div>
+    <!-- Monthly trend -->
+    ${months.length>1?`
+    <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+      <h3 class="font-bold font-headline text-gray-800 mb-3">Monthly Usage Trend</h3>
+      <div class="flex items-end gap-2" style="height:120px;">
+        ${(()=>{const maxC=Math.max(...months.map(m=>monthlyUsage[m].count),1);return months.map(m=>{const pct=Math.max((monthlyUsage[m].count/maxC)*100,4);return`<div class="flex-1 flex flex-col items-center justify-end gap-1">
+          <div class="text-xs font-bold text-gray-600">${monthlyUsage[m].count}</div>
+          <div class="w-full rounded-t-lg" style="height:${pct}%;background:linear-gradient(to top,#4338ca,#818cf8);min-height:4px;"></div>
+          <div class="text-xs text-gray-400">${m.slice(5)}</div>
+        </div>`;}).join('');})()}
+      </div>
+    </div>`:''}
+    <!-- Top used items -->
+    <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+      <h3 class="font-bold font-headline text-gray-800 mb-3">Most Used Items</h3>
+      <div class="space-y-2">
+        ${topItems.map(([name,data],i)=>{
+          const maxCount=topItems[0]?.[1]?.count||1;
+          const pct=Math.max((data.count/maxCount)*100,3);
+          return`<div class="flex items-center gap-3">
+            <div class="w-5 text-xs font-bold text-gray-400 text-right">${i+1}</div>
+            <div class="flex-1">
+              <div class="flex items-center justify-between mb-0.5">
+                <span class="text-sm font-semibold text-gray-700">${name}</span>
+                <span class="text-xs text-gray-400">${data.count} used · $${data.cost.toFixed(2)}</span>
+              </div>
+              <div class="h-2 rounded-full bg-gray-100 overflow-hidden"><div class="h-full rounded-full" style="width:${pct}%;background:linear-gradient(90deg,#4338ca,#818cf8);"></div></div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+    <!-- Recent activity log -->
+    <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+      <h3 class="font-bold font-headline text-gray-800 mb-3">Recent Activity</h3>
+      <div class="space-y-1.5 max-h-[300px] overflow-y-auto">
+        ${inventoryLog.slice().reverse().slice(0,30).map(log=>`
+          <div class="flex items-center gap-3 text-sm py-1.5 border-b border-gray-50">
+            <span class="text-xs text-gray-300 min-w-[70px]">${log.date||''}</span>
+            <span class="font-medium text-gray-700">${log.itemName||'Item'}</span>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-600 font-bold">-${log.quantityUsed}</span>
+            ${log.loggedBy?`<span class="text-xs text-gray-400">by ${log.loggedBy}</span>`:''}
+            ${log.notes?`<span class="text-xs text-gray-400 italic truncate max-w-[200px]">${log.notes}</span>`:''}
+          </div>`).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+// ─── INVENTORY MODALS & ACTIONS ────────────────────────────────────────────────
+function showAddInventoryModal(editId){
+  const item=editId?inventory.find(it=>it.id===editId):null;
+  const title=item?'Edit Inventory Item':'Add Inventory Item';
+  const html=`
+  <div class="fixed inset-0 bg-black/40 z-[300] flex items-center justify-center p-4" onclick="if(event.target===this)closeInventoryModal()">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-5">
+          <h2 class="text-xl font-bold font-headline text-gray-800">${title}</h2>
+          <button onclick="closeInventoryModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+        <form onsubmit="event.preventDefault();saveInventoryItem(${editId||'null'})" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Item Name *</label>
+            <input id="inv-name" type="text" value="${item?item.name.replace(/"/g,'&quot;'):''}" required class="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Category</label>
+              <select id="inv-category" class="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                ${INVENTORY_CATEGORIES.map(c=>`<option value="${c.id}" ${item&&item.category===c.id?'selected':''}>${c.icon} ${c.label}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Unit</label>
+              <input id="inv-unit" type="text" placeholder="e.g. bottles, bags, rolls" value="${item?item.unit||'':'units'}" class="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200">
+            </div>
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Quantity</label>
+              <input id="inv-qty" type="number" min="0" step="1" value="${item?item.quantity:0}" class="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Low Stock At</label>
+              <input id="inv-low" type="number" min="0" step="1" value="${item?item.lowStockThreshold:3}" class="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cost/Unit ($)</label>
+              <input id="inv-cost" type="number" min="0" step="0.01" value="${item?item.costPerUnit||'':''}" placeholder="0.00" class="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200">
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Notes</label>
+            <input id="inv-notes" type="text" value="${item?(item.notes||'').replace(/"/g,'&quot;'):''}" placeholder="Optional notes..." class="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200">
+          </div>
+          <button type="submit" class="w-full py-3 text-white rounded-xl font-bold text-sm" style="background:#4338ca;">${item?'Save Changes':'Add Item'}</button>
+        </form>
+      </div>
+    </div>
+  </div>`;
+  document.getElementById('inv-modal-root')?.remove();
+  const d=document.createElement('div');d.id='inv-modal-root';d.innerHTML=html;document.body.appendChild(d);
+}
+function closeInventoryModal(){document.getElementById('inv-modal-root')?.remove();}
+function saveInventoryItem(editId){
+  const name=document.getElementById('inv-name').value.trim();
+  if(!name){showToast('Item name is required','#EF4444');return;}
+  const cat=document.getElementById('inv-category').value;
+  const unit=document.getElementById('inv-unit').value.trim()||'units';
+  const qty=parseInt(document.getElementById('inv-qty').value)||0;
+  const low=parseInt(document.getElementById('inv-low').value)||3;
+  const cost=parseFloat(document.getElementById('inv-cost').value)||0;
+  const notes=document.getElementById('inv-notes').value.trim();
+  const now=new Date().toISOString().slice(0,10);
+  const user=state.userEmail?.split('@')[0]||'admin';
+  if(editId){
+    const item=inventory.find(it=>it.id===editId);
+    if(item){
+      item.name=name;item.category=cat;item.unit=unit;item.quantity=qty;
+      item.lowStockThreshold=low;item.costPerUnit=cost;item.notes=notes;
+      item.lastUpdatedBy=user;item.lastUpdatedDate=now;
+    }
+    showToast('Item updated!','#10B981');
+  }else{
+    inventory.push({id:Date.now(),name,category:cat,unit,quantity:qty,lowStockThreshold:low,costPerUnit:cost,notes,addedBy:user,addedDate:now,lastUpdatedBy:user,lastUpdatedDate:now});
+    showToast('Item added!','#10B981');
+  }
+  closeInventoryModal();saveData();render();
+}
+function deleteInventoryItem(id){
+  const item=inventory.find(it=>it.id===id);
+  if(!item)return;
+  if(!confirm('Delete "'+item.name+'" from inventory?'))return;
+  inventory=inventory.filter(it=>it.id!==id);
+  showToast('Item deleted','#EF4444');saveData();render();
+}
+// ─── LOG USAGE MODAL ───────────────────────────────────────────────────────────
+function showLogUsageModal(itemId){
+  const item=inventory.find(it=>it.id===itemId);
+  if(!item)return;
+  const html=`
+  <div class="fixed inset-0 bg-black/40 z-[300] flex items-center justify-center p-4" onclick="if(event.target===this)closeInventoryModal()">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onclick="event.stopPropagation()">
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-bold font-headline text-gray-800">📝 Log Usage</h2>
+          <button onclick="closeInventoryModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+        <p class="text-sm text-gray-500 mb-4">How many <strong>${item.name}</strong> did you use?</p>
+        <div class="flex items-center gap-3 mb-4">
+          <button onclick="document.getElementById('usage-qty').value=Math.max(0,parseInt(document.getElementById('usage-qty').value||1)-1)" class="w-10 h-10 rounded-xl border border-gray-200 text-lg font-bold text-gray-600 hover:bg-gray-100 flex items-center justify-center">−</button>
+          <input id="usage-qty" type="number" min="1" value="1" class="w-20 text-center text-2xl font-bold px-2 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+          <button onclick="document.getElementById('usage-qty').value=parseInt(document.getElementById('usage-qty').value||0)+1" class="w-10 h-10 rounded-xl border border-gray-200 text-lg font-bold text-gray-600 hover:bg-gray-100 flex items-center justify-center">+</button>
+          <span class="text-sm text-gray-400">${item.unit||'units'}</span>
+        </div>
+        <div class="text-xs text-gray-400 mb-3">Current stock: <strong>${item.quantity}</strong> ${item.unit||'units'}</div>
+        <input id="usage-notes" type="text" placeholder="Optional note (e.g. used for grooming day)" class="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+        <button onclick="submitLogUsage(${item.id})" class="w-full py-2.5 text-white rounded-xl font-bold text-sm" style="background:#4338ca;">Log Usage</button>
+      </div>
+    </div>
+  </div>`;
+  document.getElementById('inv-modal-root')?.remove();
+  const d=document.createElement('div');d.id='inv-modal-root';d.innerHTML=html;document.body.appendChild(d);
+}
+function submitLogUsage(itemId){
+  const item=inventory.find(it=>it.id===itemId);if(!item)return;
+  const qty=parseInt(document.getElementById('usage-qty').value)||0;
+  if(qty<=0){showToast('Enter a quantity','#EF4444');return;}
+  const notes=document.getElementById('usage-notes')?.value?.trim()||'';
+  const now=new Date().toISOString().slice(0,10);
+  const user=state.userEmail?.split('@')[0]||'admin';
+  item.quantity=Math.max(0,item.quantity-qty);
+  item.lastUpdatedBy=user;item.lastUpdatedDate=now;
+  inventoryLog.push({id:Date.now(),itemId:item.id,itemName:item.name,quantityUsed:qty,date:now,loggedBy:user,notes});
+  closeInventoryModal();
+  const st=invItemStatus(item);
+  showToast(st.label==='Out of Stock'?'⚠️ '+item.name+' is now out of stock!':st.label==='Low Stock'?'⚠️ '+item.name+' is running low!':'Logged '+qty+' '+item.name+' used',st.label==='In Stock'?'#10B981':'#F59E0B');
+  saveData();render();
+}
+// ─── INVENTORY BRAIN DUMP (AI PARSER) ──────────────────────────────────────────
+let _invBrainDumpVoiceRecog=null,_invBrainDumpVoiceActive=false;
+function showInventoryBrainDump(){
+  const html=`
+  <div class="fixed inset-0 bg-black/40 z-[300] flex items-center justify-center p-4" onclick="if(event.target===this){stopInvBrainDumpVoice();closeInventoryModal();}">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onclick="event.stopPropagation()">
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-bold font-headline text-gray-800">🎙️ Inventory Brain Dump</h2>
+          <button onclick="stopInvBrainDumpVoice();closeInventoryModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+        <p class="text-sm text-gray-500 mb-3">Tell us what inventory you have — speak naturally or type it out. We'll parse everything automatically.</p>
+        <p class="text-xs text-gray-400 mb-3 italic">Example: "I have 5 bottles of oatmeal shampoo, about 20 poop bag rolls, 3 bags of dog food, we're almost out of ear cleaner, and I just bought 2 boxes of latex gloves"</p>
+        <div class="relative mb-3">
+          <textarea id="inv-braindump-text" rows="5" placeholder="Type or speak your inventory here..." class="w-full px-3 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 resize-none"></textarea>
+          <button id="inv-voice-btn" onclick="toggleInvBrainDumpVoice()" class="absolute bottom-3 right-3 w-9 h-9 rounded-full flex items-center justify-center transition-all" style="background:#f1f5f9;border:1px solid #e2e8f0;" title="Voice input">
+            🎙️
+          </button>
+        </div>
+        <div id="inv-voice-status" class="text-xs text-center mb-3" style="color:#6366f1;display:none;"></div>
+        <div id="inv-braindump-preview" class="mb-4"></div>
+        <div class="flex gap-2">
+          <button onclick="previewInventoryParse()" class="flex-1 py-2.5 rounded-xl font-bold text-sm border-2 border-indigo-200 text-indigo-600 hover:bg-indigo-50">👁️ Preview</button>
+          <button onclick="confirmInventoryBrainDump()" class="flex-1 py-2.5 text-white rounded-xl font-bold text-sm" style="background:#4338ca;">✅ Add All Items</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  document.getElementById('inv-modal-root')?.remove();
+  const d=document.createElement('div');d.id='inv-modal-root';d.innerHTML=html;document.body.appendChild(d);
+}
+function toggleInvBrainDumpVoice(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){showToast('Voice not supported in this browser','#EF4444');return;}
+  if(_invBrainDumpVoiceActive){stopInvBrainDumpVoice();return;}
+  _invBrainDumpVoiceRecog=new SR();
+  _invBrainDumpVoiceRecog.continuous=true;_invBrainDumpVoiceRecog.interimResults=true;_invBrainDumpVoiceRecog.lang='en-US';
+  let finalText=document.getElementById('inv-braindump-text')?.value||'';
+  _invBrainDumpVoiceRecog.onresult=e=>{
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      if(e.results[i].isFinal)finalText+=(finalText?' ':'')+e.results[i][0].transcript;
+      else interim+=e.results[i][0].transcript;
+    }
+    const ta=document.getElementById('inv-braindump-text');
+    if(ta)ta.value=finalText+(interim?' '+interim:'');
+    const st=document.getElementById('inv-voice-status');if(st){st.style.display='block';st.textContent='🔴 Listening... '+interim;}
+  };
+  _invBrainDumpVoiceRecog.onerror=()=>stopInvBrainDumpVoice();
+  _invBrainDumpVoiceRecog.onend=()=>{if(_invBrainDumpVoiceActive)try{_invBrainDumpVoiceRecog.start();}catch(e){}};
+  _invBrainDumpVoiceRecog.start();_invBrainDumpVoiceActive=true;
+  const btn=document.getElementById('inv-voice-btn');if(btn)btn.style.background='#FEE2E2';
+  const st=document.getElementById('inv-voice-status');if(st){st.style.display='block';st.textContent='🔴 Listening...';}
+}
+function stopInvBrainDumpVoice(){
+  if(_invBrainDumpVoiceRecog)try{_invBrainDumpVoiceRecog.stop();}catch(e){}
+  _invBrainDumpVoiceActive=false;_invBrainDumpVoiceRecog=null;
+  const btn=document.getElementById('inv-voice-btn');if(btn)btn.style.background='#f1f5f9';
+  const st=document.getElementById('inv-voice-status');if(st)st.style.display='none';
+}
+function parseInventoryText(text){
+  const items=[];
+  // Split on commas, "and", semicolons, or newlines
+  const chunks=text.split(/[,;\n]|(?:\band\b)/i).map(s=>s.trim()).filter(Boolean);
+  chunks.forEach(chunk=>{
+    const c=chunk.toLowerCase();
+    // Extract quantity — look for numbers, "a few", "about N", "half", etc.
+    let qty=1;
+    const qtyMatch=c.match(/(\d+)\s*(bottle|bag|box|roll|pack|tube|can|jar|gallon|pair|set|case)?s?\b/i)
+      ||c.match(/(?:about|around|roughly|~)\s*(\d+)/i)
+      ||c.match(/^(\d+)\s+/);
+    if(qtyMatch)qty=parseInt(qtyMatch[1])||1;
+    if(/a few|some|couple/i.test(c))qty=qty>1?qty:3;
+    if(/half a|half$/i.test(c))qty=1;
+    if(/almost out|running low|nearly out|last one/i.test(c))qty=1;
+    if(/just bought|just got|picked up/i.test(c)&&qty===1){const m2=c.match(/(\d+)/);if(m2)qty=parseInt(m2[1])||1;}
+    // Extract unit
+    let unit='units';
+    const unitMatch=c.match(/\b(bottle|bag|box|roll|pack|tube|can|jar|gallon|pair|set|case|container|jug|pouch|sheet|bar|sachet|kit)s?\b/i);
+    if(unitMatch)unit=unitMatch[1].toLowerCase()+'s';
+    // Determine category by keywords
+    let category='office';
+    if(/shampoo|conditioner|brush|comb|clipper|blade|dryer|coat\s*spray|de-?matt|grooming|nail\s*(trim|clip|grind)|ear\s*(clean|wash|solution)|tooth|dental|ribbon|bow|bandana|cologne|perfume|finishing\s*spray/i.test(c))category='grooming';
+    else if(/kennel|crate|bed|blanket|towel|mat|liner|pad|leash|collar|harness|bowl|water\s*dish|gate|pen|cage/i.test(c))category='kennel';
+    else if(/clean|disinfect|bleach|mop|broom|spray|wipe|sanitiz|soap|detergent|trash|garbage|paper\s*towel|sponge|deodoriz|poop\s*bag|waste\s*bag|odor/i.test(c))category='cleaning';
+    else if(/food|treat|kibble|chew|bone|biscuit|snack|dental\s*chew|rawhide|jerky/i.test(c))category='food';
+    else if(/first\s*aid|bandage|gauze|antiseptic|hydrogen|peroxide|ointment|wrap|glove|latex|nitrile|syringe|thermometer|medicine|pill|tablet|benadryl|saline/i.test(c))category='firstaid';
+    // Extract item name — remove quantity/unit prefixes, clean up
+    let name=chunk.replace(/^\s*(i\s+have|we\s+have|we've\s+got|got|there'?s|there\s+are|about|around|roughly|just\s+bought|just\s+got|picked\s+up)\s*/i,'');
+    name=name.replace(/^\d+\s*/,'');
+    name=name.replace(/^(bottle|bag|box|roll|pack|tube|can|jar|gallon|pair|set|case|container|jug|pouch)s?\s*(of\s*)?/i,'');
+    name=name.replace(/^\s*(a\s+few|some|couple\s+of?)\s*/i,'');
+    name=name.trim().replace(/^[,.\s]+|[,.\s]+$/g,'');
+    if(name.length<2)return;
+    // Capitalize first letter
+    name=name.charAt(0).toUpperCase()+name.slice(1);
+    items.push({name,quantity:qty,unit,category,costPerUnit:0,lowStockThreshold:3,notes:''});
+  });
+  return items;
+}
+function previewInventoryParse(){
+  const text=document.getElementById('inv-braindump-text')?.value||'';
+  if(!text.trim()){showToast('Type or speak some inventory first','#6366f1');return;}
+  const parsed=parseInventoryText(text);
+  const preview=document.getElementById('inv-braindump-preview');
+  if(!preview)return;
+  if(parsed.length===0){preview.innerHTML='<div class="text-sm text-gray-400 text-center py-3">Couldn\'t parse any items. Try being more specific.</div>';return;}
+  preview.innerHTML=`
+    <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Preview: ${parsed.length} item${parsed.length!==1?'s':''} found</div>
+    <div class="space-y-1.5 max-h-[200px] overflow-y-auto rounded-xl border border-gray-100 p-3 bg-gray-50/50">
+      ${parsed.map((it,i)=>{
+        const cat=getInvCategory(it.category);
+        return`<div class="flex items-center gap-2 text-sm py-1">
+          <span>${cat.icon}</span>
+          <span class="font-medium text-gray-700">${it.name}</span>
+          <span class="text-xs px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-bold">${it.quantity} ${it.unit}</span>
+          <span class="text-xs text-gray-400">${cat.label}</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+function confirmInventoryBrainDump(){
+  const text=document.getElementById('inv-braindump-text')?.value||'';
+  if(!text.trim()){showToast('Type or speak some inventory first','#6366f1');return;}
+  const parsed=parseInventoryText(text);
+  if(parsed.length===0){showToast('Couldn\'t parse any items','#EF4444');return;}
+  const now=new Date().toISOString().slice(0,10);
+  const user=state.userEmail?.split('@')[0]||'admin';
+  let added=0,updated=0;
+  parsed.forEach(p=>{
+    // Check for existing item with same name (case-insensitive)
+    const existing=inventory.find(it=>it.name.toLowerCase()===p.name.toLowerCase());
+    if(existing){
+      existing.quantity+=p.quantity;
+      existing.lastUpdatedBy=user;existing.lastUpdatedDate=now;
+      updated++;
+    }else{
+      inventory.push({id:Date.now()+Math.random()*1000|0,...p,addedBy:user,addedDate:now,lastUpdatedBy:user,lastUpdatedDate:now});
+      added++;
+    }
+  });
+  stopInvBrainDumpVoice();closeInventoryModal();
+  let msg=[];if(added)msg.push(added+' new item'+(added>1?'s':''));if(updated)msg.push(updated+' updated');
+  showToast('✅ '+msg.join(', ')+'!','#10B981');
+  saveData();render();
 }
 // ─── VET CLINICS ADMIN VIEW ────────────────────────────────────────────────────
 function buildVetClinicsView(){
