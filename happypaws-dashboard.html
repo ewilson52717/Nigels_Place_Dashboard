@@ -2979,9 +2979,9 @@ function buildAdminLayout(){
             <span>${n.icon}</span><span class="text-sm font-medium">${n.label}</span>
           </button>`).join('')}
         <div class="pt-3 pb-0.5">
-          <button onclick="_adminNavOpen=!_adminNavOpen;render();" class="w-full flex items-center justify-between px-3 py-1.5 rounded-lg transition-colors" style="background:none;border:none;cursor:pointer;">
-            <span class="text-xs uppercase tracking-widest font-semibold" style="color:rgba(255,255,255,0.3)">Admin</span>
-            <span class="text-xs transition-transform" style="color:rgba(255,255,255,0.3);display:inline-block;transform:rotate(${adminOpen?'0':'-90'}deg);">▾</span>
+          <button onclick="_adminNavOpen=!_adminNavOpen;render();" class="w-full flex items-center justify-between px-3 py-2 rounded-xl transition-colors" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.12)'" onmouseout="this.style.background='rgba(255,255,255,0.06)'">
+            <span class="text-xs uppercase tracking-widest font-semibold" style="color:rgba(255,255,255,0.45)">⚙️ Admin</span>
+            <span style="color:rgba(255,255,255,0.45);display:inline-block;transform:rotate(${adminOpen?'0':'-90'}deg);transition:transform 0.25s ease;font-size:0.85rem;">▾</span>
           </button>
           <div style="overflow:hidden;max-height:${adminOpen?'300px':'0'};transition:max-height 0.25s ease;opacity:${adminOpen?'1':'0'};">
             ${adminNav.map(n=>`
