@@ -1035,7 +1035,14 @@ function syncSquarePayments(ss, req, callerEmail) {
             { method: 'get', headers: headers, muteHttpExceptions: true }
           );
           const paymentsData = JSON.parse(paymentsResp.getContentText());
-          completedPayments = (paymentsData.payments || []).filter(p => p.status === 'COMPLETED');
+          completedPayments = (paymentsData.payments || []).filter(p => {
+            if (p.status !== 'COMPLETED') return false;
+            // Exclude fully-refunded payments — Square keeps status as COMPLETED
+            // but populates refunded_money when a refund is issued
+            const paidCents = (p.amount_money && p.amount_money.amount) || 0;
+            const refundedCents = (p.refunded_money && p.refunded_money.amount) || 0;
+            return refundedCents < paidCents; // only include if net amount > 0
+          });
         } catch (e) {
           debug.paymentsError = e.message;
         }
